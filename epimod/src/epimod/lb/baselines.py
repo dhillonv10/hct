@@ -42,28 +42,35 @@ class DenseClock:
 # ------------------------------------------------------------------------------ extremes -> age
 class BagOfCpGs:
     """Ridge on multi-hot 'CpG is in the lowest / highest list' features (+ sex) -- the natural linear
-    model for the benchmark's value-selected inputs."""
+    model for the benchmark's value-selected inputs. With ``values`` the listed beta enters as well
+    (one slope per CpG and list), so the model can use how extreme a listed value is."""
 
-    def __init__(self, alpha: float = 30.0):
-        self.alpha = alpha
+    def __init__(self, alpha: float = 30.0, values: bool = False):
+        self.alpha, self.values = alpha, values
 
-    def _feat(self, cpg: np.ndarray, role: np.ndarray, sex: np.ndarray) -> sp.csr_matrix:
+    def _feat(self, cpg: np.ndarray, role: np.ndarray, sex: np.ndarray, beta: np.ndarray | None = None) -> sp.csr_matrix:
         B, T = cpg.shape
         V = self.V
         ok = cpg >= 0
         col = np.where(ok, cpg + V * role, 0)
         rows = np.repeat(np.arange(B), T).reshape(B, T)
-        m = sp.csr_matrix((ok.ravel().astype(np.float32), (rows.ravel(), col.ravel())), shape=(B, 2 * V + 3))
-        m = m + sp.csr_matrix((np.ones(B, np.float32), (np.arange(B), 2 * V + np.minimum(sex, 2))), shape=(B, 2 * V + 3))
-        return m.tocsr()
+        parts = [sp.csr_matrix((ok.ravel().astype(np.float32), (rows.ravel(), col.ravel())), shape=(B, 2 * V))]
+        if self.values:
+            v = np.where(ok, (beta - 0.5) * 2.0, 0.0).astype(np.float32)
+            parts.append(sp.csr_matrix((v.ravel(), (rows.ravel(), col.ravel())), shape=(B, 2 * V)))
+        parts.append(sp.csr_matrix((np.ones(B, np.float32), (np.arange(B), np.minimum(sex, 2))), shape=(B, 3)))
+        return sp.hstack(parts).tocsr()
 
-    def fit(self, cpg, role, sex, age, V: int):
+    def fit(self, cpg, role, sex, age, V: int, beta=None):
         self.V = V
-        self.m_ = Ridge(alpha=self.alpha, solver="sparse_cg").fit(self._feat(cpg, role, sex), age_to_t(age))
+        self.m_ = Ridge(alpha=self.alpha, solver="sparse_cg").fit(self._feat(cpg, role, sex, beta), age_to_t(age))
         return self
 
-    def predict(self, cpg, role, sex) -> np.ndarray:
-        return t_to_age(self.m_.predict(self._feat(cpg, role, sex)))
+    def predict_t(self, cpg, role, sex, beta=None) -> np.ndarray:
+        return self.m_.predict(self._feat(cpg, role, sex, beta))
+
+    def predict(self, cpg, role, sex, beta=None) -> np.ndarray:
+        return t_to_age(self.predict_t(cpg, role, sex, beta))
 
 
 # ------------------------------------------------------------------------------ pairwise
