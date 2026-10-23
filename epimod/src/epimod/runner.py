@@ -1,0 +1,138 @@
+"""High-level experiment entry points used by the CLI: train a run, evaluate runs + baselines."""
+from __future__ import annotations
+
+import json
+import pickle
+import time
+from dataclasses import fields, replace
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from .config import ModelConfig, TrainConfig
+from .data.computage import sibling_studies
+from .data.store import load_split
+from .eval.baselines import PUBLISHED, predict_published
+from .eval.computage_protocol import run_protocol
+from .eval.elasticnet import ElasticNetClock
+from .model.epimod import EpiMod
+from .train.loop import calibrate_sigma, evaluate_ages, load_checkpoint, save_checkpoint, split_studies, train
+
+
+def _apply(cfg, overrides: dict):
+    names = {f.name for f in fields(cfg)}
+    bad = set(overrides) - names
+    if bad:
+        raise ValueError(f"unknown config keys {sorted(bad)}; valid: {sorted(names)}")
+    return replace(cfg, **overrides)
+
+
+def run_training(out_dir: str | Path, model_overrides: dict | None = None, train_overrides: dict | None = None,
+                 log=print) -> dict:
+    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    mc = _apply(ModelConfig(), model_overrides or {})
+    tc = _apply(TrainConfig(), train_overrides or {})
+    data = load_split("train", n_cpgs=mc.n_cpgs)
+    tr, va = split_studies(data.meta, tc.val_study_frac, tc.split_seed)
+    train_d, val_d = data.select(tr), data.select(va)
+    log(f"[train] {train_d.n} train / {val_d.n} val samples; val studies: {sorted(val_d.meta.DatasetID.unique())}")
+    model = EpiMod(data.cpgs, mc)
+    log(f"[train] parameters: {sum(p.numel() for p in model.parameters()):,}")
+    t0 = time.time()
+    res = train(model, train_d, val_d, tc, out_dir, log=log)
+    res["wall_sec"] = round(time.time() - t0, 1)
+    if mc.distributional:
+        res["sigma_scale"] = calibrate_sigma(model, val_d)
+        res["val_after_calibration"] = evaluate_ages(model, val_d)
+        log(f"[train] sigma calibrated on validation studies: scale={res['sigma_scale']:.3f}; "
+            f"val metrics: {json.dumps({k: round(v, 3) for k, v in res['val_after_calibration'].items()})}")
+    save_checkpoint(model, out_dir / "model.pt", tc, extra={"val_studies": sorted(val_d.meta.DatasetID.unique())})
+    prior = res.pop("ridge_prior", None)
+    if prior is not None:
+        np.savez(out_dir / "ridge_prior.npz", w=prior["w"], b=prior["b"], lam=prior["lambda"])
+        res["ridge_lambda"] = prior["lambda"]; res["ridge_cv"] = prior["cv_median_abs_err_t"]
+    (out_dir / "history.json").write_text(json.dumps(res, indent=1))
+    (out_dir / "config.json").write_text(json.dumps({"model": mc.to_dict(), "train": tc.to_dict()}, indent=1))
+    return res
+
+
+def _elasticnet(train_dir: Path, n_cpgs: int, cache: Path) -> ElasticNetClock:
+    if cache.exists():
+        return pickle.loads(cache.read_bytes())
+    ck = load_checkpoint(train_dir / "model.pt")
+    import torch
+
+    val = torch.load(train_dir / "model.pt", map_location="cpu", weights_only=False)["extra"]["val_studies"]
+    data = load_split("train", n_cpgs=n_cpgs)
+    keep = ~data.meta["DatasetID"].isin(val).to_numpy()
+    en = ElasticNetClock().fit(data.select(keep))
+    cache.write_bytes(pickle.dumps(en))
+    del ck
+    return en
+
+
+def breakdown(preds: pd.DataFrame, meta: pd.DataFrame) -> pd.DataFrame:
+    """Healthy-control MedAE by platform / tissue / age band, per model."""
+    hc = meta[(meta.Condition == "HC")]
+    rows = []
+    bands = pd.cut(hc.Age, [-1, 18, 40, 60, 90, 120], labels=["<18", "18-40", "40-60", "60-90", ">90"])
+    for name, grp in (("platform", hc.Platform), ("tissue", hc.Tissue), ("age_band", bands)):
+        for level in pd.unique(grp.dropna()):
+            idx = grp.index[grp == level]
+            for m in preds.columns:
+                rows.append(dict(by=name, level=str(level), model=m, n=len(idx),
+                                 MedAE=float(np.median(np.abs(preds.loc[idx, m] - hc.loc[idx, "Age"])))))
+    return pd.DataFrame(rows).pivot_table(index=["by", "level", "n"], columns="model", values="MedAE").reset_index()
+
+
+def run_evaluation(runs: dict[str, str | Path], out_dir: str | Path, elasticnet: bool = True,
+                   published: bool = True, log=print) -> pd.DataFrame:
+    """``runs``: display name -> run directory containing ``model.pt``."""
+    out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
+    models = {k: load_checkpoint(Path(v) / "model.pt") for k, v in runs.items()}
+    n_max = max(m.cfg.n_cpgs for m in models.values())
+    bench = load_split("benchmark", n_cpgs=max(n_max, 2479))
+    X = bench.X.astype(np.float32)
+    preds = pd.DataFrame(index=bench.meta.index)
+    extras: dict = {}
+    for name, m in models.items():
+        p = m.predict(X[:, : m.cfg.n_cpgs])
+        preds[name] = p["age"]
+        extras[name] = {"sigma_years": p["sigma_years"], "lo": p["age_lo"], "hi": p["age_hi"]}
+        log(f"[eval] predicted with {name}")
+    if elasticnet:
+        first = Path(next(iter(runs.values())))
+        n = next(iter(models.values())).cfg.n_cpgs
+        en = _elasticnet(first, n, out_dir / "elasticnet.pkl")
+        preds["ElasticNet(same panel)"] = en.predict(X[:, :n])
+        log(f"[eval] ElasticNet: {en.n_nonzero} non-zero coefficients")
+    prior_f = Path(next(iter(runs.values()))) / "ridge_prior.npz"
+    if prior_f.exists():
+        from .age import t_to_age
+
+        rp = np.load(prior_f)
+        n = len(rp["w"])
+        z = np.where(np.isfinite(X[:, :n]), np.clip((X[:, :n] - models[next(iter(models))].mean.numpy()) /
+                                                    models[next(iter(models))].std.numpy(), -6, 6), 0.0)
+        preds["Ridge(same panel)"] = t_to_age(z @ rp["w"] + float(rp["b"]))
+    if published:
+        for name in PUBLISHED:
+            preds[name] = predict_published(name, X, bench.cpgs.ids)
+    summary, long = run_protocol(preds, bench.meta)
+    summary.to_csv(out_dir / "summary.csv"); long.to_csv(out_dir / "tests_long.csv", index=False)
+    sib = sibling_studies()
+    keep = ~bench.meta.DatasetID.isin(sib).to_numpy()
+    run_protocol(preds[keep], bench.meta[keep])[0].to_csv(out_dir / "summary_no_siblings.csv")
+    (out_dir / "sibling_studies_excluded.json").write_text(json.dumps(sib))
+    preds.to_csv(out_dir / "predictions.csv.gz")
+    breakdown(preds, bench.meta).to_csv(out_dir / "hc_breakdown.csv", index=False)
+    # calibration of the predictive interval on healthy controls
+    cal = {}
+    hc = (bench.meta.Condition == "HC").to_numpy()
+    for name, e in extras.items():
+        age = bench.meta.Age.to_numpy()
+        cal[name] = {"cover90_hc": float(np.mean((age[hc] >= e["lo"][hc]) & (age[hc] <= e["hi"][hc]))),
+                     "mean_sigma_years_hc": float(np.mean(e["sigma_years"][hc]))}
+    (out_dir / "calibration.json").write_text(json.dumps(cal, indent=1))
+    return summary
