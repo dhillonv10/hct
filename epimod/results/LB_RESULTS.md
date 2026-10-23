@@ -33,7 +33,7 @@ never used to derive candidate pools (§3).
 | LB-0190 | age MAE ↓ | 5.82 (ridge 4.30) | 4.114 [3.902, 4.319] (even 4.236) | – | 7.397 [7.179, 7.622] (even 7.549) |
 | LB-0195 | age MAE ↓ | 13.17 (EN 8.93) | 11.199 [11.115, 11.278] (even 11.144) | – | 11.180 [11.107, 11.252] (even 11.130) |
 
-Table columns: *ridge/logit baselines* = ridge (LB-0190, LB-0195), bag-of-CpGs ridge with values (LB-0010, LB-0002), pairwise logistic regression (LB-0006); *EpiSet extremes-only* = age-balanced extremes model; *EpiSet multi-task* = dense, extremes + fixed + clock + pair views. Linear-route variant: not yet scored (§5).
+Table columns: *ridge/logit baselines* = ridge (LB-0190, LB-0195), bag-of-CpGs ridge with values (LB-0010, LB-0002), pairwise logistic regression (LB-0006); *EpiSet extremes-only* = age-balanced extremes model; *EpiSet multi-task* = dense, extremes + fixed + clock + pair views. The linear-route variant was stopped before finishing and was never scored on LongevityBench (§5).
 
 **§1a. LB-0002 decade head vs age-posterior decade** (balanced accuracy over 11 classes, all items / even): extremes-only 0.207 / 0.190 (head), 0.200 / 0.191 (posterior); multi-task 0.213 / 0.219 (head), 0.137 / 0.157 (posterior).
 
@@ -58,9 +58,9 @@ classification head; the decade implied by its age posterior is lower for the mu
   scheme, dense vs MoE) used the validation series only. Rule fixed before the MoE run finished: take MoE only if its
   best validation score beat dense by > 0.01; it did not (0.3870 vs 0.3872).
 * **LongevityBench evaluations performed (all logged in `lb_eval_log.jsonl` in the run directory):** EpiSet extremes-only
-  (age-balanced sampling; chosen over natural sampling on validation, 0.887 vs 0.920), EpiSet multi-task dense,
-  and the linear-route variant (labelled diagnostic, §5). Not scored on LongevityBench: natural-age extremes run, the MoE run
-  (stopped at step 1250 of 2000 by the background time limit). Baselines: ridge / HGB (fixed panel), per-clock ridge and
+  (age-balanced sampling; chosen over natural sampling on validation, 0.887 vs 0.920) and EpiSet multi-task dense.
+  Not scored on LongevityBench: natural-age extremes run, the MoE run (stopped at step 1250 of 2000 by the background
+  time limit) and the linear-route run (stopped at step 1500 of 2000). Baselines: ridge / HGB (fixed panel), per-clock ridge and
   elastic net, pairwise logistic regression at three strengths (chosen on validation), bag-of-CpGs ridge with and without
   values (extremes; 10 settings compared on validation).
 
@@ -99,8 +99,8 @@ batch signatures instead of age, and ridge cannot. This is a hypothesis consiste
   plus composition, nearly all from monocytes (6.3 → 3.4); centering alone is worse (6.35); B-cells worse (6.3 → 10.0);
   mixed whole-blood-like samples slightly worse (4.42 → 4.59). I did not build the differentiable-deconvolution architecture.
 * **Explicit linear route** (per-CpG weights × z(β), per-view gain): learns much faster early (step-250 validation score
-  0.68 vs 0.87 for dense) but ends worse on validation (0.413 vs 0.387); LongevityBench result in §1 as a labelled
-  diagnostic of the extrapolation hypothesis for LB-0190 (not a selected model).
+  0.68 vs 0.87 for dense) but is worse on validation (0.413 vs 0.387 at step 1500 of 2000). The run was stopped at step 1500
+  by the user and was **not scored on LongevityBench**, so the hypothesis that a linear route fixes the LB-0190 shrinkage is untested.
 * **Natural vs age-balanced sampling** for extremes: 0.920 vs 0.887 validation score (single seed, 9 series; small).
 
 ## 6. Comparability with the paper
