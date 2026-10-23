@@ -56,13 +56,23 @@ for k in range(0, len(ia), 500):
 cpg, ba, bb = np.concatenate(cpg), np.concatenate(ba), np.concatenate(bb)
 y = (age_tr[ia] > age_tr[ib]).astype(np.float32)
 t6 = parsed["LB-0006"]; a_, b_ = eval_pair(t6, vocab, uni); truth = np.array(t6.label) == "A"
+# regularisation strength chosen on held-out validation SERIES (not on the benchmark items)
+iv, jv = sample_pairs(age_va, 4000, np.random.RandomState(1), 10.0, va.meta.DatasetID.to_numpy())
+import torch
+parts = [pair_batch(va, vocab, iv[k:k+500], jv[k:k+500], 160, pools.pair) for k in range(0, len(iv), 500)]
+pv_a = {k: torch.cat([p[0][k] for p in parts]) for k in ("cpg", "beta")}; pv_b = {k: torch.cat([p[1][k] for p in parts]) for k in ("cpg", "beta")}
+fit = {}
 for C in (0.05, 0.5, 5.0):
-    m = PairLogit(C).fit(cpg, ba, bb, y, len(vocab))
+    m = PairLogit(C).fit(cpg, ba, bb, y, len(vocab)); fit[C] = m
+    val_acc = float(((m.predict_logit(pv_a["cpg"].numpy(), pv_a["beta"].numpy(), pv_b["beta"].numpy()) > 0) == (age_va[iv] > age_va[jv])).mean())
     logit = m.predict_logit(a_["cpg"].numpy(), a_["beta"].numpy(), b_["beta"].numpy())
-    preds[f"LB-0006/logit_C{C}"] = logit
     ok = (logit > 0) == truth
-    res[f"LB-0006/logit_C{C}"] = {"all": float(ok.mean()), "even": float(ok[~odd].mean()), "odd": float(ok[odd].mean())}
-    print(f"LB-0006 pair-logit C={C}: concordance all {ok.mean():.3f} | even {ok[~odd].mean():.3f} | odd {ok[odd].mean():.3f}   (paper: naive Bayes 0.61, best LLM 0.868)", flush=True)
+    preds[f"LB-0006/logit_C{C}"] = logit
+    res[f"LB-0006/logit_C{C}"] = {"val_acc": val_acc, "all": float(ok.mean()), "even": float(ok[~odd].mean()), "odd": float(ok[odd].mean())}
+    print(f"LB-0006 pair-logit C={C}: val concordance {val_acc:.3f} | LB all {ok.mean():.3f} | even {ok[~odd].mean():.3f} | odd {ok[odd].mean():.3f}   (paper: naive Bayes 0.61, best LLM 0.868)", flush=True)
+best_C = max(fit, key=lambda C: res[f"LB-0006/logit_C{C}"]["val_acc"])
+preds["LB-0006/logit"] = preds[f"LB-0006/logit_C{best_C}"]; res["LB-0006/selected_C_on_validation"] = best_C
+print(f"LB-0006 selected C={best_C} on validation series", flush=True)
 out_path = sys.argv[1] if len(sys.argv) > 1 else "lb_baselines.json"
 json.dump(res, open(out_path, "w"), indent=1)
 np.savez(out_path.replace(".json", "_preds.npz"), **preds)

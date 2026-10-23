@@ -11,7 +11,7 @@ from epimod.lb.tasks import balanced_accuracy, decade_label_to_id, decade_poster
 
 PAPER = {"LB-0010": "12.96 (ridge 15.90)", "LB-0002": "0.203 (NB 0.13)", "LB-0006": "0.868 (NB 0.61)", "LB-0190": "5.82 (ridge 4.30)", "LB-0195": "13.17 (EN 8.93)"}
 KEYS = {"LB-0010": ("LB-0010/pred", "LB-0010/ridge"), "LB-0190": ("LB-0190/pred", "LB-0190/ridge"), "LB-0195": ("LB-0195/pred", "LB-0195/ridge"),
-        "LB-0006": ("LB-0006/logit", "LB-0006/logit_C0.05")}
+        "LB-0006": ("LB-0006/logit",)}
 B = 2000
 
 
