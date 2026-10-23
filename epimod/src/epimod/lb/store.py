@@ -6,7 +6,11 @@ columns of the real profile. No values are simulated.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 import pickle
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -77,14 +81,27 @@ def lb_meta(exclude_series: set[str] | None = None, include_series: set[str] | N
     return meta
 
 
+_ARRAYS = ("low_idx", "low_beta", "high_idx", "high_beta", "prof")
+
+
 def load_lb_store(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
-                  min_age: float = 0.0, max_age: float = 105.0) -> LBStore:
+                  min_age: float = 0.0, max_age: float = 105.0, cache: bool = True) -> LBStore:
     """Load profiles for the selected series only, so a train/validation split can be loaded as two
-    stores without ever holding (or copying) the full matrix."""
+    stores without ever holding (or copying) the full matrix.
+
+    With ``cache`` the assembled arrays are written once to ``<data>/lb/cache/<key>`` and every later load (and every
+    concurrent process) memory-maps them: the profile matrix then lives once in the page cache, which the kernel can
+    reclaim, instead of once per process as anonymous memory."""
     root = subdir("lb", "store")
     universe = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
     vocab = pd.Index(load_probe_annotation().index)
     meta = lb_meta(exclude_series, include_series, min_age, max_age)
+    key = hashlib.md5(json.dumps([sorted(meta.index), len(universe), "v1"]).encode()).hexdigest()[:16]
+    cdir = subdir("lb", "cache") / key
+    if cache and (cdir / "done").exists():
+        arrs = {k: np.load(cdir / f"{k}.npy", mmap_mode="r") for k in _ARRAYS}
+        ids = json.loads((cdir / "ids.json").read_text())
+        return LBStore(meta.loc[ids], universe, vocab, **arrs)
     counts = meta.groupby("DatasetID").size()
     S, U = len(meta), len(universe)
     low_idx = np.zeros((S, N_EXT), np.int32); high_idx = np.zeros((S, N_EXT), np.int32)
@@ -108,7 +125,19 @@ def load_lb_store(exclude_series: set[str] | None = None, include_series: set[st
             prof[pos:pos + n] = z["prof"][keep]
             ids.extend(samples[i] for i in keep); pos += n
     assert pos == S, (pos, S)
-    return LBStore(meta.loc[ids], universe, vocab, low_idx, low_beta, high_idx, high_beta, prof)
+    arrs = dict(low_idx=low_idx, low_beta=low_beta, high_idx=high_idx, high_beta=high_beta, prof=prof)
+    if cache:
+        tmp = cdir.with_name(cdir.name + f".tmp{os.getpid()}"); tmp.mkdir(parents=True, exist_ok=True)
+        for k, a in arrs.items():
+            np.save(tmp / f"{k}.npy", a)
+        (tmp / "ids.json").write_text(json.dumps(ids)); (tmp / "done").write_text("ok")
+        if cdir.exists():
+            shutil.rmtree(tmp)                      # another process finished first
+        else:
+            os.replace(tmp, cdir)
+        del arrs, low_idx, high_idx, low_beta, high_beta, prof
+        arrs = {k: np.load(cdir / f"{k}.npy", mmap_mode="r") for k in _ARRAYS}
+    return LBStore(meta.loc[ids], universe, vocab, **arrs)
 
 
 # ----------------------------------------------------------------------------- task generators

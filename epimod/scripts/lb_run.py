@@ -28,6 +28,7 @@ ap.add_argument("--tasks", default=",".join(ALL_TASKS)); ap.add_argument("--step
 ap.add_argument("--moe", type=int, default=0); ap.add_argument("--topk", type=int, default=2)
 ap.add_argument("--d", type=int, default=96); ap.add_argument("--layers", type=int, default=4)
 ap.add_argument("--age-balance", type=float, default=0.0); ap.add_argument("--tail-shift", type=float, default=0.04)
+ap.add_argument("--bs-fixed", type=int, default=32, help="batch size of the (attention-heavy) fixed-panel task")
 ap.add_argument("--lr", type=float, default=1e-3); ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--threads", type=int, default=4); ap.add_argument("--full-pools", action="store_true",
                 help="derive pools from ALL eval prompts (secondary check; not the headline protocol)")
@@ -45,7 +46,8 @@ odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext_mask=odd, pair_mask=odd)
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
-cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads)
+bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24}
+cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads)
 mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk)
 if a.eval_only:
     ck = torch.load(out / "model.pt", map_location="cpu", weights_only=False)
