@@ -29,7 +29,8 @@ Single training/validation split; two initialisation seeds for the main model. R
    probabilistic loss and augmentation each improve age accuracy (§3).
 5. **What did not pan out:** the genomic-context embedding does not improve accuracy on seen CpGs;
    masked-CpG pre-training has no measurable effect; the acceleration head did not help;
-   interval calibration does not carry over to new studies (76% coverage at nominal 90%).
+   interval calibration does not carry over to new studies (76% coverage at nominal 90%); sparser,
+   more inspectable modules cost 0.43 y of out-of-study accuracy.
 
 **Versus Insilico's Longevity-LLM.** Their abstract reports a 4.34-year MAE for epigenetic age.
 I could not read the paper's methods, so I do not know the evaluation set, tissue, or whether it
@@ -104,6 +105,7 @@ Healthy-control MedAE (years), benchmark:
 | no masked-CpG reconstruction loss | 3.98 | +0.05 | +0.41 | 0.779 |
 | **no genomic-context features** | **3.84** | **−0.09** | +0.27 | 0.752 |
 | *post hoc:* cell-type-balanced sampling | 3.77 | −0.16 | +0.28 | 0.811 |
+| sparser modules (assignment-entropy penalty 0.5) | 4.36 | **+0.43** | +0.32 | 0.725 |
 
 * Components that help age accuracy beyond the noise floor: the warm-started linear route (the
   cold-start model needs far longer to converge), learned CpG ids, the module transformer, the
@@ -171,6 +173,15 @@ them as guarantees; per-study recalibration would be needed.
   across modules rather than carried by one**. P-values are descriptive (samples within a study are
   not independent).
 
+**Making modules sparser costs accuracy.** With an assignment-entropy penalty (`w_assign_entropy=0.5`)
+the modules become much more concentrated — median effective size 1,978 CpGs (min 456) vs 4,830,
+top-1% mass 0.17 (max 0.45) vs 0.085 — and half of them cover under 2,000 CpGs
+(`results/sparse_modules/`). On held-out *training* studies this looked free (validation MedAE
+2.65 y vs 2.72 y), but on the benchmark it is worse by 0.43 y (4.36 vs 3.93 y; blood 4.13 vs 3.69;
+interval coverage 0.725 vs 0.756) with the same disease signal (+0.32 y). So there is a real
+interpretability/accuracy trade-off, and it was invisible in my training-time validation. The
+default stays diffuse; the penalty is an option for people who want smaller CpG sets.
+
 ## 7. Acceleration head (negative result)
 
 A small head on frozen module tokens trained to place cases above age-matched same-study controls,
@@ -183,8 +194,8 @@ scored only on held-out studies or disease classes (`train/accel.py`):
 | + head, disease-class-held-out folds | 4.15 | 7 | +0.32 |
 
 No change in mean acceleration; slightly worse chronological error. The +2 hits are within the
-threshold-fragility noted above. I tried two versions (unweighted, then pair-weighted per test) and
-stopped there to avoid tuning against the same test studies. Not recommended as is.
+threshold-fragility noted above. I tried two versions (unweighted, on an early 6-epoch checkpoint; then pair-weighted per test, on
+the final model — the table) and stopped there to avoid tuning against the same test studies. Not recommended as is.
 
 ## 8. Limitations and open items
 
@@ -197,5 +208,5 @@ stopped there to avoid tuning against the same test studies. Not recommended as 
   under different sample ids cannot be ruled out from metadata.
 * Not tested: other tissues, non-human data, longitudinal/mortality outcomes, EPICv2-only probes,
   more than 12 k CpGs, larger or longer-trained models.
-* The assignment-entropy option (`w_assign_entropy`) for sparser modules is evaluated in the
-  section below if the run completed; modules in the headline model are diffuse.
+* Validation on held-out *training* studies did not predict benchmark behaviour for the sparse-module
+  variant (looked free, cost 0.43 y); take validation-only comparisons with caution.

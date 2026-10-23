@@ -1,0 +1,22 @@
+{
+ "full": {
+  "cover90_hc": 0.7561837455830389,
+  "mean_sigma_years_hc": 5.082518700429451,
+  "cover90_hc[Platform=27K]": 0.3106796116504854,
+  "cover90_hc[Platform=450K]": 0.768359375,
+  "cover90_hc[Platform=EPIC]": 0.844311377245509,
+  "cover90_hc[Tissue=Blood]": 0.7836235642830678,
+  "cover90_hc[Tissue=Saliva]": 0.19083969465648856,
+  "cover90_hc[blood,450K/EPIC]": 0.8023882896764253
+ },
+ "sparse_modules": {
+  "cover90_hc": 0.7250883392226148,
+  "mean_sigma_years_hc": 4.832815095596182,
+  "cover90_hc[Platform=27K]": 0.27184466019417475,
+  "cover90_hc[Platform=450K]": 0.738671875,
+  "cover90_hc[Platform=EPIC]": 0.7964071856287425,
+  "cover90_hc[Tissue=Blood]": 0.7532419414598,
+  "cover90_hc[Tissue=Saliva]": 0.1450381679389313,
+  "cover90_hc[blood,450K/EPIC]": 0.772342064714946
+ }
+}

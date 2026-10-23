@@ -27,7 +27,7 @@ On the 65 held-out ComputAge Bench studies (details, caveats and ablations in
   prediction; modest accuracy gains from the linear warm start, module transformer, probabilistic
   loss and augmentation.
 * **Not supported by the ablations:** genomic context improving accuracy on seen CpGs; masked-CpG
-  pre-training; the acceleration head.
+  pre-training; the acceleration head. Sparser (more inspectable) modules cost 0.43 y out of study.
 * **Versus Insilico's Longevity-LLM:** their 4.34-year MAE (abstract) is not comparable — evaluation
   set and metric unknown; I could only read the abstract.
 
