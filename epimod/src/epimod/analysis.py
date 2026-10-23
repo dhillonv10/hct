@@ -17,6 +17,50 @@ from .train.accel import AccelConfig, cross_fitted_age, extract_features
 from .train.loop import load_checkpoint
 
 
+def run_cpg_transfer(run_dir: str | Path, out_dir: str | Path, log=print) -> dict:
+    """Unseen-CpG transfer test for a context-only model trained on CpG half "A".
+
+    The same weights are re-targeted (``EpiMod.rebind``) to half "B" -- CpGs the model never saw --
+    and scored on benchmark healthy controls. Controls: the seen half A, a constant predictor, and
+    half B with each CpG's genomic annotations shuffled among CpGs (if context carries the transfer,
+    shuffling must destroy it)."""
+    from dataclasses import replace
+
+    from .config import ModelConfig
+    from .runner import cpg_half
+
+    run_dir, out_dir = Path(run_dir), Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    model = load_checkpoint(run_dir / "model.pt")
+    cfg = ModelConfig()
+    bench = load_split("benchmark", n_cpgs=cfg.n_cpgs)
+    X = bench.X.astype(np.float32)
+    ia, ib = cpg_half(cfg.n_cpgs, "A", 123), cpg_half(cfg.n_cpgs, "B", 123)
+    assert len(np.intersect1d(ia, ib)) == 0
+    hc = (bench.meta.Condition == "HC").to_numpy()
+    age = bench.meta.Age.to_numpy()
+    whole = bench.meta.CellType.fillna("NA").str.contains("hole|PBMC|buffy|leuk|PBL", case=False).to_numpy()
+    train_age = load_split("train", n_cpgs=10).meta.Age
+
+    def score(pred, name):
+        e = np.abs(pred - age)
+        return {"model": name, "MedAE_all_HC": float(np.median(e[hc])), "MedAE_whole_blood_HC": float(np.median(e[hc & whole])),
+                "r_all_HC": float(np.corrcoef(pred[hc], age[hc])[0, 1]) if np.std(pred[hc]) > 0 else float("nan")}
+
+    rows = [score(np.full(len(age), float(train_age.median())), "constant (training median age)")]
+    rows.append(score(model.predict(X[:, ia])["age"], f"seen CpGs (half A, n={len(ia)})"))
+    tb = bench.cpgs.subset(ib)
+    rows.append(score(model.rebind(tb).predict(X[:, ib])["age"], f"UNSEEN CpGs (half B, n={len(ib)}), true context"))
+    rng = np.random.RandomState(0)
+    perm = rng.permutation(len(ib))
+    shuf = replace(tb, chrom=tb.chrom[perm], pos=tb.pos[perm], island=tb.island[perm], reg=tb.reg[perm], binary=tb.binary[perm])
+    rows.append(score(model.rebind(shuf).predict(X[:, ib])["age"], "UNSEEN CpGs, annotations shuffled (control)"))
+    out = pd.DataFrame(rows).set_index("model")
+    out.to_csv(out_dir / "cpg_transfer.csv")
+    log(out.round(2).to_string())
+    return {"table": out}
+
+
 def run_analysis(run_dir: str | Path, out_dir: str | Path, log=print) -> dict:
     run_dir, out_dir = Path(run_dir), Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

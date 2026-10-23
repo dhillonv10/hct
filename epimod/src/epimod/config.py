@@ -23,6 +23,8 @@ class ModelConfig:
     id_dropout: float = 0.25           # train-time prob. that a CpG's id embedding is hidden
     distributional: bool = True        # predict (mu, sigma) instead of a point estimate
     ssl_decoder: bool = True
+    cpg_split: str = ""         # "A" / "B": train on a random half of the panel (for the unseen-CpG transfer test)
+    cpg_split_seed: int = 123
 
     def to_dict(self):
         return asdict(self)

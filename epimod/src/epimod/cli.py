@@ -42,8 +42,16 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--run", required=True)
     a.add_argument("--out", required=True)
 
+    x = sub.add_parser("transfer", help="unseen-CpG transfer test for a run trained with model cpg_split=A, use_id_embedding=False")
+    x.add_argument("--run", required=True)
+    x.add_argument("--out", required=True)
+
     args = ap.parse_args(argv)
-    if args.cmd == "analyze":
+    if args.cmd == "transfer":
+        from .analysis import run_cpg_transfer
+
+        run_cpg_transfer(args.run, args.out)
+    elif args.cmd == "analyze":
         from .analysis import run_analysis
 
         run_analysis(args.run, args.out)

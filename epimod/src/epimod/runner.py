@@ -28,12 +28,23 @@ def _apply(cfg, overrides: dict):
     return replace(cfg, **overrides)
 
 
+def cpg_half(n: int, which: str, seed: int) -> np.ndarray:
+    """Indices of a deterministic random half ("A" or "B") of ``n`` CpGs; A and B are disjoint."""
+    in_a = np.random.RandomState(seed).rand(n) < 0.5
+    return np.flatnonzero(in_a if which == "A" else ~in_a)
+
+
 def run_training(out_dir: str | Path, model_overrides: dict | None = None, train_overrides: dict | None = None,
                  log=print) -> dict:
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     mc = _apply(ModelConfig(), model_overrides or {})
     tc = _apply(TrainConfig(), train_overrides or {})
     data = load_split("train", n_cpgs=mc.n_cpgs)
+    if mc.cpg_split:
+        idx = cpg_half(mc.n_cpgs, mc.cpg_split, mc.cpg_split_seed)
+        data = type(data)(X=data.X[:, idx], meta=data.meta, cpgs=data.cpgs.subset(idx))
+        mc = replace(mc, n_cpgs=len(idx))
+        log(f"[train] CpG split {mc.cpg_split}: training on {len(idx)} of the panel's CpGs")
     tr, va = split_studies(data.meta, tc.val_study_frac, tc.split_seed)
     train_d, val_d = data.select(tr), data.select(va)
     log(f"[train] {train_d.n} train / {val_d.n} val samples; val studies: {sorted(val_d.meta.DatasetID.unique())}")
@@ -91,30 +102,30 @@ def run_evaluation(runs: dict[str, str | Path], out_dir: str | Path, elasticnet:
     """``runs``: display name -> run directory containing ``model.pt``."""
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
     models = {k: load_checkpoint(Path(v) / "model.pt") for k, v in runs.items()}
-    n_max = max(m.cfg.n_cpgs for m in models.values())
-    bench = load_split("benchmark", n_cpgs=max(n_max, 2479))
+    bench = load_split("benchmark")                      # full 16k-CpG panel; models pick columns by CpG id
     X = bench.X.astype(np.float32)
     preds = pd.DataFrame(index=bench.meta.index)
     extras: dict = {}
     for name, m in models.items():
-        p = m.predict(X[:, : m.cfg.n_cpgs])
+        cols = pd.Index(bench.cpgs.ids).get_indexer(m.cpg_ids)
+        assert (cols >= 0).all(), f"{name}: model uses CpGs missing from the benchmark store"
+        p = m.predict(X[:, cols])
         preds[name] = p["age"]
         extras[name] = {"sigma_years": p["sigma_years"], "lo": p["age_lo"], "hi": p["age_hi"]}
         log(f"[eval] predicted with {name}")
+    base_n = ModelConfig().n_cpgs                        # baselines use the default panel prefix
+    first = Path(next(iter(runs.values())))
     if elasticnet:
-        first = Path(next(iter(runs.values())))
-        n = next(iter(models.values())).cfg.n_cpgs
-        en = _elasticnet(first, n, out_dir / "elasticnet.pkl")
-        preds["ElasticNet(same panel)"] = en.predict(X[:, :n])
+        en = _elasticnet(first, base_n, out_dir / "elasticnet.pkl")
+        preds["ElasticNet(same panel)"] = en.predict(X[:, :base_n])
         log(f"[eval] ElasticNet: {en.n_nonzero} non-zero coefficients")
-    prior_f = Path(next(iter(runs.values()))) / "ridge_prior.npz"
-    if prior_f.exists():
+    prior_f = first / "ridge_prior.npz"
+    if prior_f.exists() and len(np.load(prior_f)["w"]) == base_n:
         from .age import t_to_age
 
         rp = np.load(prior_f)
-        n = len(rp["w"])
-        z = np.where(np.isfinite(X[:, :n]), np.clip((X[:, :n] - models[next(iter(models))].mean.numpy()) /
-                                                    models[next(iter(models))].std.numpy(), -6, 6), 0.0)
+        mean, std = bench.cpgs.mean[:base_n], np.maximum(bench.cpgs.std[:base_n], 1e-2)
+        z = np.where(np.isfinite(X[:, :base_n]), np.clip((X[:, :base_n] - mean) / std, -6, 6), 0.0)
         preds["Ridge(same panel)"] = t_to_age(z @ rp["w"] + float(rp["b"]))
     if published:
         for name in PUBLISHED:
