@@ -96,3 +96,23 @@ def test_linear_route_is_noop_at_init_invariant_and_linear_in_z():
     assert torch.allclose(lin, manual, atol=1e-6)
     (lin.sum()).backward()
     assert m.lin_w.weight.grad is not None and m.lin_gain.grad is not None
+
+
+def test_sample_level_moe_routes_whole_samples_and_stays_invariant():
+    cfg = SetConfig(n_tokens_vocab=200, d_model=32, d_emb=16, n_layers=2, n_heads=2, moe_experts=4, moe_level="sample")
+    torch.manual_seed(0)
+    m = EpiSet(cfg).eval()
+    cpg, beta, role, sex = _batch()
+    base = m(cpg, beta, role, sex)[0]
+    # all tokens of a sample share one routing decision (top-2 of 4, constant over the set)
+    ffn = m.blocks[0].ffn
+    x = torch.randn(3, 9, 32); pad = torch.zeros(3, 9, dtype=torch.bool); pad[0, 6:] = True
+    ffn(x, pad)
+    assert abs(float(ffn.last_load.sum()) - 1.0) < 1e-5
+    # padding and permutation invariance
+    padt = torch.full((4, 5), -1)
+    out = m(torch.cat([cpg, padt], 1), torch.cat([beta, torch.rand(4, 5)], 1), torch.cat([role, torch.zeros(4, 5, dtype=torch.long)], 1), sex)[0]
+    perm = torch.randperm(cpg.shape[1])
+    assert torch.allclose(base, out, atol=1e-5) and torch.allclose(base, m(cpg[:, perm], beta[:, perm], role[:, perm], sex)[0], atol=1e-5)
+    m.train(); mu, sig, dec = m(cpg, beta, role, sex); (mu.sum() + m.moe_aux()).backward()
+    assert m.blocks[0].ffn.router.weight.grad is not None

@@ -37,6 +37,7 @@ class SetConfig:
     moe_experts: int = 0             # 0 = dense FFN; >0 = sparse mixture of experts
     moe_top_k: int = 2
     moe_balance: float = 0.01
+    moe_level: str = "token"          # "token": router per token; "sample": one routing decision per sample from the pooled set
     linear_route: bool = False       # add an explicit per-CpG linear term sum_i w_i z_i (extrapolates; cannot memorise cohorts)
 
 
@@ -45,9 +46,9 @@ class MoEFFN(nn.Module):
     the renormalised router weights. Experts are computed densely (E is small), gates are sparse.
     ``aux`` is the Switch-style load-balancing loss (E * sum_e fraction_e * mean_prob_e)."""
 
-    def __init__(self, d: int, ff: int, n_experts: int, top_k: int, dropout: float):
+    def __init__(self, d: int, ff: int, n_experts: int, top_k: int, dropout: float, sample_level: bool = False):
         super().__init__()
-        self.E, self.k = n_experts, top_k
+        self.E, self.k, self.sample_level = n_experts, top_k, sample_level
         self.router = nn.Linear(d, n_experts)
         self.w1 = nn.Parameter(torch.randn(n_experts, d, ff) * d**-0.5)
         self.b1 = nn.Parameter(torch.zeros(n_experts, ff))
@@ -58,13 +59,17 @@ class MoEFFN(nn.Module):
         self.last_load: torch.Tensor | None = None
 
     def forward(self, x: torch.Tensor, pad: torch.Tensor | None = None) -> torch.Tensor:
-        probs = torch.softmax(self.router(x), -1)                                   # [B,T,E]
+        live = torch.ones(x.shape[:2], device=x.device) if pad is None else (~pad).float()
+        if self.sample_level:       # one decision per sample from the permutation-invariant mean of its live tokens
+            pooled = (x * live.unsqueeze(-1)).sum(1) / live.sum(1, keepdim=True).clamp_min(1.0)
+            probs = torch.softmax(self.router(pooled), -1).unsqueeze(1).expand(-1, x.shape[1], -1)      # [B,T,E], constant over T
+        else:
+            probs = torch.softmax(self.router(x), -1)                               # [B,T,E]
         topv, topi = probs.topk(self.k, dim=-1)
         gates = torch.zeros_like(probs).scatter(-1, topi, topv / topv.sum(-1, keepdim=True))
         h = torch.nn.functional.gelu(torch.einsum("btd,edf->btef", x, self.w1) + self.b1)
         y = torch.einsum("btef,efd->bted", self.drop(h), self.w2) + self.b2
         out = (gates.unsqueeze(-1) * y).sum(2)
-        live = torch.ones(x.shape[:2], device=x.device) if pad is None else (~pad).float()
         n = live.sum().clamp_min(1.0)
         frac = ((gates > 0).float() * live.unsqueeze(-1)).sum((0, 1)) / (n * self.k)
         mean_p = (probs * live.unsqueeze(-1)).sum((0, 1)) / n
@@ -80,7 +85,7 @@ class Block(nn.Module):
         self.n1, self.n2 = nn.LayerNorm(d), nn.LayerNorm(d)
         self.attn = nn.MultiheadAttention(d, cfg.n_heads, dropout=cfg.dropout, batch_first=True)
         if cfg.moe_experts > 0:
-            self.ffn = MoEFFN(d, cfg.ff_mult * d, cfg.moe_experts, cfg.moe_top_k, cfg.dropout)
+            self.ffn = MoEFFN(d, cfg.ff_mult * d, cfg.moe_experts, cfg.moe_top_k, cfg.dropout, cfg.moe_level == "sample")
         else:
             self.ffn = nn.Sequential(nn.Linear(d, cfg.ff_mult * d), nn.GELU(), nn.Dropout(cfg.dropout), nn.Linear(cfg.ff_mult * d, d))
         self.moe = cfg.moe_experts > 0
