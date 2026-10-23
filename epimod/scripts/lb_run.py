@@ -39,9 +39,10 @@ out = Path(a.out) / a.name; out.mkdir(parents=True, exist_ok=True)
 parsed = load_parsed(); store = load_lb_store(exclude_series=lb_series(parsed)); uni = store.universe
 tr_m, va_m = split_studies(store.meta, 0.15, 0)
 tr, va = store.subset(tr_m), store.subset(va_m)
+del store; import gc; gc.collect()
 odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext_mask=odd, pair_mask=odd)
-vocab = build_vocab(store, parsed, pools); sets = task_sets(parsed, uni)
+vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
 cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads)
 mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk)

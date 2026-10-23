@@ -11,8 +11,9 @@ from epimod.train.loop import split_studies
 parsed = load_parsed(); store = load_lb_store(exclude_series=lb_series(parsed)); uni = store.universe
 tr_m, va_m = split_studies(store.meta, 0.15, 0)
 tr, va = store.subset(tr_m), store.subset(va_m)
+del store; import gc; gc.collect()
 odd = np.arange(500) % 2 == 1
-pools = make_pools(parsed, uni, ext_mask=odd, pair_mask=odd); vocab = build_vocab(store, parsed, pools); sets = task_sets(parsed, uni)
+pools = make_pools(parsed, uni, ext_mask=odd, pair_mask=odd); vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 age_tr, age_va = tr.meta.Age.to_numpy(float), va.meta.Age.to_numpy(float)
 res = {}
 
