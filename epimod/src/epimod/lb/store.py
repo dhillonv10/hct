@@ -20,6 +20,7 @@ import pandas as pd
 from ..data.annotation import load_probe_annotation
 from ..data.computage import load_meta
 from ..paths import subdir
+from .lite import load_lite_universe
 
 MISSING = 255
 N_EXT = 100
@@ -68,11 +69,16 @@ class LBStore:
 
 
 def lb_meta(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
-            min_age: float = 0.0, max_age: float = 105.0) -> pd.DataFrame:
+            min_age: float = 0.0, max_age: float = 105.0, geo: bool = True) -> pd.DataFrame:
     """Sample metadata of the usable ComputAge samples (QC'd, de-duplicated, LB series excluded)."""
     metas = []
     for split in ("train", "benchmark"):
         m = load_meta(split).copy(); m["split"] = split; metas.append(m)
+    if geo:
+        from ..data.geo import geo_meta
+        g = geo_meta()
+        if len(g):
+            metas.append(g)
     meta = pd.concat(metas)
     meta = meta[~meta.index.duplicated(keep="first")]
     meta = meta[meta.Age.between(min_age, max_age) & ~meta.DatasetID.isin(set(exclude_series or ()))]
@@ -85,18 +91,18 @@ _ARRAYS = ("low_idx", "low_beta", "high_idx", "high_beta", "prof")
 
 
 def load_lb_store(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
-                  min_age: float = 0.0, max_age: float = 105.0, cache: bool = True) -> LBStore:
+                  min_age: float = 0.0, max_age: float = 105.0, cache: bool = True, geo: bool = True) -> LBStore:
     """Load profiles for the selected series only, so a train/validation split can be loaded as two
     stores without ever holding (or copying) the full matrix.
 
     With ``cache`` the assembled arrays are written once to ``<data>/lb/cache/<key>`` and every later load (and every
     concurrent process) memory-maps them: the profile matrix then lives once in the page cache, which the kernel can
     reclaim, instead of once per process as anonymous memory."""
-    root = subdir("lb", "store")
-    universe = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
+    root = subdir("lb", "store_lite")                    # compact store: see lb/lite.py
+    universe = load_lite_universe()
     vocab = pd.Index(load_probe_annotation().index)
-    meta = lb_meta(exclude_series, include_series, min_age, max_age)
-    key = hashlib.md5(json.dumps([sorted(meta.index), len(universe), "v1"]).encode()).hexdigest()[:16]
+    meta = lb_meta(exclude_series, include_series, min_age, max_age, geo)
+    key = hashlib.md5(json.dumps([sorted(meta.index), len(universe), "lite-v1"]).encode()).hexdigest()[:16]
     cdir = subdir("lb", "cache") / key
     if cache and (cdir / "done").exists():
         arrs = {k: np.load(cdir / f"{k}.npy", mmap_mode="r") for k in _ARRAYS}
@@ -104,12 +110,12 @@ def load_lb_store(exclude_series: set[str] | None = None, include_series: set[st
         return LBStore(meta.loc[ids], universe, vocab, **arrs)
     counts = meta.groupby("DatasetID").size()
     S, U = len(meta), len(universe)
-    low_idx = np.zeros((S, N_EXT), np.int32); high_idx = np.zeros((S, N_EXT), np.int32)
-    low_beta = np.zeros((S, N_EXT), np.float16); high_beta = np.zeros((S, N_EXT), np.float16)
+    low_idx = np.zeros((S, N_EXT), np.int32); high_idx = np.zeros((S, N_EXT), np.int32)      # whole-array extremes are not stored
+    low_beta = np.zeros((S, N_EXT), np.float16); high_beta = np.zeros((S, N_EXT), np.float16)  # (pooled extremes are generated)
     prof = np.empty((S, U), np.uint8)
     ids: list[str] = []
     pos = 0
-    for split in ("train", "benchmark"):
+    for split in ("train", "benchmark", "geo"):
         for f in sorted((root / split).glob("GSE*.npz")):
             if f.stem not in counts.index:
                 continue
@@ -120,8 +126,6 @@ def load_lb_store(exclude_series: set[str] | None = None, include_series: set[st
             if not keep:
                 continue
             n = len(keep)
-            low_idx[pos:pos + n], high_idx[pos:pos + n] = z["low_idx"][keep], z["high_idx"][keep]
-            low_beta[pos:pos + n], high_beta[pos:pos + n] = z["low_beta"][keep], z["high_beta"][keep]
             prof[pos:pos + n] = z["prof"][keep]
             ids.extend(samples[i] for i in keep); pos += n
     assert pos == S, (pos, S)
