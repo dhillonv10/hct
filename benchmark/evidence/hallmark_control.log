@@ -1,0 +1,6 @@
+curated Hallmark50 : (0.6951802011341486, [0.66, 0.67, 0.82, 0.63])
+  shuffled replicate 5: mean so far 0.487
+  shuffled replicate 10: mean so far 0.486
+  shuffled replicate 15: mean so far 0.490
+  shuffled replicate 20: mean so far 0.508
+SHUFFLED Hallmark (20 replicates): mean LOSO AUROC 0.508, sd 0.078, range [0.36,0.67]; curated beats 100% of shuffled

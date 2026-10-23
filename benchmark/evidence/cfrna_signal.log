@@ -1,0 +1,11 @@
+expressed genes: 13167
+pre-GVHD: D0 + PR (prognostic)     n= 52 patients= 32 pos= 27 | AUROC 0.32 [0.14,0.48] perm p=0.902 (null mean 0.50) | confounders: batch 0.50 libsize 0.34
+timepoint PR                       n= 26 patients= 26 pos= 13 | AUROC 0.49 [0.29,0.76] perm p=0.659 (null mean 0.53) | confounders: batch 0.50 libsize 0.46
+timepoint D0                       n= 26 patients= 26 pos= 14 | AUROC 0.41 [0.16,0.63] perm p=0.610 (null mean 0.46) | confounders: batch 0.50 libsize 0.36
+timepoint 1M                       n= 62 patients= 62 pos= 30 | AUROC 0.45 [0.31,0.60] perm p=0.659 (null mean 0.49) | confounders: batch 0.53 libsize 0.52
+timepoint 2M                       n= 63 patients= 63 pos= 32 | AUROC 0.65 [0.50,0.77] perm p=0.098 (null mean 0.51) | confounders: batch 0.47 libsize 0.32
+timepoint 3M                       n= 61 patients= 61 pos= 28 | AUROC 0.73 [0.61,0.87] perm p=0.024 (null mean 0.50) | confounders: batch 0.50 libsize 0.46
+timepoint 6M                       n= 52 patients= 52 pos= 25 | AUROC 0.55 [0.39,0.73] perm p=0.317 (null mean 0.53) | confounders: batch 0.51 libsize 0.59
+timepoint E                        n= 71 patients= 71 pos= 35 | AUROC 0.45 [0.30,0.54] perm p=0.707 (null mean 0.51) | confounders: batch 0.35 libsize 0.59
+1M+2M+3M (first 100 days)          n=186 patients= 74 pos= 90 | AUROC 0.61 [0.50,0.72] perm p=0.098 (null mean 0.51) | confounders: batch 0.50 libsize 0.39
+all post-HCT samples               n=382 patients= 92 pos=187 | AUROC 0.52 [0.42,0.61] perm p=0.488 (null mean 0.52) | confounders: batch 0.52 libsize 0.42

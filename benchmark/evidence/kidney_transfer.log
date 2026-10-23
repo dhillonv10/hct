@@ -1,0 +1,25 @@
+[2026-10-23 04:21:57 UTC] downloaded GPL570.table.txt (79,501,528 bytes, sha256 ebb6df22d8e0..)
+[2026-10-23 04:21:59 UTC] GPL570: 43,160 of 54,675 probes map to a unique symbol (21,810 genes) via Gene Symbol
+kidney GSE36059: 338 biopsies, 57 T-cell-mediated; GSE21374: 282 biopsies, 76 rejection
+T1 sanity  kidney->kidney (train GSE36059 TCMR/mixed vs non, test GSE21374 rej vs nonrej): AUROC 0.83 [0.78,0.88]  (C=0.03)
+T2 ZERO-SHOT  (kidney-trained head scores GVHD samples; AUROC [patient-bootstrap 95% CI])
+  K1_donor_CD8_to_recipient_aGVHD  n= 47  0.46 [0.29,0.62]
+  K1_donor_CD4_to_recipient_aGVHD  n= 49  0.45 [0.29,0.60]
+  K2_PTCy_CD8_GVHD                 n= 35  0.52 [0.29,0.73]
+  K2_PTCy_CD4Tconv_GVHD            n= 33  0.51 [0.30,0.72]
+  K2_PTCy_Treg_GVHD                n= 20  0.66 [0.40,0.89]
+  K3_PBMC_T_aGVHD                  n= 24  0.66 [0.41,0.87]
+  K4_CD8_subsets_aGVHD             n= 60  0.35 [0.09,0.67]
+  K5_scRNA_pseudobulk_aGVHD        n= 75  0.55 [0.24,0.88]
+  colon GSE215068 (GVHD vs no)       n= 33  0.64 [0.43,0.83]
+  colon GSE168116 (GVHD vs no)       n= 17  0.74 [0.44,0.97]
+  skin GSE263557 (GVHD vs control)   n= 54  0.84 [0.73,0.94]
+T3 POOLED leave-one-STUDY-out over the four T-cell GVHD studies (Hallmark50 space)
+  GVHD-only (replicates 0.695)                 GSE103569=0.66 GSE295359=0.67 GSE73809=0.82 PTCY=0.63  | mean 0.695
+  GVHD + kidney rejection rows                 GSE103569=0.43 GSE295359=0.62 GSE73809=0.78 PTCY=0.52  | mean 0.587
+  GVHD + kidney, kidney labels PERMUTED #1     GSE103569=0.35 GSE295359=0.47 GSE73809=0.87 PTCY=0.47  | mean 0.541
+  GVHD + kidney, kidney labels PERMUTED #2     GSE103569=0.53 GSE295359=0.74 GSE73809=0.69 PTCY=0.49  | mean 0.614
+  GVHD + kidney, kidney labels PERMUTED #3     GSE103569=0.56 GSE295359=0.53 GSE73809=0.74 PTCY=0.54  | mean 0.591
+  GVHD + kidney, kidney labels PERMUTED #4     GSE103569=0.45 GSE295359=0.62 GSE73809=0.90 PTCY=0.56  | mean 0.634
+  GVHD + kidney, kidney labels PERMUTED #5     GSE103569=0.51 GSE295359=0.77 GSE73809=0.87 PTCY=0.62  | mean 0.694
+summary: GVHD-only 0.695 | + kidney 0.587 | + kidney with permuted labels 0.615 (+/- 0.050)

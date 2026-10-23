@@ -1,0 +1,7 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+== esm2_t12_35M_UR50D | CD8-donor-reactive (346s)
+  B2 V/J/length + CDR3 k-mers        pooled AUROC 0.643 | within-lineage-decile AUROC 0.579 [0.566,0.596]
+  V/J/length + ESM2 embedding        pooled AUROC 0.642 | within-lineage-decile AUROC 0.578 [0.566,0.593]
+== esm2_t12_35M_UR50D | CD4-donor-reactive (949s)
+  B2 V/J/length + CDR3 k-mers        pooled AUROC 0.586 | within-lineage-decile AUROC 0.570 [0.561,0.580]
+  V/J/length + ESM2 embedding        pooled AUROC 0.584 | within-lineage-decile AUROC 0.570 [0.561,0.578]

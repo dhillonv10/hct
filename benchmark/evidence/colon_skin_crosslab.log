@@ -1,0 +1,25 @@
+colon GSE215068 (47968, 33) pos=18 | colon GSE168116 (44407, 17) pos=9 | skin (58746, 54) GVHD=45 ctrl=9
+genes shared by all three studies: 21219
+after expression filter: 13743
+(1) skin GVHD vs control, within-study grouped CV
+   AUROC 0.82 (n=54, controls=9)
+(2) cross-organ and cross-lab transfer (per-study gene z-scoring; genes chosen on training data only)
+   colon(215068+168116) -> skin                   AUROC 0.86 [0.73,0.96] perm p=0.123 (test n=54, pos=45)
+   colon 215068 -> skin                           AUROC 0.85 [0.72,0.95] perm p=0.169 (test n=54, pos=45)
+   colon 168116 -> skin                           AUROC 0.89 [0.78,0.97] perm p=0.043 (test n=54, pos=45)
+   skin -> colon 215068                           AUROC 0.71 [0.53,0.88] perm p=0.146 (test n=33, pos=18)
+   skin -> colon 168116                           AUROC 0.81 [0.55,0.99] perm p=0.066 (test n=17, pos=9)
+   colon 215068 -> colon 168116                   AUROC 0.85 [0.63,1.00] perm p=0.017 (test n=17, pos=9)
+   colon 168116 -> colon 215068                   AUROC 0.80 [0.65,0.94] perm p=0.090 (test n=33, pos=18)
+(3) PRE-SPECIFIED zero-parameter program score (written before looking at these cohorts' labels)
+   32/37 signature genes measured in all three studies
+   colon GSE215068                      AUROC 0.80 [0.62,0.94]  vs random same-size gene sets p=0.088
+   colon GSE168116                      AUROC 0.88 [0.66,1.00]  vs random same-size gene sets p=0.002
+   skin GSE263557 (GVHD vs control)     AUROC 0.88 [0.76,0.97]  vs random same-size gene sets p=0.195
+(4) learning curve: fit on n colon biopsies of GSE215068, test on the other lab (GSE168116, n=17)
+   n_train=  6: mean AUROC 0.77  sd 0.11  (draws=40)
+   n_train= 10: mean AUROC 0.79  sd 0.08  (draws=40)
+   n_train= 14: mean AUROC 0.79  sd 0.07  (draws=40)
+   n_train= 20: mean AUROC 0.81  sd 0.04  (draws=40)
+   n_train= 26: mean AUROC 0.81  sd 0.03  (draws=40)
+   n_train= 33: mean AUROC 0.82  sd 0.00  (draws=1)

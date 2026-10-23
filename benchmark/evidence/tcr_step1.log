@@ -1,0 +1,18 @@
+  CD8 fold 0 done (159s)
+  CD8 fold 1 done (256s)
+  CD8 fold 2 done (351s)
+  CD8 fold 3 done (412s)
+  CD8 fold 4 done (502s)
+== CD8-donor-reactive (29,147 matched clones, 4,891 positives, 54 held-out recipients across folds)
+  B1 V/J/length (logistic)       pooled AUROC 0.610 | within-lineage-decile AUROC 0.549 [0.539,0.560]
+  B2 + CDR3 k-mers (logistic)    pooled AUROC 0.643 | within-lineage-decile AUROC 0.579 [0.566,0.596]
+  T  CDR3 transformer            pooled AUROC 0.646 | within-lineage-decile AUROC 0.590 [0.576,0.608]
+  CD4 fold 0 done (327s)
+  CD4 fold 1 done (496s)
+  CD4 fold 2 done (657s)
+  CD4 fold 3 done (875s)
+  CD4 fold 4 done (1083s)
+== CD4-donor-reactive (87,702 matched clones, 14,617 positives, 54 held-out recipients across folds)
+  B1 V/J/length (logistic)       pooled AUROC 0.567 | within-lineage-decile AUROC 0.551 [0.542,0.560]
+  B2 + CDR3 k-mers (logistic)    pooled AUROC 0.586 | within-lineage-decile AUROC 0.570 [0.561,0.580]
+  T  CDR3 transformer            pooled AUROC 0.584 | within-lineage-decile AUROC 0.569 [0.561,0.577]

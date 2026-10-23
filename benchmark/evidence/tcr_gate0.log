@@ -1,0 +1,13 @@
+== CD8-donor-reactive clones: 29,147 matched clones from 54 recipients, 4,891 positives
+  B0 clone size                AUROC 0.504 [0.501,0.508]
+  B1 V/J/length                AUROC 0.612 [0.600,0.627]
+  B2 +CDR3 k-mers              AUROC 0.645 [0.630,0.661]
+  B2 shuffled-label control    AUROC 0.513 [0.503,0.521]
+  GATE (CD8): B2 0.645 (CI lower 0.630) vs B1 0.612 -> PASS
+== CD4-donor-reactive clones: 87,702 matched clones from 54 recipients, 14,617 positives
+  B0 clone size                AUROC 0.500 [0.500,0.500]
+  B1 V/J/length                AUROC 0.567 [0.555,0.578]
+  B2 +CDR3 k-mers              AUROC 0.586 [0.576,0.596]
+  B2 shuffled-label control    AUROC 0.495 [0.490,0.500]
+  GATE (CD4): B2 0.586 (CI lower 0.576) vs B1 0.567 -> NOT PASSED
+OVERALL step-0 gate: PASS (proceed to transformer)

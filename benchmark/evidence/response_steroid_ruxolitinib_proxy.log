@@ -1,0 +1,17 @@
+JAK-STAT sets present: ['Interferon Gamma Response', 'IL-6/JAK/STAT3 Signaling', 'IL-2/STAT5 Signaling', 'Interferon Alpha Response']
+SKIN day-28 steroid NON-response (at diagnosis) n= 45 fail/neg= 10 | ridge Hallmark50 AUROC 0.56 [0.37,0.77] perm p=0.338
+      zero-parameter Interferon Gamma Response    AUROC 0.39 [0.21,0.59]  (>0.5 = higher in failure)
+      zero-parameter IL-6/JAK/STAT3 Signaling     AUROC 0.42 [0.24,0.62]  (>0.5 = higher in failure)
+      zero-parameter IL-2/STAT5 Signaling         AUROC 0.43 [0.25,0.63]  (>0.5 = higher in failure)
+      zero-parameter Interferon Alpha Response    AUROC 0.41 [0.22,0.61]  (>0.5 = higher in failure)
+
+GSE56495 columns: ['title', 'geo_accession', 'status', 'submission_date', 'last_update_date', 'type', 'channel_count', 'source_name_ch1', 'organism_ch1', 'tissue', 'condition', 'treatment group', 'time point', 'disease']
+baseline responses: {'not evaluable': 5, 'complete response': 3, 'stable disease': 3, 'near complete response': 3, 'partial response': 2, 'progression': 1}
+baseline evaluable: 12 patients; failure(stable/progression) = 4
+BLOOD bortezomib failure at baseline (SR-cGVHD) n= 12 fail/neg=  4 | ridge Hallmark50 AUROC 0.47 [0.05,0.70] perm p=0.577
+      zero-parameter Interferon Gamma Response    AUROC 0.47 [0.00,1.00]  (>0.5 = higher in failure)
+      zero-parameter IL-6/JAK/STAT3 Signaling     AUROC 0.69 [0.34,1.00]  (>0.5 = higher in failure)
+      zero-parameter IL-2/STAT5 Signaling         AUROC 0.56 [0.19,0.89]  (>0.5 = higher in failure)
+      zero-parameter Interferon Alpha Response    AUROC 0.53 [0.00,1.00]  (>0.5 = higher in failure)
+
+[exited with code 0]

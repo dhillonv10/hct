@@ -1,0 +1,30 @@
+genes with LLM embedding: 2887/3072; K=64; repeats=6
+[2026-10-22 23:26:17 UTC] corpus: blood65=24,000 cells/65 donors (val donors 13); hao_pbmc=24,000 cells/8 donors (val donors 2); szabo_tissue_t=24,000 cells/4 donors (val donors 1); tilc=24,000 cells/12 donors (val donors 2)
+corpus profiles for data-derived gene axes: (2000, 3072)
+K1_donor_CD8_to_recipient_aGVHD n=47 genes_z=0.75 genes_z_hasText=0.74 llm_mod64=0.61 rand_mod64=0.69 corp_mod64=0.62 llm_pc64=0.70 rand_pc64=0.53 corp_pc64=0.59 llm_full=0.69 rand_full=0.69
+K1_donor_CD4_to_recipient_aGVHD n=49 genes_z=0.60 genes_z_hasText=0.60 llm_mod64=0.57 rand_mod64=0.62 corp_mod64=0.55 llm_pc64=0.60 rand_pc64=0.70 corp_pc64=0.57 llm_full=0.53 rand_full=0.62
+K2_PTCy_CD8_GVHD n=35 genes_z=0.84 genes_z_hasText=0.84 llm_mod64=0.78 rand_mod64=0.58 corp_mod64=0.70 llm_pc64=0.74 rand_pc64=0.66 corp_pc64=0.87 llm_full=0.69 rand_full=0.89
+K2_PTCy_CD4Tconv_GVHD n=33 genes_z=0.78 genes_z_hasText=0.78 llm_mod64=0.66 rand_mod64=0.69 corp_mod64=0.67 llm_pc64=0.79 rand_pc64=0.59 corp_pc64=0.85 llm_full=0.83 rand_full=0.82
+K2_PTCy_Treg_GVHD n=20 genes_z=0.79 genes_z_hasText=0.79 llm_mod64=0.77 rand_mod64=0.78 corp_mod64=0.78 llm_pc64=0.72 rand_pc64=0.69 corp_pc64=0.80 llm_full=0.80 rand_full=0.82
+K3_PBMC_T_aGVHD n=24 genes_z=0.82 genes_z_hasText=0.81 llm_mod64=0.73 rand_mod64=0.75 corp_mod64=0.72 llm_pc64=0.80 rand_pc64=0.89 corp_pc64=0.70 llm_full=0.72 rand_full=0.76
+K4_CD8_subsets_aGVHD n=60 genes_z=0.53 genes_z_hasText=0.53 llm_mod64=0.53 rand_mod64=0.41 corp_mod64=0.45 llm_pc64=0.54 rand_pc64=0.59 corp_pc64=0.49 llm_full=0.44 rand_full=0.54
+K5_scRNA_pseudobulk_aGVHD n=75 genes_z=0.53 genes_z_hasText=0.53 llm_mod64=0.56 rand_mod64=0.43 corp_mod64=0.56 llm_pc64=0.37 rand_pc64=0.46 corp_pc64=0.58 llm_full=0.40 rand_full=0.53
+=== mean AUROC across tasks ===
+genes_z            0.704
+genes_z_hasText    0.701
+llm_mod64          0.651
+rand_mod64         0.619
+corp_mod64         0.631
+llm_pc64           0.656
+rand_pc64          0.638
+corp_pc64          0.681
+llm_full           0.637
+rand_full          0.710
+llm_mod64 - rand_mod64: mean +0.032, tasks won 3/8, per-task [-0.09, -0.05, 0.2, -0.03, -0.01, -0.02, 0.12, 0.13]
+llm_mod64 - corp_mod64: mean +0.021, tasks won 4/8, per-task [-0.01, 0.02, 0.08, -0.01, -0.01, 0.01, 0.08, -0.0]
+llm_mod64 - genes_z_hasText: mean -0.050, tasks won 2/8, per-task [-0.13, -0.03, -0.06, -0.12, -0.02, -0.08, 0.01, 0.03]
+llm_pc64 - rand_pc64: mean +0.018, tasks won 4/8, per-task [0.17, -0.1, 0.07, 0.2, 0.03, -0.09, -0.05, -0.09]
+llm_pc64 - corp_pc64: mean -0.024, tasks won 4/8, per-task [0.11, 0.03, -0.14, -0.06, -0.08, 0.1, 0.04, -0.21]
+llm_pc64 - genes_z_hasText: mean -0.045, tasks won 2/8, per-task [-0.04, -0.0, -0.11, 0.01, -0.07, -0.01, 0.01, -0.16]
+llm_full - rand_full: mean -0.073, tasks won 2/8, per-task [0.0, -0.1, -0.2, 0.01, -0.02, -0.04, -0.1, -0.13]
+llm_full - genes_z_hasText: mean -0.064, tasks won 2/8, per-task [-0.04, -0.07, -0.16, 0.05, 0.01, -0.09, -0.09, -0.12]

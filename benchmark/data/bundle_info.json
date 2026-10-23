@@ -1,0 +1,83 @@
+{
+ "GSE73809": {
+  "platform": "microarray (GPL17586)",
+  "series": "GSE73809",
+  "ctx": "blood",
+  "n_samples": 24,
+  "native_genes": 22617,
+  "genes_in_bundle": 5801,
+  "note": "diagnostic: GVHD at sampling"
+ },
+ "GSE103569": {
+  "platform": "microarray (GPL13497)",
+  "series": "GSE103569",
+  "ctx": "blood",
+  "n_samples": 60,
+  "native_genes": 21751,
+  "genes_in_bundle": 6050,
+  "note": "diagnostic: GVHD at sampling"
+ },
+ "GSE4624": {
+  "platform": "microarray (GPL3639)",
+  "series": "GSE4624",
+  "ctx": "blood",
+  "n_samples": 96,
+  "native_genes": 8414,
+  "genes_in_bundle": 2811,
+  "note": "PROGNOSTIC: donor T cells -> recipient aGVHD"
+ },
+ "PTCY": {
+  "platform": "bulk RNA-seq (counts)",
+  "series": "GSE182610+GSE182612+GSE182678",
+  "ctx": "blood",
+  "n_samples": 101,
+  "native_genes": 56466,
+  "genes_in_bundle": 6196,
+  "note": "patient ids not provided by GEO (one id per sample)"
+ },
+ "GSE295359": {
+  "platform": "scRNA-seq pseudobulk (3,072-gene release)",
+  "series": "GSE295359",
+  "ctx": "blood",
+  "n_samples": 75,
+  "native_genes": 3072,
+  "genes_in_bundle": 3071,
+  "note": "10 patients x (timepoint, compartment); Zenodo release restricted to 3,072 genes"
+ },
+ "COLON215068": {
+  "platform": "bulk RNA-seq (FFPE, FPKM)",
+  "series": "GSE215068",
+  "ctx": "tissue",
+  "n_samples": 33,
+  "native_genes": 47968,
+  "genes_in_bundle": 6083,
+  "note": "diagnostic: colon biopsy GVHD vs no GVHD"
+ },
+ "COLON168116": {
+  "platform": "bulk RNA-seq (TPM)",
+  "series": "GSE168116",
+  "ctx": "tissue",
+  "n_samples": 17,
+  "native_genes": 44407,
+  "genes_in_bundle": 6097,
+  "note": "diagnostic: paediatric rectosigmoid biopsy GVHD vs no GVHD"
+ },
+ "SKIN263557": {
+  "platform": "bulk RNA-seq (log2 FPKM supplementary matrix)",
+  "series": "GSE263557",
+  "ctx": "tissue",
+  "n_samples": 50,
+  "native_genes": 58746,
+  "genes_in_bundle": 6078,
+  "note": "diagnostic: skin GVHD vs control; PROGNOSTIC y_nr = day-28 steroid non-response (45 GVHD biopsies)"
+ },
+ "CFRNA268164": {
+  "platform": "plasma cfRNA-seq (log1p CPM)",
+  "series": "GSE268164",
+  "ctx": "plasma",
+  "n_samples": 382,
+  "native_genes": 13077,
+  "genes_in_bundle": 5158,
+  "note": "LONGITUDINAL: patient-level ever-aGVHD label repeated at each timepoint; onset date not in GEO"
+ }
+}

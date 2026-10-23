@@ -1,0 +1,839 @@
+study,sid,patient,block,y,day_post_hct,batch,site,ctx,platform,series,organ,cgvhd,array_order,relapse,timepoint,remission,n_cells,y_nr,libprep_order,libsize_log10,bkv
+GSE73809,GSM1903858,UM1,PBMC_CD4CD8_T,1,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903859,UM10,PBMC_CD4CD8_T,1,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903860,ABA-001-008,PBMC_CD4CD8_T,1,83.0,2,Emory,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903861,UM2,PBMC_CD4CD8_T,1,28.0,3,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903862,UM3,PBMC_CD4CD8_T,1,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903863,UM4,PBMC_CD4CD8_T,1,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903864,UM5,PBMC_CD4CD8_T,1,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903865,UM6,PBMC_CD4CD8_T,1,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903866,UM7,PBMC_CD4CD8_T,1,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903867,UM8,PBMC_CD4CD8_T,1,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903868,UM9,PBMC_CD4CD8_T,1,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903869,UM11,PBMC_CD4CD8_T,0,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903870,UM20,PBMC_CD4CD8_T,0,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903871,ABA-004-001,PBMC_CD4CD8_T,0,176.0,1,Emory,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903872,ABA-001-001,PBMC_CD4CD8_T,0,28.0,1,Emory,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903873,ABA-001-002,PBMC_CD4CD8_T,0,28.0,1,Emory,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903874,UM12,PBMC_CD4CD8_T,0,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903875,UM13,PBMC_CD4CD8_T,0,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903876,UM14,PBMC_CD4CD8_T,0,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903877,UM15,PBMC_CD4CD8_T,0,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903878,UM16,PBMC_CD4CD8_T,0,60.0,3,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903879,UM17,PBMC_CD4CD8_T,0,28.0,2,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903880,UM18,PBMC_CD4CD8_T,0,28.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE73809,GSM1903881,UM19,PBMC_CD4CD8_T,0,60.0,1,Minnesota,blood,microarray (GPL17586),GSE73809,,,,,,,,,,,
+GSE103569,GSM2774436,P1,CD8_reference_DN,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774437,P2,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774438,P3,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774439,P4,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774440,P5,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774441,P6,CD8_reference_DN,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774442,P7,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774443,P8,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774444,P2,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774445,P3,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774446,P4,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774447,P1,CD8_guthoming_ITGB7+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774448,P8,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774449,P5,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774450,P7,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774451,P6,CD8_guthoming_ITGB7+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774452,P4,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774453,P3,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774454,P1,CD8_skinhoming_CLA+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774455,P2,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774456,P6,CD8_skinhoming_CLA+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774457,P7,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774458,P8,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774459,P5,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774460,P9,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774461,P10,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774462,P11,CD8_reference_DN,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774463,P12,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774464,P11,CD8_skinhoming_CLA+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774465,P9,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774466,P12,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774467,P10,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774468,P11,CD8_guthoming_ITGB7+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774469,P10,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774470,P9,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774471,P12,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774472,P13,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774473,P14,CD8_reference_DN,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774474,P15,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774475,P16,CD8_guthoming_ITGB7+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774476,P17,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774477,P16,CD8_reference_DN,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774478,P15,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774479,P18,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774480,P19,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774481,P14,CD8_guthoming_ITGB7+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774482,P20,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774483,P17,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774484,P17,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774485,P18,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774486,P19,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774487,P20,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774488,P18,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774489,P15,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774490,P13,CD8_reference_DN,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774491,P16,CD8_skinhoming_CLA+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE103569,GSM2774492,P13,CD8_skinhoming_CLA+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous,,,,,,,,,,
+GSE103569,GSM2774493,P19,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Cutaneous + Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774494,P20,CD8_guthoming_ITGB7+,1,,,,blood,microarray (GPL13497),GSE103569,Gastrointestinal,,,,,,,,,,
+GSE103569,GSM2774495,P14,CD8_skinhoming_CLA+,0,,,,blood,microarray (GPL13497),GSE103569,Absent,,,,,,,,,,
+GSE4624,GSM103566,D3,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,1.0,,,,,,,,
+GSE4624,GSM103567,D3,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,1.0,,,,,,,,
+GSE4624,GSM103568,D7,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,1.0,,,,,,,,
+GSE4624,GSM103569,D7,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,1.0,,,,,,,,
+GSE4624,GSM103570,D11,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,2.0,,,,,,,,
+GSE4624,GSM103571,D11,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,2.0,,,,,,,,
+GSE4624,GSM103573,D17,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,3.0,,,,,,,,
+GSE4624,GSM103576,D21,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,1.0,,,,,,,,
+GSE4624,GSM103577,D21,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,1.0,,,,,,,,
+GSE4624,GSM103580,D31,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,2.0,,,,,,,,
+GSE4624,GSM103581,D31,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,2.0,,,,,,,,
+GSE4624,GSM103584,D39,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,4.0,,,,,,,,
+GSE4624,GSM103585,D39,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,3.0,,,,,,,,
+GSE4624,GSM103588,D47,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,3.0,,,,,,,,
+GSE4624,GSM103589,D47,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,3.0,,,,,,,,
+GSE4624,GSM103592,D55,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,5.0,,,,,,,,
+GSE4624,GSM103593,D55,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,4.0,,,,,,,,
+GSE4624,GSM103594,D59,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,6.0,,,,,,,,
+GSE4624,GSM103595,D59,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,5.0,,,,,,,,
+GSE4624,GSM103596,D71,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,1.0,,,,,,,,
+GSE4624,GSM103597,D71,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,1.0,,,,,,,,
+GSE4624,GSM103600,D77,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,4.0,,,,,,,,
+GSE4624,GSM103601,D77,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,4.0,,,,,,,,
+GSE4624,GSM103602,D81,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,5.0,,,,,,,,
+GSE4624,GSM103603,D81,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,5.0,,,,,,,,
+GSE4624,GSM103604,D85,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,7.0,,,,,,,,
+GSE4624,GSM103605,D85,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,6.0,,,,,,,,
+GSE4624,GSM103608,D91,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,6.0,,,,,,,,
+GSE4624,GSM103609,D91,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,6.0,,,,,,,,
+GSE4624,GSM103610,D95,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,2.0,,,,,,,,
+GSE4624,GSM103611,D95,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,2.0,,,,,,,,
+GSE4624,GSM103612,D99,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,7.0,,,,,,,,
+GSE4624,GSM103613,D99,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,7.0,,,,,,,,
+GSE4624,GSM103615,D107,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,8.0,,,,,,,,
+GSE4624,GSM103616,D113,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,3.0,,,,,,,,
+GSE4624,GSM103617,D113,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,3.0,,,,,,,,
+GSE4624,GSM103626,D137,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,8.0,,,,,,,,
+GSE4624,GSM103627,D137,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,7.0,,,,,,,,
+GSE4624,GSM103630,D143,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,9.0,,,,,,,,
+GSE4624,GSM103631,D143,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,8.0,,,,,,,,
+GSE4624,GSM103634,D151,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,10.0,,,,,,,,
+GSE4624,GSM103635,D151,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,9.0,,,,,,,,
+GSE4624,GSM103638,D157,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,11.0,,,,,,,,
+GSE4624,GSM103639,D157,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,10.0,,,,,,,,
+GSE4624,GSM103642,D163,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,4.0,,,,,,,,
+GSE4624,GSM103643,D163,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,4.0,,,,,,,,
+GSE4624,GSM103646,D171,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,9.0,,,,,,,,
+GSE4624,GSM103647,D171,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,8.0,,,,,,,,
+GSE4624,GSM103650,D177,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,12.0,,,,,,,,
+GSE4624,GSM103651,D177,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,11.0,,,,,,,,
+GSE4624,GSM103656,D189,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,10.0,,,,,,,,
+GSE4624,GSM103657,D189,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,9.0,,,,,,,,
+GSE4624,GSM103660,D195,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,11.0,,,,,,,,
+GSE4624,GSM103661,D195,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,10.0,,,,,,,,
+GSE4624,GSM103664,D207,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,12.0,,,,,,,,
+GSE4624,GSM103665,D207,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,11.0,,,,,,,,
+GSE4624,GSM103668,D211,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,13.0,,,,,,,,
+GSE4624,GSM103669,D211,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,12.0,,,,,,,,
+GSE4624,GSM103671,D219,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,1.0,13.0,,,,,,,,
+GSE4624,GSM103673,D226,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,2.0,,,,,,,,
+GSE4624,GSM103676,D231,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,2.0,,,,,,,,
+GSE4624,GSM103677,D231,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,3.0,,,,,,,,
+GSE4624,GSM103678,D237,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,14.0,,,,,,,,
+GSE4624,GSM103679,D237,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,13.0,,,,,,,,
+GSE4624,GSM103680,D239,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,5.0,,,,,,,,
+GSE4624,GSM103681,D239,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,5.0,,,,,,,,
+GSE4624,GSM103684,D245,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,6.0,,,,,,,,
+GSE4624,GSM103685,D245,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,6.0,,,,,,,,
+GSE4624,GSM103686,D249,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,15.0,,,,,,,,
+GSE4624,GSM103687,D249,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,14.0,,,,,,,,
+GSE4624,GSM103689,D253,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,16.0,,,,,,,,
+GSE4624,GSM103692,D271,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,3.0,,,,,,,,
+GSE4624,GSM103693,D271,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,4.0,,,,,,,,
+GSE4624,GSM103696,D288,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,17.0,,,,,,,,
+GSE4624,GSM103697,D288,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,15.0,,,,,,,,
+GSE4624,GSM103700,D294,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,7.0,,,,,,,,
+GSE4624,GSM103701,D294,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,7.0,,,,,,,,
+GSE4624,GSM103704,D306,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,18.0,,,,,,,,
+GSE4624,GSM103705,D306,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,16.0,,,,,,,,
+GSE4624,GSM103707,D313,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,1.0,17.0,,,,,,,,
+GSE4624,GSM103712,D321,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,8.0,,,,,,,,
+GSE4624,GSM103713,D321,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,8.0,,,,,,,,
+GSE4624,GSM103716,D327,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,9.0,,,,,,,,
+GSE4624,GSM103717,D327,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,9.0,,,,,,,,
+GSE4624,GSM103720,D333,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,10.0,,,,,,,,
+GSE4624,GSM103721,D333,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,10.0,,,,,,,,
+GSE4624,GSM103724,D339,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,11.0,,,,,,,,
+GSE4624,GSM103725,D339,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,11.0,,,,,,,,
+GSE4624,GSM103728,D345,CD4,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,12.0,,,,,,,,
+GSE4624,GSM103729,D345,CD8,0,,,,blood,microarray (GPL3639),GSE4624,,0.0,12.0,,,,,,,,
+GSE4624,GSM103732,D357,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,4.0,,,,,,,,
+GSE4624,GSM103733,D357,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,5.0,,,,,,,,
+GSE4624,GSM103736,D363,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,5.0,,,,,,,,
+GSE4624,GSM103737,D363,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,6.0,,,,,,,,
+GSE4624,GSM103738,D372,CD4,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,6.0,,,,,,,,
+GSE4624,GSM103739,D372,CD8,1,,,,blood,microarray (GPL3639),GSE4624,,0.0,7.0,,,,,,,,
+PTCY,15065X1,15065X1,CD8,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X2,15065X2,CD8,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X4,15065X4,CD8,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X5,15065X5,CD8,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X6,15065X6,CD8,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X7,15065X7,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X8,15065X8,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X9,15065X9,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X10,15065X10,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X11,15065X11,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X12,15065X12,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X13,15065X13,CD8,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X14,15065X14,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X15,15065X15,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X16,15065X16,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X17,15065X17,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X18,15065X18,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X19,15065X19,CD4_Tconv,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X20,15065X20,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X21,15065X21,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X22,15065X22,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X23,15065X23,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X24,15065X24,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X26,15065X26,CD4_Tconv,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X27,15065X27,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X28,15065X28,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X29,15065X29,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X30,15065X30,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X31,15065X31,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X32,15065X32,Treg,1,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X33,15065X33,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X34,15065X34,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X35,15065X35,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X36,15065X36,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X37,15065X37,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X38,15065X38,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,15065X39,15065X39,Treg,0,,15065R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17941X1,17941X1,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X2,17941X2,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X4,17941X4,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X5,17941X5,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X8,17941X8,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X9,17941X9,CD8,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X10,17941X10,CD8,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X11,17941X11,CD8,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X12,17941X12,CD8,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X13,17941X13,CD8,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X14,17941X14,CD4_Tconv,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X15,17941X15,CD4_Tconv,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X16,17941X16,CD4_Tconv,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X18,17941X18,CD4_Tconv,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X19,17941X19,CD4_Tconv,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X20,17941X20,CD4_Tconv,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X21,17941X21,CD4_Tconv,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X22,17941X22,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X23,17941X23,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X24,17941X24,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X26,17941X26,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X27,17941X27,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X28,17941X28,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X29,17941X29,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X30,17941X30,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X31,17941X31,NK,0,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X32,17941X32,NK,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X33,17941X33,NK,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,1.0,,,,,,,
+PTCY,17941X34,17941X34,NK,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17941X35,17941X35,NK,1,,17941R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X1,18740X1,CD8,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X3,18740X3,CD8,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X19,18740X19,CD8,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X20,18740X20,CD8,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X26,18740X26,CD4_Tconv,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X35,18740X35,CD4_Tconv,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X36,18740X36,CD4_Tconv,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,18740X37,18740X37,CD4_Tconv,0,,18740R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,0.0,,,,,,,
+PTCY,17618X11,17618X11,CD4_Tconv,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X12,17618X12,CD4_Tconv,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X13,17618X13,CD4_Tconv,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X14,17618X14,CD4_Tconv,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X15,17618X15,CD4_Tconv,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X16,17618X16,CD4_Tconv,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X17,17618X17,CD4_Tconv,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X18,17618X18,CD4_Tconv,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X19,17618X19,CD4_Tconv,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X1,17618X1,CD8,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X20,17618X20,CD4_Tconv,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X21,17618X21,Treg,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X22,17618X22,Treg,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X23,17618X23,Treg,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X27,17618X27,Treg,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X28,17618X28,Treg,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X29,17618X29,Treg,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X2,17618X2,CD8,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X30,17618X30,Treg,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X3,17618X3,CD8,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X4,17618X4,CD8,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X5,17618X5,CD8,1,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X6,17618X6,CD8,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X7,17618X7,CD8,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X8,17618X8,CD8,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+PTCY,17618X9,17618X9,CD8,0,,17618R,,blood,bulk RNA-seq (counts),GSE182610+GSE182612+GSE182678,,,,-1.0,,,,,,,
+GSE295359,CR_1_D100|T_all,CR_1,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,1795.0,,,,
+GSE295359,CR_1_D100|CD4,CR_1,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,453.0,,,,
+GSE295359,CR_1_D100|CD8,CR_1,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,1122.0,,,,
+GSE295359,CR_1_D30|T_all,CR_1,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,4154.0,,,,
+GSE295359,CR_1_D30|CD4,CR_1,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,422.0,,,,
+GSE295359,CR_1_D30|CD8,CR_1,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2652.0,,,,
+GSE295359,CR_1_Graft|T_all,CR_1,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,3484.0,,,,
+GSE295359,CR_1_Graft|CD4,CR_1,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,1128.0,,,,
+GSE295359,CR_1_Graft|CD8,CR_1,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,1659.0,,,,
+GSE295359,CR_2_D100|T_all,CR_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,3056.0,,,,
+GSE295359,CR_2_D100|CD4,CR_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,699.0,,,,
+GSE295359,CR_2_D100|CD8,CR_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,1852.0,,,,
+GSE295359,CR_2_D30|T_all,CR_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2236.0,,,,
+GSE295359,CR_2_D30|CD4,CR_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,481.0,,,,
+GSE295359,CR_2_D30|CD8,CR_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1220.0,,,,
+GSE295359,CR_2_Graft|T_all,CR_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,3851.0,,,,
+GSE295359,CR_2_Graft|CD4,CR_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,897.0,,,,
+GSE295359,CR_2_Graft|CD8,CR_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,2386.0,,,,
+GSE295359,CR_3_D100|T_all,CR_3,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,11134.0,,,,
+GSE295359,CR_3_D100|CD4,CR_3,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,3946.0,,,,
+GSE295359,CR_3_D100|CD8,CR_3,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,3890.0,,,,
+GSE295359,CR_3_D30|T_all,CR_3,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,6856.0,,,,
+GSE295359,CR_3_D30|CD4,CR_3,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2175.0,,,,
+GSE295359,CR_3_D30|CD8,CR_3,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2683.0,,,,
+GSE295359,CR_3_Graft|T_all,CR_3,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,9547.0,,,,
+GSE295359,CR_3_Graft|CD4,CR_3,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,3974.0,,,,
+GSE295359,CR_3_Graft|CD8,CR_3,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,4289.0,,,,
+GSE295359,CR_4_D30|T_all,CR_4,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,3988.0,,,,
+GSE295359,CR_4_D30|CD4,CR_4,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1019.0,,,,
+GSE295359,CR_4_D30|CD8,CR_4,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2741.0,,,,
+GSE295359,CR_4_Graft|T_all,CR_4,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,1389.0,,,,
+GSE295359,CR_4_Graft|CD4,CR_4,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,207.0,,,,
+GSE295359,CR_4_Graft|CD8,CR_4,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,944.0,,,,
+GSE295359,CR_5_D30|T_all,CR_5,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1530.0,,,,
+GSE295359,CR_5_D30|CD4,CR_5,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,570.0,,,,
+GSE295359,CR_5_D30|CD8,CR_5,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,596.0,,,,
+GSE295359,CR_5_Graft|T_all,CR_5,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,2041.0,,,,
+GSE295359,CR_5_Graft|CD4,CR_5,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,744.0,,,,
+GSE295359,CR_5_Graft|CD8,CR_5,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,845.0,,,,
+GSE295359,CR_6_D30|T_all,CR_6,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1293.0,,,,
+GSE295359,CR_6_D30|CD4,CR_6,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,446.0,,,,
+GSE295359,CR_6_D30|CD8,CR_6,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,604.0,,,,
+GSE295359,CR_6_Graft|T_all,CR_6,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,620.0,,,,
+GSE295359,CR_6_Graft|CD4,CR_6,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,174.0,,,,
+GSE295359,CR_6_Graft|CD8,CR_6,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,387.0,,,,
+GSE295359,CR_7_D100|T_all,CR_7,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,9704.0,,,,
+GSE295359,CR_7_D100|CD4,CR_7,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,1229.0,,,,
+GSE295359,CR_7_D100|CD8,CR_7,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,CR,7682.0,,,,
+GSE295359,CR_7_D30|T_all,CR_7,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1217.0,,,,
+GSE295359,CR_7_D30|CD4,CR_7,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,52.0,,,,
+GSE295359,CR_7_D30|CD8,CR_7,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,1031.0,,,,
+GSE295359,CR_7_Graft|T_all,CR_7,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,5694.0,,,,
+GSE295359,CR_7_Graft|CD4,CR_7,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,321.0,,,,
+GSE295359,CR_7_Graft|CD8,CR_7,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,4605.0,,,,
+GSE295359,CR_8_D30|T_all,CR_8,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,13072.0,,,,
+GSE295359,CR_8_D30|CD4,CR_8,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,2855.0,,,,
+GSE295359,CR_8_D30|CD8,CR_8,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,CR,7993.0,,,,
+GSE295359,CR_8_Graft|T_all,CR_8,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,2874.0,,,,
+GSE295359,CR_8_Graft|CD4,CR_8,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,918.0,,,,
+GSE295359,CR_8_Graft|CD8,CR_8,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,CR,1567.0,,,,
+GSE295359,REL_1_D100|T_all,REL_1,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,10468.0,,,,
+GSE295359,REL_1_D100|CD4,REL_1,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,5615.0,,,,
+GSE295359,REL_1_D100|CD8,REL_1,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,4108.0,,,,
+GSE295359,REL_1_D30|T_all,REL_1,T_all,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,1231.0,,,,
+GSE295359,REL_1_D30|CD4,REL_1,CD4,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,585.0,,,,
+GSE295359,REL_1_D30|CD8,REL_1,CD8,0,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,584.0,,,,
+GSE295359,REL_2_D100|T_all,REL_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,1336.0,,,,
+GSE295359,REL_2_D100|CD4,REL_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,604.0,,,,
+GSE295359,REL_2_D100|CD8,REL_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D100,REL,586.0,,,,
+GSE295359,REL_2_D30|T_all,REL_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,566.0,,,,
+GSE295359,REL_2_D30|CD4,REL_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,141.0,,,,
+GSE295359,REL_2_D30|CD8,REL_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,D30,REL,321.0,,,,
+GSE295359,REL_2_Graft|T_all,REL_2,T_all,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,REL,306.0,,,,
+GSE295359,REL_2_Graft|CD4,REL_2,CD4,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,REL,92.0,,,,
+GSE295359,REL_2_Graft|CD8,REL_2,CD8,1,,,,blood,"scRNA-seq pseudobulk (3,072-gene release)",GSE295359,,,,,Graft,REL,172.0,,,,
+COLON215068,COLON215068_0,COLON215068:0,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_1,COLON215068:1,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_2,COLON215068:2,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_3,COLON215068:3,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_4,COLON215068:4,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_5,COLON215068:5,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_6,COLON215068:6,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_7,COLON215068:7,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_8,COLON215068:8,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_9,COLON215068:9,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_10,COLON215068:10,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_11,COLON215068:11,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_12,COLON215068:12,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_13,COLON215068:13,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_14,COLON215068:14,biopsy,0,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_15,COLON215068:15,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_16,COLON215068:16,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_17,COLON215068:17,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_18,COLON215068:18,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_19,COLON215068:19,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_20,COLON215068:20,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_21,COLON215068:21,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_22,COLON215068:22,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_23,COLON215068:23,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_24,COLON215068:24,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_25,COLON215068:25,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_26,COLON215068:26,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_27,COLON215068:27,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_28,COLON215068:28,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_29,COLON215068:29,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_30,COLON215068:30,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_31,COLON215068:31,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON215068,COLON215068_32,COLON215068:32,biopsy,1,,,,tissue,"bulk RNA-seq (FFPE, FPKM)",GSE215068,,,,,,,,,,,
+COLON168116,COLON168116_0,COLON168116:0,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_1,COLON168116:1,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_2,COLON168116:2,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_3,COLON168116:3,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_4,COLON168116:4,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_5,COLON168116:5,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_6,COLON168116:6,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_7,COLON168116:7,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_8,COLON168116:8,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_9,COLON168116:9,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_10,COLON168116:10,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_11,COLON168116:11,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_12,COLON168116:12,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_13,COLON168116:13,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_14,COLON168116:14,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_15,COLON168116:15,biopsy,0,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+COLON168116,COLON168116_16,COLON168116:16,biopsy,1,,,,tissue,bulk RNA-seq (TPM),GSE168116,,,,,,,,,,,
+SKIN263557,SKIN263557_0,SKIN263557:0,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,43.0,,
+SKIN263557,SKIN263557_1,SKIN263557:1,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,46.0,,
+SKIN263557,SKIN263557_2,SKIN263557:2,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,53.0,,
+SKIN263557,SKIN263557_3,SKIN263557:3,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,55.0,,
+SKIN263557,SKIN263557_4,SKIN263557:4,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,57.0,,
+SKIN263557,SKIN263557_5,SKIN263557:5,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,59.0,,
+SKIN263557,SKIN263557_6,SKIN263557:6,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,44.0,,
+SKIN263557,SKIN263557_7,SKIN263557:7,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,47.0,,
+SKIN263557,SKIN263557_8,SKIN263557:8,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,50.0,,
+SKIN263557,SKIN263557_9,SKIN263557:9,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,56.0,,
+SKIN263557,SKIN263557_10,SKIN263557:10,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,58.0,,
+SKIN263557,SKIN263557_11,SKIN263557:11,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,60.0,,
+SKIN263557,SKIN263557_12,SKIN263557:12,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,45.0,,
+SKIN263557,SKIN263557_13,SKIN263557:13,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,48.0,,
+SKIN263557,SKIN263557_14,SKIN263557:14,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,9.0,,
+SKIN263557,SKIN263557_15,SKIN263557:15,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,15.0,,
+SKIN263557,SKIN263557_16,SKIN263557:16,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,10.0,,
+SKIN263557,SKIN263557_17,SKIN263557:17,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,11.0,,
+SKIN263557,SKIN263557_18,SKIN263557:18,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,3.0,,
+SKIN263557,SKIN263557_19,SKIN263557:19,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,6.0,,
+SKIN263557,SKIN263557_20,SKIN263557:20,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,32.0,,
+SKIN263557,SKIN263557_21,SKIN263557:21,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,18.0,,
+SKIN263557,SKIN263557_22,SKIN263557:22,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,30.0,,
+SKIN263557,SKIN263557_23,SKIN263557:23,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,61.0,,
+SKIN263557,SKIN263557_24,SKIN263557:24,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,25.0,,
+SKIN263557,SKIN263557_25,SKIN263557:25,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,27.0,,
+SKIN263557,SKIN263557_26,SKIN263557:26,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,16.0,,
+SKIN263557,SKIN263557_27,SKIN263557:27,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,4.0,,
+SKIN263557,SKIN263557_28,SKIN263557:28,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,31.0,,
+SKIN263557,SKIN263557_29,SKIN263557:29,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,40.0,,
+SKIN263557,SKIN263557_30,SKIN263557:30,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,21.0,,
+SKIN263557,SKIN263557_31,SKIN263557:31,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,41.0,,
+SKIN263557,SKIN263557_32,SKIN263557:32,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,17.0,,
+SKIN263557,SKIN263557_33,SKIN263557:33,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,0.0,22.0,,
+SKIN263557,SKIN263557_34,SKIN263557:34,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,49.0,,
+SKIN263557,SKIN263557_35,SKIN263557:35,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,51.0,,
+SKIN263557,SKIN263557_36,SKIN263557:36,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,54.0,,
+SKIN263557,SKIN263557_37,SKIN263557:37,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,42.0,,
+SKIN263557,SKIN263557_38,SKIN263557:38,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,12.0,,
+SKIN263557,SKIN263557_39,SKIN263557:39,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,26.0,,
+SKIN263557,SKIN263557_40,SKIN263557:40,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,35.0,,
+SKIN263557,SKIN263557_41,SKIN263557:41,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,36.0,,
+SKIN263557,SKIN263557_42,SKIN263557:42,biopsy,1,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,1.0,5.0,,
+SKIN263557,SKIN263557_43,SKIN263557:43,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,38.0,,
+SKIN263557,SKIN263557_44,SKIN263557:44,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,7.0,,
+SKIN263557,SKIN263557_45,SKIN263557:45,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,19.0,,
+SKIN263557,SKIN263557_46,SKIN263557:46,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,23.0,,
+SKIN263557,SKIN263557_47,SKIN263557:47,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,33.0,,
+SKIN263557,SKIN263557_48,SKIN263557:48,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,2.0,,
+SKIN263557,SKIN263557_49,SKIN263557:49,biopsy,0,,,,tissue,bulk RNA-seq (log2 FPKM supplementary matrix),GSE263557,,,,,,,,,8.0,,
+CFRNA268164,hct_cfrna_266.trimmed,100,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.423160645525223,1.0
+CFRNA268164,hct_cfrna_255.trimmed,100,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.179225660649849,1.0
+CFRNA268164,hct_cfrna_279.trimmed,100,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.433443070389155,1.0
+CFRNA268164,hct_cfrna_301.trimmed,100,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.659708696489503,1.0
+CFRNA268164,hct_cfrna_280.trimmed,100,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,5.923309831542195,1.0
+CFRNA268164,gvhd_hct_cfrna_509.trimmed,101,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.754351241192552,0.0
+CFRNA268164,hct_cfrna_340.trimmed,102,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.716622189741773,1.0
+CFRNA268164,hct_cfrna_324.trimmed,102,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.415803059569959,1.0
+CFRNA268164,hct_cfrna_315.trimmed,102,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.642585789194378,1.0
+CFRNA268164,hct_cfrna_352.trimmed,102,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.540404437310768,1.0
+CFRNA268164,gvhd_hct_cfrna_507.trimmed,103,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.602617809919394,1.0
+CFRNA268164,hct_cfrna_362.trimmed,104,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.5065830901609685,0.0
+CFRNA268164,hct_cfrna_368.trimmed,104,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.482554602914793,0.0
+CFRNA268164,hct_cfrna_357.trimmed,104,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.703195736803335,0.0
+CFRNA268164,hct_cfrna_376.trimmed,104,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.856309494104201,0.0
+CFRNA268164,hct_cfrna_363.trimmed,104,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.656366461364826,0.0
+CFRNA268164,hct_cfrna_311.trimmed,105,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.2561004939512825,1.0
+CFRNA268164,hct_cfrna_312.trimmed,105,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.491636333261187,1.0
+CFRNA268164,hct_cfrna_313.trimmed,105,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.394627289416368,1.0
+CFRNA268164,hct_cfrna_320.trimmed,105,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.6719691213649215,1.0
+CFRNA268164,gvhd_hct_cfrna_469,106,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.326043023159535,0.0
+CFRNA268164,gvhd_hct_cfrna_465,106,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.233950001966583,0.0
+CFRNA268164,gvhd_hct_cfrna_473,106,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.529210969984802,0.0
+CFRNA268164,hct_cfrna_263.trimmed,107,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.401834101759816,1.0
+CFRNA268164,hct_cfrna_290.trimmed,107,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,2M,,,,,6.463602914753321,1.0
+CFRNA268164,hct_cfrna_273.trimmed,107,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,3M,,,,,6.382311217978125,1.0
+CFRNA268164,hct_cfrna_291.trimmed,107,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,6M,,,,,6.593686828924252,1.0
+CFRNA268164,hct_cfrna_254.trimmed,107,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,1M,,,,,6.39481332553286,1.0
+CFRNA268164,gvhd_hct_cfrna_150,108,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,6.472771949113036,0.0
+CFRNA268164,gvhd_hct_cfrna_162,108,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.283219790853155,0.0
+CFRNA268164,gvhd_hct_cfrna_163,108,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.048856865255244,0.0
+CFRNA268164,gvhd_hct_cfrna_151,108,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.9243874326023045,0.0
+CFRNA268164,gvhd_hct_cfrna_179,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,PR,,,,,6.140450845642533,0.0
+CFRNA268164,gvhd_hct_cfrna_180,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,5.9645660274236105,0.0
+CFRNA268164,gvhd_hct_cfrna_183,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.206348969340111,0.0
+CFRNA268164,gvhd_hct_cfrna_170,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,5.891099039456744,0.0
+CFRNA268164,gvhd_hct_cfrna_181,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.149067853274565,0.0
+CFRNA268164,gvhd_hct_cfrna_173,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,6.044184889357091,0.0
+CFRNA268164,gvhd_hct_cfrna_182,111,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.219900309538083,0.0
+CFRNA268164,gvhd_hct_cfrna_184,112,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,5.539388527790601,0.0
+CFRNA268164,gvhd_hct_cfrna_169,112,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,5.75067189946904,0.0
+CFRNA268164,gvhd_hct_cfrna_171,112,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,PR,,,,,5.925438441465143,0.0
+CFRNA268164,gvhd_hct_cfrna_172,112,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,5.202798805612153,0.0
+CFRNA268164,gvhd_hct_cfrna_185,112,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,6.00509124122239,0.0
+CFRNA268164,gvhd_hct_cfrna_71,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.0750298797515025,1.0
+CFRNA268164,gvhd_hct_cfrna_127,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.452324749688704,1.0
+CFRNA268164,gvhd_hct_cfrna_69,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.086247326713539,1.0
+CFRNA268164,gvhd_hct_cfrna_112,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D1,,,,,6.247404385284304,1.0
+CFRNA268164,gvhd_hct_cfrna_57,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,5.778952507926586,1.0
+CFRNA268164,gvhd_hct_cfrna_70,13,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,5.64983313503588,1.0
+CFRNA268164,gvhd_hct_cfrna_96,14,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.439463909901873,0.0
+CFRNA268164,gvhd_hct_cfrna_111,14,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,5.750309329739992,0.0
+CFRNA268164,gvhd_hct_cfrna_128,14,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.478520466596673,0.0
+CFRNA268164,gvhd_hct_cfrna_115,14,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.364328819887162,0.0
+CFRNA268164,gvhd_hct_cfrna_198,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.599963921887046,0.0
+CFRNA268164,gvhd_hct_cfrna_247,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.634080581206991,0.0
+CFRNA268164,gvhd_hct_cfrna_232,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.7713838070705155,0.0
+CFRNA268164,gvhd_hct_cfrna_230,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.731078511979239,0.0
+CFRNA268164,gvhd_hct_cfrna_229,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.5901260743548615,0.0
+CFRNA268164,gvhd_hct_cfrna_250,15,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.582082576038395,0.0
+CFRNA268164,gvhd_hct_cfrna_248,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.527427526624244,0.0
+CFRNA268164,gvhd_hct_cfrna_249,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.628693850988484,0.0
+CFRNA268164,gvhd_hct_cfrna_196,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,5.857319226119357,0.0
+CFRNA268164,gvhd_hct_cfrna_215,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.982519931125595,0.0
+CFRNA268164,gvhd_hct_cfrna_228,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.410255935917172,0.0
+CFRNA268164,gvhd_hct_cfrna_212,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,7.019519643695149,0.0
+CFRNA268164,gvhd_hct_cfrna_221,16,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.894002692600812,0.0
+CFRNA268164,gvhd_hct_cfrna_241,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.819662626479899,1.0
+CFRNA268164,gvhd_hct_cfrna_195,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.695995958294899,1.0
+CFRNA268164,gvhd_hct_cfrna_251,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.474523804707286,1.0
+CFRNA268164,gvhd_hct_cfrna_213,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.554852192290336,1.0
+CFRNA268164,gvhd_hct_cfrna_209,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.641735599995705,1.0
+CFRNA268164,gvhd_hct_cfrna_245,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.923864077905964,1.0
+CFRNA268164,gvhd_hct_cfrna_233,17,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R2,,,,,6.921947441851884,1.0
+CFRNA268164,gvhd_hct_cfrna_208,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,6.4514259596583114,0.0
+CFRNA268164,gvhd_hct_cfrna_211,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.426114847782886,0.0
+CFRNA268164,gvhd_hct_cfrna_234,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.462992574147367,0.0
+CFRNA268164,gvhd_hct_cfrna_237,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.837399150645474,0.0
+CFRNA268164,gvhd_hct_cfrna_200,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.767339492991197,0.0
+CFRNA268164,gvhd_hct_cfrna_240,18,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.778189611368626,0.0
+CFRNA268164,gvhd_hct_cfrna_99,19,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,PR,,,,,6.372346684321026,0.0
+CFRNA268164,gvhd_hct_cfrna_102,19,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.2491680168858235,0.0
+CFRNA268164,gvhd_hct_cfrna_126,19,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.17074767716001,0.0
+CFRNA268164,gvhd_hct_cfrna_29,19,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,5.821278303750716,0.0
+CFRNA268164,gvhd_hct_cfrna_44,20,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,5.548257942761346,0.0
+CFRNA268164,gvhd_hct_cfrna_101,20,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.304146790737236,0.0
+CFRNA268164,gvhd_hct_cfrna_30,20,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.209690573427807,0.0
+CFRNA268164,gvhd_hct_cfrna_32,20,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,5.729798753205828,0.0
+CFRNA268164,gvhd_hct_cfrna_92,20,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.135267214092746,0.0
+CFRNA268164,gvhd_hct_cfrna_145,21,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.315536673738534,0.0
+CFRNA268164,gvhd_hct_cfrna_167,21,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,S2,,,,,6.052175479638919,0.0
+CFRNA268164,gvhd_hct_cfrna_147,21,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.093100048078339,0.0
+CFRNA268164,gvhd_hct_cfrna_144,21,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.247722677319981,0.0
+CFRNA268164,gvhd_hct_cfrna_146,21,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.427699795617322,0.0
+CFRNA268164,gvhd_hct_cfrna_93,22,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.028279591910123,1.0
+CFRNA268164,gvhd_hct_cfrna_132,22,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.222509416763279,1.0
+CFRNA268164,gvhd_hct_cfrna_135,22,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.192887063411544,1.0
+CFRNA268164,hct_cfrna_441.trimmed,22,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R1,,,,,6.419777040004077,1.0
+CFRNA268164,hct_cfrna_338.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.63026867234402,1.0
+CFRNA268164,hct_cfrna_432.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,R2,,,,,6.6601070766328005,1.0
+CFRNA268164,hct_cfrna_339.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.600067662553813,1.0
+CFRNA268164,hct_cfrna_314.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.5757319890520805,1.0
+CFRNA268164,hct_cfrna_319.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.302469681573216,1.0
+CFRNA268164,hct_cfrna_318.trimmed,23,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,5.897023057071724,1.0
+CFRNA268164,hct_cfrna_369.trimmed,24,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.4941154779141765,0.0
+CFRNA268164,hct_cfrna_375.trimmed,24,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.371665668191316,0.0
+CFRNA268164,gvhd_hct_cfrna_503,25,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,5.958971708715163,1.0
+CFRNA268164,gvhd_hct_cfrna_88,26,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.2905525604627215,0.0
+CFRNA268164,gvhd_hct_cfrna_18,26,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.3053606142307626,0.0
+CFRNA268164,gvhd_hct_cfrna_19,26,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,5.934423200680623,0.0
+CFRNA268164,gvhd_hct_cfrna_246,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.383004884278871,1.0
+CFRNA268164,gvhd_hct_cfrna_231,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.230849309549763,1.0
+CFRNA268164,gvhd_hct_cfrna_217,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,D2,,,,,6.775259375818475,1.0
+CFRNA268164,gvhd_hct_cfrna_216,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,D0,,,,,6.452279072573884,1.0
+CFRNA268164,gvhd_hct_cfrna_225,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,6.876658610550256,1.0
+CFRNA268164,gvhd_hct_cfrna_227,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.749029742101185,1.0
+CFRNA268164,gvhd_hct_cfrna_242,27,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.452990354478733,1.0
+CFRNA268164,gvhd_hct_cfrna_4,28,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,5.891742570165007,0.0
+CFRNA268164,gvhd_hct_cfrna_3,28,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,5.98524544289735,0.0
+CFRNA268164,gvhd_hct_cfrna_125,28,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,5.93231239633089,0.0
+CFRNA268164,gvhd_hct_cfrna_89,28,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.066019761014506,0.0
+CFRNA268164,gvhd_hct_cfrna_90,28,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,D0,,,,,5.704528857658932,0.0
+CFRNA268164,gvhd_hct_cfrna_66,29,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D2,,,,,5.90234616394452,1.0
+CFRNA268164,gvhd_hct_cfrna_103,29,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.275936426789206,1.0
+CFRNA268164,gvhd_hct_cfrna_97,29,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.384190276617592,1.0
+CFRNA268164,gvhd_hct_cfrna_34,29,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,5.853987644963763,1.0
+CFRNA268164,gvhd_hct_cfrna_106,29,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,5.842799513751787,1.0
+CFRNA268164,gvhd_hct_cfrna_5,30,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,5.89810565093511,0.0
+CFRNA268164,gvhd_hct_cfrna_104,30,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,5.992012411350158,0.0
+CFRNA268164,gvhd_hct_cfrna_120,30,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.0595047254919745,0.0
+CFRNA268164,gvhd_hct_cfrna_52,30,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,5.7797162303709575,0.0
+CFRNA268164,gvhd_hct_cfrna_130,31,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.448966663991922,0.0
+CFRNA268164,gvhd_hct_cfrna_129,31,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.132595849372379,0.0
+CFRNA268164,gvhd_hct_cfrna_118,31,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.058151086744723,0.0
+CFRNA268164,gvhd_hct_cfrna_105,31,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.120861720431445,0.0
+CFRNA268164,gvhd_hct_cfrna_65,32,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,5.717808590020233,0.0
+CFRNA268164,gvhd_hct_cfrna_124,32,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.359661919518394,0.0
+CFRNA268164,gvhd_hct_cfrna_87,32,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,5.972938848176815,0.0
+CFRNA268164,gvhd_hct_cfrna_119,32,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.291767436859382,0.0
+CFRNA268164,hct_cfrna_444.trimmed,33,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.995113903960163,0.0
+CFRNA268164,hct_cfrna_422.trimmed,33,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.773311678636912,0.0
+CFRNA268164,hct_cfrna_427.trimmed,33,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.715103924465198,0.0
+CFRNA268164,hct_cfrna_417.trimmed,33,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.68345474123226,0.0
+CFRNA268164,hct_cfrna_440.trimmed,33,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.509029576846566,0.0
+CFRNA268164,gvhd_hct_cfrna_472,34,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R2,,,,,6.126907700628061,1.0
+CFRNA268164,gvhd_hct_cfrna_481,34,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.526019772490591,1.0
+CFRNA268164,gvhd_hct_cfrna_463,34,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R1,,,,,6.280583150312484,1.0
+CFRNA268164,gvhd_hct_cfrna_470,34,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.53273820408742,1.0
+CFRNA268164,gvhd_hct_cfrna_464,34,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.358440848047862,1.0
+CFRNA268164,gvhd_hct_cfrna_168,35,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.164779206909992,0.0
+CFRNA268164,gvhd_hct_cfrna_152,35,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.622170384025238,0.0
+CFRNA268164,gvhd_hct_cfrna_210,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.732067675299239,0.0
+CFRNA268164,gvhd_hct_cfrna_204,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.910390228228715,0.0
+CFRNA268164,gvhd_hct_cfrna_191,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.83057032144061,0.0
+CFRNA268164,gvhd_hct_cfrna_220,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.727943321888953,0.0
+CFRNA268164,gvhd_hct_cfrna_224,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.998998231032182,0.0
+CFRNA268164,gvhd_hct_cfrna_197,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.905298773877515,0.0
+CFRNA268164,gvhd_hct_cfrna_235,36,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.904143067628735,0.0
+CFRNA268164,gvhd_hct_cfrna_511.trimmed,37,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.832417381886133,1.0
+CFRNA268164,gvhd_hct_cfrna_68,38,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,PR,,,,,5.496333120994506,0.0
+CFRNA268164,gvhd_hct_cfrna_123,38,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.109468187665784,0.0
+CFRNA268164,gvhd_hct_cfrna_28,38,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,5.9632592715714345,0.0
+CFRNA268164,gvhd_hct_cfrna_117,38,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,5.984862468328087,0.0
+CFRNA268164,gvhd_hct_cfrna_91,38,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,5.327818532328821,0.0
+CFRNA268164,hct_cfrna_270.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.591788384506601,1.0
+CFRNA268164,hct_cfrna_449.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,R2,,,,,6.676035910023834,1.0
+CFRNA268164,hct_cfrna_271.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.813355377036298,1.0
+CFRNA268164,hct_cfrna_287.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.1083850451175765,1.0
+CFRNA268164,hct_cfrna_272.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.043200320833981,1.0
+CFRNA268164,hct_cfrna_258.trimmed,39,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,5.9987866249491075,1.0
+CFRNA268164,gvhd_hct_cfrna_243,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.834021388907832,0.0
+CFRNA268164,gvhd_hct_cfrna_218,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,7.121666353090762,0.0
+CFRNA268164,gvhd_hct_cfrna_236,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,D0,,,,,6.654746143578768,0.0
+CFRNA268164,gvhd_hct_cfrna_203,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.77937142223548,0.0
+CFRNA268164,gvhd_hct_cfrna_205,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.924901277500438,0.0
+CFRNA268164,gvhd_hct_cfrna_199,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,6.827149549780733,0.0
+CFRNA268164,gvhd_hct_cfrna_223,40,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,7.051040286251716,0.0
+CFRNA268164,gvhd_hct_cfrna_512.trimmed,41,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,7.233889177828592,0.0
+CFRNA268164,hct_cfrna_346.trimmed,42,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.0820759220746,1.0
+CFRNA268164,hct_cfrna_347.trimmed,42,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.984868044558875,1.0
+CFRNA268164,hct_cfrna_429.trimmed,42,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R2,,,,,6.17253784053294,1.0
+CFRNA268164,hct_cfrna_325.trimmed,42,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.6702388003714255,1.0
+CFRNA268164,hct_cfrna_337.trimmed,42,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.404442162182746,1.0
+CFRNA268164,gvhd_hct_cfrna_192,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.8669481454660595,1.0
+CFRNA268164,gvhd_hct_cfrna_244,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,6M,,,,,6.79712926494674,1.0
+CFRNA268164,gvhd_hct_cfrna_194,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,D0,,,,,6.746498752657489,1.0
+CFRNA268164,gvhd_hct_cfrna_206,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,R2,,,,,6.510951367928287,1.0
+CFRNA268164,gvhd_hct_cfrna_239,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,3M,,,,,6.646263121458712,1.0
+CFRNA268164,gvhd_hct_cfrna_219,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,PR,,,,,7.0641272753853555,1.0
+CFRNA268164,gvhd_hct_cfrna_193,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,1M,,,,,6.862274291178369,1.0
+CFRNA268164,gvhd_hct_cfrna_222,43,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,2M,,,,,6.975933186558956,1.0
+CFRNA268164,hct_cfrna_391.trimmed,44,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.812118539017957,0.0
+CFRNA268164,hct_cfrna_395.trimmed,44,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.8457416835832055,0.0
+CFRNA268164,hct_cfrna_407.trimmed,44,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.567125689365004,0.0
+CFRNA268164,hct_cfrna_384.trimmed,44,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.946999210113033,0.0
+CFRNA268164,hct_cfrna_411.trimmed,44,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.574871133416816,0.0
+CFRNA268164,hct_cfrna_383.trimmed,45,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.907585473655446,0.0
+CFRNA268164,hct_cfrna_412.trimmed,45,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.7750953234691655,0.0
+CFRNA268164,hct_cfrna_274.trimmed,46,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.237861049238411,1.0
+CFRNA268164,hct_cfrna_288.trimmed,46,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.9267883985639065,1.0
+CFRNA268164,hct_cfrna_298.trimmed,46,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.718028856059166,1.0
+CFRNA268164,hct_cfrna_289.trimmed,46,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.441455697210602,1.0
+CFRNA268164,gvhd_hct_cfrna_136,47,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.461406976141039,1.0
+CFRNA268164,gvhd_hct_cfrna_27,47,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R2,,,,,5.7214816794834364,1.0
+CFRNA268164,hct_cfrna_447.trimmed,47,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,S2,,,,,6.964397017162974,1.0
+CFRNA268164,gvhd_hct_cfrna_107,47,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.275485037600276,1.0
+CFRNA268164,gvhd_hct_cfrna_138,48,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,5.513595777796212,1.0
+CFRNA268164,gvhd_hct_cfrna_95,48,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,5.802275539847886,1.0
+CFRNA268164,gvhd_hct_cfrna_137,48,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,S2,,,,,6.167643966783626,1.0
+CFRNA268164,gvhd_hct_cfrna_60,48,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,5.825716848427749,1.0
+CFRNA268164,gvhd_hct_cfrna_109,48,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,5.719408359126986,1.0
+CFRNA268164,hct_cfrna_327.trimmed,49,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.052535428211633,0.0
+CFRNA268164,hct_cfrna_342.trimmed,49,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.46436299639119,0.0
+CFRNA268164,hct_cfrna_341.trimmed,49,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.234207396496802,0.0
+CFRNA268164,hct_cfrna_343.trimmed,49,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.445129956366888,0.0
+CFRNA268164,gvhd_hct_cfrna_143,50,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.811178732482632,1.0
+CFRNA268164,gvhd_hct_cfrna_148,50,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.159638767727777,1.0
+CFRNA268164,gvhd_hct_cfrna_149,50,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.18774711536858,1.0
+CFRNA268164,gvhd_hct_cfrna_164,50,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,R2,,,,,6.03391728387097,1.0
+CFRNA268164,gvhd_hct_cfrna_461,51,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,3M,,,,,6.559656504686792,0.0
+CFRNA268164,hct_cfrna_439.trimmed,51,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,2M,,,,,6.5394682929093335,0.0
+CFRNA268164,hct_cfrna_434.trimmed,51,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.648419734564736,0.0
+CFRNA268164,hct_cfrna_431.trimmed,51,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,1M,,,,,6.685074203248029,0.0
+CFRNA268164,hct_cfrna_419.trimmed,51,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,6M,,,,,6.798820394481542,0.0
+CFRNA268164,gvhd_hct_cfrna_513.trimmed,52,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.894067601771257,0.0
+CFRNA268164,hct_cfrna_262.trimmed,53,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.153899886309634,1.0
+CFRNA268164,hct_cfrna_261.trimmed,53,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,5.966486214621821,1.0
+CFRNA268164,hct_cfrna_421.trimmed,53,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,R2,,,,,6.770696594743225,1.0
+CFRNA268164,hct_cfrna_302.trimmed,53,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.367796515676071,1.0
+CFRNA268164,hct_cfrna_278.trimmed,53,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.568151601243968,1.0
+CFRNA268164,hct_cfrna_361.trimmed,55,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.715862926894278,0.0
+CFRNA268164,hct_cfrna_370.trimmed,55,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.489921654189096,0.0
+CFRNA268164,hct_cfrna_364.trimmed,55,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.073235043438549,0.0
+CFRNA268164,hct_cfrna_374.trimmed,55,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.731429279732156,0.0
+CFRNA268164,hct_cfrna_424.trimmed,56,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.7960011165039065,0.0
+CFRNA268164,hct_cfrna_450.trimmed,56,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.635370131777911,0.0
+CFRNA268164,hct_cfrna_453.trimmed,56,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.426081471342838,0.0
+CFRNA268164,hct_cfrna_438.trimmed,56,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.80025360652417,0.0
+CFRNA268164,hct_cfrna_455.trimmed,56,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.96442666705489,0.0
+CFRNA268164,hct_cfrna_400.trimmed,58,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.340361015845729,0.0
+CFRNA268164,hct_cfrna_408.trimmed,58,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.854870561274485,0.0
+CFRNA268164,hct_cfrna_403.trimmed,58,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.963615113744586,0.0
+CFRNA268164,hct_cfrna_396.trimmed,58,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.9713869137007745,0.0
+CFRNA268164,hct_cfrna_331.trimmed,59,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.584525143316317,1.0
+CFRNA268164,hct_cfrna_330.trimmed,59,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.523426219120605,1.0
+CFRNA268164,hct_cfrna_423.trimmed,59,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,R1,,,,,6.793391726112923,1.0
+CFRNA268164,hct_cfrna_349.trimmed,59,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.640903501209179,1.0
+CFRNA268164,gvhd_hct_cfrna_460,59,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,R2,,,,,6.639421041338587,1.0
+CFRNA268164,hct_cfrna_348.trimmed,59,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.699317648179103,1.0
+CFRNA268164,gvhd_hct_cfrna_514.trimmed,60,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.740753378744154,0.0
+CFRNA268164,hct_cfrna_381.trimmed,61,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,6.999835892542886,0.0
+CFRNA268164,hct_cfrna_404.trimmed,61,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,7.050288904574279,0.0
+CFRNA268164,hct_cfrna_399.trimmed,61,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.953340992402384,0.0
+CFRNA268164,hct_cfrna_392.trimmed,61,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,7.042009418984627,0.0
+CFRNA268164,hct_cfrna_382.trimmed,61,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.855332435535364,0.0
+CFRNA268164,gvhd_hct_cfrna_462,62,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.613850909208111,0.0
+CFRNA268164,gvhd_hct_cfrna_474,62,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.622632050412454,0.0
+CFRNA268164,gvhd_hct_cfrna_476,62,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.561158649475379,0.0
+CFRNA268164,gvhd_hct_cfrna_482,62,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.884186585456716,0.0
+CFRNA268164,gvhd_hct_cfrna_483,62,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.469686259334303,0.0
+CFRNA268164,gvhd_hct_cfrna_515.trimmed,63,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,7.071371816582788,1.0
+CFRNA268164,gvhd_hct_cfrna_516.trimmed,64,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,7.066627962521876,0.0
+CFRNA268164,gvhd_hct_cfrna_20,65,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,5.9092713982257905,0.0
+CFRNA268164,gvhd_hct_cfrna_15,65,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,5.73347894335788,0.0
+CFRNA268164,gvhd_hct_cfrna_67,65,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,5.953622956819564,0.0
+CFRNA268164,gvhd_hct_cfrna_114,65,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.27731943520864,0.0
+CFRNA268164,hct_cfrna_356.trimmed,66,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.474176621965354,0.0
+CFRNA268164,hct_cfrna_367.trimmed,66,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.680688064545133,0.0
+CFRNA268164,hct_cfrna_373.trimmed,66,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.553713521672326,0.0
+CFRNA268164,hct_cfrna_358.trimmed,66,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.131922307713958,0.0
+CFRNA268164,hct_cfrna_355.trimmed,66,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.332024572014459,0.0
+CFRNA268164,gvhd_hct_cfrna_520.trimmed,67,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,7.085779767127858,1.0
+CFRNA268164,hct_cfrna_332.trimmed,68,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,7.017909520921472,1.0
+CFRNA268164,hct_cfrna_334.trimmed,68,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.843370085663741,1.0
+CFRNA268164,hct_cfrna_326.trimmed,68,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.899907079208155,1.0
+CFRNA268164,hct_cfrna_333.trimmed,68,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.723722816421892,1.0
+CFRNA268164,hct_cfrna_308.trimmed,68,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.727492294478723,1.0
+CFRNA268164,hct_cfrna_306.trimmed,69,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.406252258474993,0.0
+CFRNA268164,hct_cfrna_305.trimmed,69,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.75998223560089,0.0
+CFRNA268164,hct_cfrna_307.trimmed,69,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.5949041197083025,0.0
+CFRNA268164,hct_cfrna_323.trimmed,69,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.3690905620834375,0.0
+CFRNA268164,gvhd_hct_cfrna_519.trimmed,71,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.789483619574763,1.0
+CFRNA268164,gvhd_hct_cfrna_51,72,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,5.694198789956856,1.0
+CFRNA268164,gvhd_hct_cfrna_100,72,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,5.959658034299558,1.0
+CFRNA268164,gvhd_hct_cfrna_133,72,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,5.700868925251931,1.0
+CFRNA268164,gvhd_hct_cfrna_94,72,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.225401301045325,1.0
+CFRNA268164,hct_cfrna_428.trimmed,73,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,S2,,,,,6.720852793365391,0.0
+CFRNA268164,hct_cfrna_452.trimmed,73,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,3M,,,,,6.789340655828399,0.0
+CFRNA268164,hct_cfrna_442.trimmed,73,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,2M,,,,,6.725146126267338,0.0
+CFRNA268164,hct_cfrna_418.trimmed,73,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.9970359237995865,0.0
+CFRNA268164,hct_cfrna_437.trimmed,73,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,6M,,,,,5.709803171071255,0.0
+CFRNA268164,gvhd_hct_cfrna_521.trimmed,75,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,7.203281609916956,0.0
+CFRNA268164,gvhd_hct_cfrna_525.trimmed,76,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,7.090586348583018,0.0
+CFRNA268164,gvhd_hct_cfrna_55,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,D0,,,,,5.392556268295072,0.0
+CFRNA268164,gvhd_hct_cfrna_64,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,5.894858591776733,0.0
+CFRNA268164,gvhd_hct_cfrna_31,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.0369812175113555,0.0
+CFRNA268164,gvhd_hct_cfrna_108,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,PR,,,,,6.675742607113689,0.0
+CFRNA268164,gvhd_hct_cfrna_131,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.2168710250875225,0.0
+CFRNA268164,gvhd_hct_cfrna_63,77,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,5.862676291653141,0.0
+CFRNA268164,gvhd_hct_cfrna_498,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.571959206655417,1.0
+CFRNA268164,gvhd_hct_cfrna_485,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.496458722740036,1.0
+CFRNA268164,gvhd_hct_cfrna_497,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,6.630312013807042,1.0
+CFRNA268164,gvhd_hct_cfrna_510.trimmed,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.90543739904749,1.0
+CFRNA268164,gvhd_hct_cfrna_502,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.177550062402907,1.0
+CFRNA268164,gvhd_hct_cfrna_484,78,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.19323288008109,1.0
+CFRNA268164,hct_cfrna_413.trimmed,79,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.853061266289899,0.0
+CFRNA268164,hct_cfrna_401.trimmed,79,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.6089263412814665,0.0
+CFRNA268164,hct_cfrna_402.trimmed,79,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.781894326655543,0.0
+CFRNA268164,hct_cfrna_410.trimmed,79,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.655472482460423,0.0
+CFRNA268164,hct_cfrna_379.trimmed,79,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.699721725143748,0.0
+CFRNA268164,hct_cfrna_420.trimmed,81,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.600439441784888,0.0
+CFRNA268164,hct_cfrna_454.trimmed,81,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.876243077449939,0.0
+CFRNA268164,hct_cfrna_456.trimmed,81,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.759982160126065,0.0
+CFRNA268164,hct_cfrna_448.trimmed,81,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.940555928236507,0.0
+CFRNA268164,hct_cfrna_322.trimmed,82,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.428158776793197,1.0
+CFRNA268164,hct_cfrna_350.trimmed,82,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.282035407877346,1.0
+CFRNA268164,hct_cfrna_335.trimmed,82,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.695296010941581,1.0
+CFRNA268164,hct_cfrna_351.trimmed,82,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.778470556564624,1.0
+CFRNA268164,hct_cfrna_321.trimmed,82,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.048112656110583,1.0
+CFRNA268164,hct_cfrna_260.trimmed,83,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.251352733118276,1.0
+CFRNA268164,hct_cfrna_296.trimmed,83,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.760094829433049,1.0
+CFRNA268164,hct_cfrna_259.trimmed,83,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.209866061373863,1.0
+CFRNA268164,hct_cfrna_275.trimmed,83,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.708153612058184,1.0
+CFRNA268164,hct_cfrna_294.trimmed,84,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.3798513520408715,1.0
+CFRNA268164,hct_cfrna_269.trimmed,84,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,1M,,,,,6.018852724647708,1.0
+CFRNA268164,hct_cfrna_295.trimmed,84,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,3M,,,,,6.1850166041347245,1.0
+CFRNA268164,gvhd_hct_cfrna_161,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.087591549883734,0.0
+CFRNA268164,gvhd_hct_cfrna_155,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.005785185452375,0.0
+CFRNA268164,gvhd_hct_cfrna_158,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,6.047316542074766,0.0
+CFRNA268164,gvhd_hct_cfrna_160,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.703545258670532,0.0
+CFRNA268164,gvhd_hct_cfrna_156,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.013858091712994,0.0
+CFRNA268164,gvhd_hct_cfrna_157,85,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.236953722460208,0.0
+CFRNA268164,hct_cfrna_309.trimmed,86,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.426666083333075,1.0
+CFRNA268164,hct_cfrna_310.trimmed,86,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.4425639544556885,1.0
+CFRNA268164,hct_cfrna_336.trimmed,86,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,1M,,,,,6.60757757347606,1.0
+CFRNA268164,gvhd_hct_cfrna_524.trimmed,88,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,1.0,E,,,,,6.901680207166865,0.0
+CFRNA268164,gvhd_hct_cfrna_459,89,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.306269082475245,0.0
+CFRNA268164,hct_cfrna_451.trimmed,89,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.934099424055459,0.0
+CFRNA268164,hct_cfrna_443.trimmed,89,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.726697059957915,0.0
+CFRNA268164,hct_cfrna_430.trimmed,89,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.700944069819516,0.0
+CFRNA268164,hct_cfrna_433.trimmed,89,plasma,1,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.734943610845982,0.0
+CFRNA268164,hct_cfrna_394.trimmed,90,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.876003123613767,0.0
+CFRNA268164,hct_cfrna_414.trimmed,90,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.716584324833706,0.0
+CFRNA268164,hct_cfrna_409.trimmed,90,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.939361630032219,0.0
+CFRNA268164,hct_cfrna_380.trimmed,90,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.793857339080584,0.0
+CFRNA268164,hct_cfrna_393.trimmed,90,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.655706777155648,0.0
+CFRNA268164,gvhd_hct_cfrna_523.trimmed,91,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,E,,,,,6.939998908005974,1.0
+CFRNA268164,gvhd_hct_cfrna_176,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.0164424640671195,1.0
+CFRNA268164,gvhd_hct_cfrna_177,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.4427819454171145,1.0
+CFRNA268164,gvhd_hct_cfrna_175,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,PR,,,,,5.93791088606282,1.0
+CFRNA268164,gvhd_hct_cfrna_188,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.4553781812791104,1.0
+CFRNA268164,gvhd_hct_cfrna_187,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,5.9941816070003915,1.0
+CFRNA268164,gvhd_hct_cfrna_186,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,5.903662335530529,1.0
+CFRNA268164,gvhd_hct_cfrna_174,92,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,D0,,,,,5.754673170457551,1.0
+CFRNA268164,gvhd_hct_cfrna_8,93,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,5.457185256553668,1.0
+CFRNA268164,gvhd_hct_cfrna_73,93,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,5.836239274387323,1.0
+CFRNA268164,gvhd_hct_cfrna_139,93,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,5.57108663497341,1.0
+CFRNA268164,gvhd_hct_cfrna_116,93,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,R2,,,,,5.755058071610941,1.0
+CFRNA268164,hct_cfrna_283.trimmed,94,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,1M,,,,,6.2195541402538765,1.0
+CFRNA268164,hct_cfrna_286.trimmed,94,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,2M,,,,,6.185548670639211,1.0
+CFRNA268164,hct_cfrna_257.trimmed,94,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,6M,,,,,6.257766384654669,1.0
+CFRNA268164,hct_cfrna_299.trimmed,94,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,1.0,,0.0,3M,,,,,6.437383476437923,1.0
+CFRNA268164,hct_cfrna_285.trimmed,95,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.301177847764677,1.0
+CFRNA268164,hct_cfrna_282.trimmed,95,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.461116888321884,1.0
+CFRNA268164,hct_cfrna_284.trimmed,95,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.23061009136186,1.0
+CFRNA268164,hct_cfrna_256.trimmed,95,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.35527504615669,1.0
+CFRNA268164,gvhd_hct_cfrna_508.trimmed,96,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,7.15961720640109,1.0
+CFRNA268164,gvhd_hct_cfrna_501,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,PR,,,,,6.501268686877229,1.0
+CFRNA268164,gvhd_hct_cfrna_500,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,D0,,,,,6.391856210951582,1.0
+CFRNA268164,gvhd_hct_cfrna_499,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,2M,,,,,6.485740728029634,1.0
+CFRNA268164,gvhd_hct_cfrna_522.trimmed,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,E,,,,,7.021380181241812,1.0
+CFRNA268164,gvhd_hct_cfrna_486,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,6M,,,,,6.454516958207339,1.0
+CFRNA268164,gvhd_hct_cfrna_504,97,plasma,0,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,1.0,3M,,,,,6.309495813401898,1.0
+CFRNA268164,gvhd_hct_cfrna_480,98,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,6M,,,,,6.717664429492902,0.0
+CFRNA268164,gvhd_hct_cfrna_471,98,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.661358283736034,0.0
+CFRNA268164,gvhd_hct_cfrna_475,98,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.57116544926286,0.0
+CFRNA268164,gvhd_hct_cfrna_466,98,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.367507059026843,0.0
+CFRNA268164,gvhd_hct_cfrna_479,98,plasma,1,,gvhd_,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.600977576028125,0.0
+CFRNA268164,hct_cfrna_281.trimmed,99,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,E,,,,,6.833484149223054,1.0
+CFRNA268164,hct_cfrna_300.trimmed,99,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,3M,,,,,6.656782180255526,1.0
+CFRNA268164,hct_cfrna_267.trimmed,99,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,2M,,,,,6.314309932852662,1.0
+CFRNA268164,hct_cfrna_268.trimmed,99,plasma,0,,plain,,plasma,plasma cfRNA-seq (log1p CPM),GSE268164,,0.0,,0.0,1M,,,,,6.61953731586781,1.0

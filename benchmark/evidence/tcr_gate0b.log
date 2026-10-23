@@ -1,0 +1,5 @@
+lineage training clones: 274,304 (CD8-only 72,013, CD4-only 202,291) from 54 recipients
+CD8-donor-reactive: pooled B2 AUROC 0.643 | lineage scorer alone predicts the label with AUROC 0.627 (and the lineage scorer's own held-out CD4-vs-CD8 AUROC is 0.686)
+   B2 AUROC WITHIN lineage-score deciles: 0.579 [0.567,0.594]   -> PASS   (control: lineage score within B2-score deciles: 0.522)
+CD4-donor-reactive: pooled B2 AUROC 0.586 | lineage scorer alone predicts the label with AUROC 0.454 (and the lineage scorer's own held-out CD4-vs-CD8 AUROC is 0.686)
+   B2 AUROC WITHIN lineage-score deciles: 0.570 [0.561,0.580]   -> PASS   (control: lineage score within B2-score deciles: 0.495)
