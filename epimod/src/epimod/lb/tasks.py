@@ -11,7 +11,7 @@ import torch
 from ..age import age_to_t
 from ..paths import subdir
 from .episet import N_DECADES, ROLES
-from .store import MISSING, LBStore, extremes_tokens, pair_tokens
+from .store import MISSING, LBStore, pair_tokens, pooled_extremes
 
 SEX_ID = {"": 0, "U": 0, "M": 1, "F": 2}
 CLOCKS = ["Hannum", "Horvathv1", "Horvathv2", "Lin", "PEDBE", "VidalBralo", "YingAdaptAge", "YingCausAge", "YingDamAge"]
@@ -31,6 +31,32 @@ def load_parsed() -> dict:
 
 
 @dataclass
+class Pools:
+    """Candidate CpG pools (universe columns) from which the benchmark builds its CpG lists."""
+
+    low: np.ndarray       # candidates for the lowest-methylated list (LB-0010 / LB-0002)
+    high: np.ndarray
+    pair: np.ndarray      # candidates for the most-different-sites list (LB-0006)
+
+
+def make_pools(parsed: dict, universe: pd.Index, ext_mask: np.ndarray | None = None, pair_mask: np.ndarray | None = None) -> Pools:
+    """Pools from the CpG *identities* (never values or labels) shown in the selected eval prompts."""
+    t = parsed["LB-0010"]
+    sel = range(len(t.ids)) if ext_mask is None else np.flatnonzero(ext_mask)
+    lo, hi = set(), set()
+    for i in sel:
+        flag = t.is_high[i].astype(bool)
+        lo.update(t.ids[i][~flag]); hi.update(t.ids[i][flag])
+    p = parsed["LB-0006"]
+    sel = range(len(p.ids)) if pair_mask is None else np.flatnonzero(pair_mask)
+    pr = set()
+    for i in sel:
+        pr.update(p.ids[i])
+    cols = lambda ids: (lambda u: u[u >= 0])(universe.get_indexer(sorted(ids)))
+    return Pools(cols(lo), cols(hi), cols(pr))
+
+
+@dataclass
 class Vocab:
     """CpG vocabulary of the model: universe column -> model id (-1 = not in vocabulary)."""
 
@@ -43,27 +69,27 @@ class Vocab:
         return len(self.cpg_ids)
 
 
-def build_vocab(store: LBStore, parsed: dict, min_count: int = 5, max_size: int = 60000) -> Vocab:
-    """CpGs shown in any eval prompt, plus CpGs that are frequently in a training extreme list."""
+def build_vocab(store: LBStore, parsed: dict, pools: Pools) -> Vocab:
+    """Vocabulary = candidate pools + the fixed 353 set + every published-clock CpG shown in clock prompts.
+
+    CpGs outside it (e.g. seen only in held-out prompts) are unknown to the model and dropped."""
     uni = store.universe
     keep = np.zeros(len(uni), bool)
-    for t in parsed.values():
-        for ids in t.ids:
-            keep[uni.get_indexer(list(ids))[uni.get_indexer(list(ids)) >= 0]] = True
-    v2u = store.v2u()
-    cnt = np.zeros(len(uni), np.int64)
-    for arr in (store.low_idx, store.high_idx):
-        u = v2u[arr.ravel()]; u = u[u >= 0]
-        cnt += np.bincount(u, minlength=len(uni))
-    freq = cnt >= min_count
-    sel = np.flatnonzero(keep | freq)
-    if len(sel) > max_size:
-        sel = np.flatnonzero(keep | (cnt >= np.sort(cnt[~keep])[-(max_size - keep.sum())]))
+    for cols in (pools.low, pools.high, pools.pair):
+        keep[cols] = True
+    for ids in list(parsed["LB-0190"].ids[:1]) + list(parsed["LB-0195"].ids):
+        u = uni.get_indexer(list(ids)); keep[u[u >= 0]] = True
+    sel = np.flatnonzero(keep)
     u2m = np.full(len(uni), -1, np.int64); u2m[sel] = np.arange(len(sel))
     prof = store.prof[:, sel].astype(np.float32); prof[prof == MISSING] = np.nan
     prof /= 100.0
     mean = np.nanmean(prof, axis=0); std = np.nanstd(prof, axis=0)
     return Vocab(u2m, pd.Index(uni[sel]), np.nan_to_num(mean, nan=0.5), np.nan_to_num(std, nan=0.25))
+
+
+def extremes_cache(store: LBStore, pools: Pools) -> dict:
+    lc, lv, hc, hv = pooled_extremes(store, pools.low, pools.high)
+    return {"low_col": lc, "low_val": lv, "high_col": hc, "high_val": hv}
 
 
 # ---------------------------------------------------------------------------------------------
@@ -79,10 +105,16 @@ def sex_ids(meta: pd.DataFrame, rows: np.ndarray) -> np.ndarray:
     return np.array([SEX_ID.get(g, 0) for g in meta.Gender.to_numpy()[rows]], dtype=np.int64)
 
 
-def extremes_batch(store: LBStore, vocab: Vocab, v2u: np.ndarray, rows: np.ndarray, drop: float = 0.0, rng=None):
-    ucpg, beta, role = extremes_tokens(store, rows, v2u)
+def extremes_batch(store: LBStore, vocab: Vocab, cache: dict, rows: np.ndarray, drop: float = 0.0, rng=None, tail_shift: float = 0.0):
+    ucpg = np.concatenate([cache["low_col"][rows], cache["high_col"][rows]], axis=1)
+    beta = np.concatenate([cache["low_val"][rows], cache["high_val"][rows]], axis=1).astype(np.float32)
+    n = cache["low_col"].shape[1]
+    if tail_shift > 0:   # tail values depend on the preprocessing pipeline: lift the low list, lower the high list
+        s = rng.uniform(0, tail_shift, size=(len(rows), 1)).astype(np.float32)
+        beta = np.concatenate([beta[:, :n] + s, beta[:, n:] - rng.uniform(0, tail_shift, size=(len(rows), 1)).astype(np.float32)], axis=1)
+    beta = np.round(np.clip(beta, 0.0, 1.0), 2).astype(np.float32)
+    role = np.concatenate([np.zeros((len(rows), n)), np.ones((len(rows), n))], axis=1).astype(np.int64)
     mcpg = np.where(ucpg >= 0, vocab.u2m[np.maximum(ucpg, 0)], -1)
-    beta = np.round(beta, 2)                                   # the benchmark shows two decimals
     if drop > 0:
         mcpg = np.where(rng.rand(*mcpg.shape) < rng.uniform(0, drop, size=(len(rows), 1)), -1, mcpg)
     return _tensors(mcpg, beta, role, sex_ids(store.meta, rows))
@@ -114,9 +146,9 @@ def clock_batch(store: LBStore, vocab: Vocab, rows: np.ndarray, clock_sets: dict
     return _tensors(cpg, beta, np.full(cpg.shape, ROLES["clock"]), sex_ids(store.meta, rows), clock)
 
 
-def pair_batch(store: LBStore, vocab: Vocab, ia: np.ndarray, ib: np.ndarray, k: int = 160):
-    """Two views over the shared k most-different CpGs. Returns (view_a, view_b)."""
-    ucols, ba, bb = pair_tokens(store, ia, ib, k)
+def pair_batch(store: LBStore, vocab: Vocab, ia: np.ndarray, ib: np.ndarray, k: int = 160, cand: np.ndarray | None = None):
+    """Two views over the shared k most-different CpGs (within ``cand``). Returns (view_a, view_b)."""
+    ucols, ba, bb = pair_tokens(store, ia, ib, k, cand)
     mcpg = vocab.u2m[ucols]
     role = np.full(ucols.shape, ROLES["pair_a"])
     return (_tensors(mcpg, np.round(ba, 2), role, sex_ids(store.meta, ia)),

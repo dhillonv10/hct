@@ -152,6 +152,17 @@ class EpiSet(nn.Module):
 
     # ---------------------------------------------------------------------------------------
     @torch.no_grad()
+    def predict_all(self, cpg, beta, role, sex, clock=None, batch_size: int = 128):
+        """(mu_t, sigma_t scaled, decade logits) as numpy, in batches."""
+        self.eval()
+        mus, sigs, decs = [], [], []
+        for i in range(0, len(cpg), batch_size):
+            sl = slice(i, i + batch_size)
+            mu, sig, dec = self(cpg[sl], beta[sl], role[sl], sex[sl], None if clock is None else clock[sl])
+            mus.append(mu); sigs.append(sig * self.sigma_scale); decs.append(dec)
+        return torch.cat(mus).double().numpy(), torch.cat(sigs).double().numpy(), torch.cat(decs).numpy()
+
+    @torch.no_grad()
     def predict_age(self, cpg, beta, role, sex, clock=None, batch_size: int = 128):
         self.eval()
         out_mu, out_sig = [], []

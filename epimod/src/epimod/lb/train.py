@@ -16,8 +16,8 @@ from torch import nn
 from ..age import age_to_t, t_to_age
 from .episet import EpiSet, SetConfig
 from .store import LBStore, sample_pairs
-from .tasks import (CLOCKS, Vocab, balanced_accuracy, clock_batch, decade_of, decade_posterior, extremes_batch, fixed_batch, mae,
-                    pair_batch)
+from .tasks import (CLOCKS, Pools, Vocab, balanced_accuracy, clock_batch, decade_of, decade_posterior, extremes_batch, extremes_cache,
+                    fixed_batch, mae, pair_batch)
 
 ALL_TASKS = ("extremes", "fixed", "clock", "pair")
 
@@ -37,6 +37,8 @@ class LBTrainConfig:
     pair_temp: float = 0.25          # divides the t-space age difference
     drop: float = 0.15               # random token dropout on extremes / fixed sets
     study_power: float = 0.5
+    age_balance: float = 0.0         # 1 = sample uniformly over 10-year age bins; 0 = natural age distribution
+    tail_shift: float = 0.04         # augmentation of the extreme lists' tail values (pipeline differences)
     eval_every: int = 250
     seed: int = 0
     threads: int = 4
@@ -66,22 +68,27 @@ def _loss_single(model, b, age_t, age, cfg):
     nll = (0.5 * ((age_t - mu) / sigma) ** 2 + torch.log(sigma)).mean()
     hub = nn.functional.smooth_l1_loss(mu, age_t, beta=0.05)
     ce = nn.functional.cross_entropy(dec, torch.as_tensor(decade_of(age)))
-    return nll + cfg.w_huber * hub + cfg.w_decade * ce, {"nll": float(nll), "hub": float(hub), "ce": float(ce)}
+    return nll + cfg.w_huber * hub + cfg.w_decade * ce, {"nll": float(nll.detach()), "hub": float(hub.detach()), "ce": float(ce.detach())}
 
 
 class Trainer:
-    def __init__(self, store_tr: LBStore, store_val: LBStore | None, vocab: Vocab, sets: TaskSets, mcfg: SetConfig,
+    def __init__(self, store_tr: LBStore, store_val: LBStore | None, vocab: Vocab, sets: TaskSets, pools: Pools, mcfg: SetConfig,
                  cfg: LBTrainConfig, log=print):
-        self.cfg, self.vocab, self.sets, self.log = cfg, vocab, sets, log
+        self.cfg, self.vocab, self.sets, self.pools, self.log = cfg, vocab, sets, pools, log
         self.tr, self.val = store_tr, store_val
         torch.set_num_threads(cfg.threads); torch.manual_seed(cfg.seed)
         self.rng = np.random.RandomState(cfg.seed)
         mcfg = replace(mcfg, n_tokens_vocab=len(vocab))
         self.model = EpiSet(mcfg, vocab.mean, vocab.std)
-        self.v2u = store_tr.v2u()
+        self.cache = extremes_cache(store_tr, pools) if "extremes" in cfg.tasks else None
+        self.val_cache = extremes_cache(store_val, pools) if (store_val is not None and "extremes" in cfg.tasks) else None
         self.age = store_tr.meta.Age.to_numpy(np.float64)
         n_study = store_tr.meta.groupby("DatasetID")["Age"].transform("size").to_numpy()
         w = n_study.astype(np.float64) ** -cfg.study_power
+        if cfg.age_balance > 0:
+            bins = np.minimum((self.age // 10).astype(int), 10)
+            dens = np.bincount(bins, minlength=11).astype(np.float64)
+            w = w * (dens[bins] ** -cfg.age_balance)
         self.p = w / w.sum()
         self.series = store_tr.meta.DatasetID.to_numpy()
         self.log_tau = nn.Parameter(torch.tensor(math.log(cfg.pair_temp)))
@@ -96,7 +103,7 @@ class Trainer:
         n = cfg.bs[kind]
         if kind == "pair":
             ia, ib = sample_pairs(self.age, n, self.rng, 10.0, self.series)
-            va, vb = pair_batch(self.tr, self.vocab, ia, ib)
+            va, vb = pair_batch(self.tr, self.vocab, ia, ib, 160, self.pools.pair)
             mua, siga, _ = m(va["cpg"], va["beta"], va["role"], va["sex"])
             mub, sigb, _ = m(vb["cpg"], vb["beta"], vb["role"], vb["sex"])
             y = torch.as_tensor((self.age[ia] > self.age[ib]).astype(np.float32))
@@ -104,10 +111,10 @@ class Trainer:
             bce = nn.functional.binary_cross_entropy_with_logits((mua - mub) / tau, y)
             ta, tb = torch.as_tensor(age_to_t(self.age[ia]), dtype=torch.float32), torch.as_tensor(age_to_t(self.age[ib]), dtype=torch.float32)
             aux = 0.5 * (nn.functional.smooth_l1_loss(mua, ta, beta=0.05) + nn.functional.smooth_l1_loss(mub, tb, beta=0.05))
-            return bce + cfg.w_pair_age * aux, {"bce": float(bce), "aux": float(aux)}
+            return bce + cfg.w_pair_age * aux, {"bce": float(bce.detach()), "aux": float(aux.detach())}
         rows = self._rows(n)
         if kind == "extremes":
-            b = extremes_batch(self.tr, self.vocab, self.v2u, rows, cfg.drop, self.rng)
+            b = extremes_batch(self.tr, self.vocab, self.cache, rows, cfg.drop, self.rng, cfg.tail_shift)
         elif kind == "fixed":
             b = fixed_batch(self.tr, self.vocab, rows, self.sets.fixed_u, cfg.drop, self.rng)
         else:
@@ -126,10 +133,9 @@ class Trainer:
         v = self.val
         age = v.meta.Age.to_numpy(np.float64)
         rows = rng.choice(v.n, min(n_val, v.n), replace=False)
-        v2u = v.v2u()
         model.eval()
         if "extremes" in self.cfg.tasks:
-            b = extremes_batch(v, self.vocab, v2u, rows)
+            b = extremes_batch(v, self.vocab, self.val_cache, rows)
             pred, _, _ = model.predict_age(b["cpg"], b["beta"], b["role"], b["sex"])
             out["extremes_mae"] = mae(pred, age[rows])
         if "fixed" in self.cfg.tasks:
@@ -143,7 +149,7 @@ class Trainer:
             out["clock_mae"] = mae(pred, age[rows])
         if "pair" in self.cfg.tasks:
             ia, ib = sample_pairs(age, 1000, rng, 10.0, v.meta.DatasetID.to_numpy())
-            va, vb = pair_batch(v, self.vocab, ia, ib)
+            va, vb = pair_batch(v, self.vocab, ia, ib, 160, self.pools.pair)
             pa, _, _ = model.predict_age(va["cpg"], va["beta"], va["role"], va["sex"])
             pb, _, _ = model.predict_age(vb["cpg"], vb["beta"], vb["role"], vb["sex"])
             out["pair_acc"] = float(np.mean((pa > pb) == (age[ia] > age[ib])))

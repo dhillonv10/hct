@@ -111,16 +111,43 @@ def extremes_tokens(store: LBStore, rows: np.ndarray, v2u: np.ndarray):
     return cpg, beta, role
 
 
-def pair_tokens(store: LBStore, ia: np.ndarray, ib: np.ndarray, k: int = 160):
-    """The ``k`` CpGs with the largest |beta_A - beta_B| among those observed in both donors."""
-    a = store.prof[ia].astype(np.int16); b = store.prof[ib].astype(np.int16)
+def pooled_extremes(store: LBStore, low_cols: np.ndarray, high_cols: np.ndarray, n: int = N_EXT, chunk: int = 2000):
+    """Per sample: the ``n`` lowest-beta CpGs among ``low_cols`` and the ``n`` highest among ``high_cols``.
+
+    Returns (low_col, low_val, high_col, high_val); columns are universe indices (-1 = fewer than n observed),
+    values are betas (0..1). The benchmark builds its lists inside a restricted candidate pool, not over the
+    whole array, so lists must be generated the same way."""
+    S = store.n
+    out = [np.full((S, n), -1, np.int64), np.zeros((S, n), np.float32), np.full((S, n), -1, np.int64), np.zeros((S, n), np.float32)]
+    for lo in range(0, S, chunk):
+        sl = slice(lo, min(S, lo + chunk))
+        for k, (cols, sign) in enumerate(((low_cols, 1), (high_cols, -1))):
+            x = store.prof[sl][:, cols].astype(np.int16)
+            key = np.where(x == MISSING, 10_000, sign * x)
+            top = np.argpartition(key, n, axis=1)[:, :n]
+            rows = np.arange(top.shape[0])[:, None]
+            order = np.argsort(key[rows, top], axis=1)
+            top = top[rows, order]
+            ok = key[rows, top] < 10_000
+            out[2 * k][sl] = np.where(ok, cols[top], -1)
+            out[2 * k + 1][sl] = np.where(ok, x[rows, top] / 100.0, 0.0)
+    return tuple(out)
+
+
+def pair_tokens(store: LBStore, ia: np.ndarray, ib: np.ndarray, k: int = 160, cand: np.ndarray | None = None):
+    """The ``k`` CpGs with the largest |beta_A - beta_B| among those observed in both donors
+    (restricted to universe columns ``cand`` when given)."""
+    prof = store.prof if cand is None else None
+    a = (store.prof[ia] if cand is None else store.prof[ia][:, cand]).astype(np.int16)
+    b = (store.prof[ib] if cand is None else store.prof[ib][:, cand]).astype(np.int16)
     bad = (a == MISSING) | (b == MISSING)
     diff = np.where(bad, -1, np.abs(a - b))
     top = np.argpartition(-diff, k, axis=1)[:, :k]
     rows = np.arange(len(ia))[:, None]
     order = np.argsort(-diff[rows, top], axis=1)
     top = top[rows, order]
-    return top.astype(np.int64), a[rows, top].astype(np.float32) / 100.0, b[rows, top].astype(np.float32) / 100.0
+    cols = top if cand is None else cand[top]
+    return cols.astype(np.int64), a[rows, top].astype(np.float32) / 100.0, b[rows, top].astype(np.float32) / 100.0
 
 
 def sample_pairs(ages: np.ndarray, n: int, rng: np.random.RandomState, min_gap: float = 10.0, series: np.ndarray | None = None,
