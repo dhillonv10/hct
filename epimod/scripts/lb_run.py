@@ -53,7 +53,7 @@ if a.eval_only:
     model = EpiSet(SetConfig(**ck["cfg"]), vocab.mean, vocab.std); model.load_state_dict(ck["state"]); model.eval()
     cfg = LBTrainConfig(tasks=tuple(ck["args"]["tasks"].split(",")))
 else:
-    tr_ = Trainer(tr, va, vocab, sets, pools, mcfg, cfg, log=lambda s: print(s, flush=True))
+    tr_ = Trainer(tr, va, vocab, sets, pools, mcfg, cfg, log=lambda s: print(s, flush=True), ckpt_path=out / "ckpt.pt")
     t0 = time.time(); res = tr_.fit(); res["train_sec"] = round(time.time() - t0)
     model = tr_.model
     print(f"params: {sum(p.numel() for p in model.parameters()):,} | best val score {res['best_val_score']:.4f}", flush=True)

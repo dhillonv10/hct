@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -73,8 +74,9 @@ def _loss_single(model, b, age_t, age, cfg):
 
 class Trainer:
     def __init__(self, store_tr: LBStore, store_val: LBStore | None, vocab: Vocab, sets: TaskSets, pools: Pools, mcfg: SetConfig,
-                 cfg: LBTrainConfig, log=print):
+                 cfg: LBTrainConfig, log=print, ckpt_path=None):
         self.cfg, self.vocab, self.sets, self.pools, self.log = cfg, vocab, sets, pools, log
+        self.ckpt_path = Path(ckpt_path) if ckpt_path else None
         self.tr, self.val = store_tr, store_val
         torch.set_num_threads(cfg.threads); torch.manual_seed(cfg.seed)
         self.rng = np.random.RandomState(cfg.seed)
@@ -175,7 +177,14 @@ class Trainer:
         for p in ema.parameters():
             p.requires_grad_(False)
         best, best_state, hist, t0 = float("inf"), None, [], time.time()
-        for step in range(1, cfg.steps + 1):
+        start = 1
+        if self.ckpt_path is not None and self.ckpt_path.exists():          # resume after a restart
+            ck = torch.load(self.ckpt_path, map_location="cpu", weights_only=False)
+            model.load_state_dict(ck["model"]); ema.load_state_dict(ck["ema"]); opt.load_state_dict(ck["opt"]); sched.load_state_dict(ck["sched"])
+            self.log_tau.data.copy_(ck["log_tau"]); best, best_state, hist = ck["best"], ck["best_state"], ck["hist"]
+            self.rng.set_state(ck["rng"]); start = ck["step"] + 1
+            self.log(f"[resume] continuing from step {ck['step']}")
+        for step in range(start, cfg.steps + 1):
             model.train()
             total, parts = 0.0, {}
             loss = torch.zeros(())
@@ -199,6 +208,12 @@ class Trainer:
                 hist.append(rec); self.log(json.dumps(rec))
                 if sc < best:
                     best, best_state = sc, copy.deepcopy(ema.state_dict())
+                if self.ckpt_path is not None:                                 # atomic checkpoint every eval
+                    tmp = self.ckpt_path.with_suffix(".tmp")
+                    torch.save({"step": step, "model": model.state_dict(), "ema": ema.state_dict(), "opt": opt.state_dict(),
+                                "sched": sched.state_dict(), "log_tau": self.log_tau.detach(), "best": best, "best_state": best_state,
+                                "hist": hist, "rng": self.rng.get_state()}, tmp)
+                    os.replace(tmp, self.ckpt_path)
         ema.load_state_dict(best_state if best_state is not None else ema.state_dict())
         self.model = ema
         return {"history": hist, "best_val_score": best}

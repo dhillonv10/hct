@@ -61,3 +61,25 @@ def test_decade_helpers():
     ba = balanced_accuracy(np.array([1, 1, 2, 2]), np.array([1, 2, 2, 2]))
     # class 1 recall = 1/1, class 2 recall = 2/3 -> balanced 5/6; plain accuracy = 3/4
     assert abs(ba["balanced_acc_present"] - 5 / 6) < 1e-9 and abs(ba["accuracy"] - 0.75) < 1e-9
+
+
+def test_trainer_resumes_from_checkpoint_after_interruption(tmp_path):
+    """Container restarts killed long runs; a restarted run must continue from its last checkpoint."""
+    from epimod.lb.episet import SetConfig
+    from epimod.lb.tasks import Pools
+    from epimod.lb.train import LBTrainConfig, TaskSets, Trainer
+
+    st = toy_store(S=40, U=400)
+    vocab = Vocab(np.arange(400), st.universe, np.full(400, 0.5, np.float32), np.full(400, 0.25, np.float32))
+    pools = Pools(np.arange(0, 150), np.arange(150, 300), np.arange(0, 400))
+    sets = TaskSets(np.arange(30), {"Hannum": np.arange(30, 70)})
+    mcfg = SetConfig(d_model=16, d_emb=8, n_layers=1, n_heads=2)
+    kw = dict(tasks=("extremes", "fixed", "clock", "pair"), eval_every=10, bs={"extremes": 4, "fixed": 4, "clock": 4, "pair": 4}, threads=1, warmup=2)
+    logs = []
+    ck = tmp_path / "ckpt.pt"
+    Trainer(st, st, vocab, sets, pools, mcfg, LBTrainConfig(steps=20, **kw), log=logs.append, ckpt_path=ck).fit()
+    assert ck.exists()
+    logs.clear()
+    res = Trainer(st, st, vocab, sets, pools, mcfg, LBTrainConfig(steps=40, **kw), log=logs.append, ckpt_path=ck).fit()
+    assert any("[resume] continuing from step 20" in l for l in logs)
+    assert [h["step"] for h in res["history"]] == [10, 20, 30, 40]       # earlier history kept, new steps appended
