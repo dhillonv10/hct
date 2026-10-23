@@ -53,8 +53,12 @@ def run_cpg_transfer(run_dir: str | Path, out_dir: str | Path, log=print) -> dic
     rows.append(score(model.rebind(tb).predict(X[:, ib])["age"], f"UNSEEN CpGs (half B, n={len(ib)}), true context"))
     rng = np.random.RandomState(0)
     perm = rng.permutation(len(ib))
-    shuf = replace(tb, chrom=tb.chrom[perm], pos=tb.pos[perm], island=tb.island[perm], reg=tb.reg[perm], binary=tb.binary[perm])
-    rows.append(score(model.rebind(shuf).predict(X[:, ib])["age"], "UNSEEN CpGs, annotations shuffled (control)"))
+    pos_only = dict(chrom=tb.chrom[perm], pos=tb.pos[perm])
+    ann_only = dict(island=tb.island[perm], reg=tb.reg[perm], binary=tb.binary[perm])
+    for label, fields in (("genomic position (chrom+pos) shuffled", pos_only),
+                          ("island/gene/regulatory annotations shuffled", ann_only),
+                          ("all context shuffled", {**pos_only, **ann_only})):
+        rows.append(score(model.rebind(replace(tb, **fields)).predict(X[:, ib])["age"], f"UNSEEN CpGs, {label} (control)"))
     out = pd.DataFrame(rows).set_index("model")
     out.to_csv(out_dir / "cpg_transfer.csv")
     log(out.round(2).to_string())

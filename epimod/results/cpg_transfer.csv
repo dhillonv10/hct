@@ -1,0 +1,7 @@
+model,MedAE_all_HC,MedAE_whole_blood_HC,r_all_HC
+constant (training median age),15.0,14.2,
+"seen CpGs (half A, n=5958)",4.847228318452835,3.814784049987793,0.8769965192364734
+"UNSEEN CpGs (half B, n=6042), true context",8.500114977359772,9.068690538406372,0.7478050489334804
+"UNSEEN CpGs, genomic position (chrom+pos) shuffled (control)",11.214886665344238,10.786889910697937,0.5342945167837527
+"UNSEEN CpGs, island/gene/regulatory annotations shuffled (control)",11.31524670124054,11.98317289352417,0.32088735303186305
+"UNSEEN CpGs, all context shuffled (control)",11.238449454307556,11.845033407211304,0.314633778771238

@@ -1,0 +1,92 @@
+{
+ "full": {
+  "cover90_hc": 0.7561837455830389,
+  "mean_sigma_years_hc": 5.082518700429451,
+  "cover90_hc[Platform=27K]": 0.3106796116504854,
+  "cover90_hc[Platform=450K]": 0.768359375,
+  "cover90_hc[Platform=EPIC]": 0.844311377245509,
+  "cover90_hc[Tissue=Blood]": 0.7836235642830678,
+  "cover90_hc[Tissue=Saliva]": 0.19083969465648856,
+  "cover90_hc[blood,450K/EPIC]": 0.8023882896764253
+ },
+ "full_seed1": {
+  "cover90_hc": 0.7664310954063605,
+  "mean_sigma_years_hc": 5.181827193751074,
+  "cover90_hc[Platform=27K]": 0.36893203883495146,
+  "cover90_hc[Platform=450K]": 0.77734375,
+  "cover90_hc[Platform=EPIC]": 0.844311377245509,
+  "cover90_hc[Tissue=Blood]": 0.7954798073360504,
+  "cover90_hc[Tissue=Saliva]": 0.16793893129770993,
+  "cover90_hc[blood,450K/EPIC]": 0.8124036979969184
+ },
+ "no_context": {
+  "cover90_hc": 0.7515901060070671,
+  "mean_sigma_years_hc": 4.849535214060519,
+  "cover90_hc[Platform=27K]": 0.2912621359223301,
+  "cover90_hc[Platform=450K]": 0.765625,
+  "cover90_hc[Platform=EPIC]": 0.8203592814371258,
+  "cover90_hc[Tissue=Blood]": 0.7791774731381993,
+  "cover90_hc[Tissue=Saliva]": 0.183206106870229,
+  "cover90_hc[blood,450K/EPIC]": 0.7985362095531587
+ },
+ "no_id": {
+  "cover90_hc": 0.7459363957597173,
+  "mean_sigma_years_hc": 5.178361073994747,
+  "cover90_hc[Platform=27K]": 0.33980582524271846,
+  "cover90_hc[Platform=450K]": 0.75703125,
+  "cover90_hc[Platform=EPIC]": 0.8263473053892215,
+  "cover90_hc[Tissue=Blood]": 0.7743608743979251,
+  "cover90_hc[Tissue=Saliva]": 0.16030534351145037,
+  "cover90_hc[blood,450K/EPIC]": 0.7916024653312789
+ },
+ "no_module_mixing": {
+  "cover90_hc": 0.7459363957597173,
+  "mean_sigma_years_hc": 5.066922676614461,
+  "cover90_hc[Platform=27K]": 0.2912621359223301,
+  "cover90_hc[Platform=450K]": 0.758203125,
+  "cover90_hc[Platform=EPIC]": 0.8383233532934131,
+  "cover90_hc[Tissue=Blood]": 0.7765839199703594,
+  "cover90_hc[Tissue=Saliva]": 0.11450381679389313,
+  "cover90_hc[blood,450K/EPIC]": 0.7958397534668721
+ },
+ "point_estimate": {
+  "cover90_hc": 0.43462897526501765,
+  "mean_sigma_years_hc": 2.0823651003102936,
+  "cover90_hc[Platform=27K]": 0.14563106796116504,
+  "cover90_hc[Platform=450K]": 0.4484375,
+  "cover90_hc[Platform=EPIC]": 0.40119760479041916,
+  "cover90_hc[Tissue=Blood]": 0.45387180437198965,
+  "cover90_hc[Tissue=Saliva]": 0.03816793893129771,
+  "cover90_hc[blood,450K/EPIC]": 0.4661016949152542
+ },
+ "no_aug": {
+  "cover90_hc": 0.7939929328621909,
+  "mean_sigma_years_hc": 5.089869286418451,
+  "cover90_hc[Platform=27K]": 0.2912621359223301,
+  "cover90_hc[Platform=450K]": 0.813671875,
+  "cover90_hc[Platform=EPIC]": 0.8023952095808383,
+  "cover90_hc[Tissue=Blood]": 0.8154872174879585,
+  "cover90_hc[Tissue=Saliva]": 0.3511450381679389,
+  "cover90_hc[blood,450K/EPIC]": 0.8362865947611711
+ },
+ "no_ssl": {
+  "cover90_hc": 0.7791519434628975,
+  "mean_sigma_years_hc": 5.205571814793367,
+  "cover90_hc[Platform=27K]": 0.3106796116504854,
+  "cover90_hc[Platform=450K]": 0.794140625,
+  "cover90_hc[Platform=EPIC]": 0.8383233532934131,
+  "cover90_hc[Tissue=Blood]": 0.8095590959614672,
+  "cover90_hc[Tissue=Saliva]": 0.15267175572519084,
+  "cover90_hc[blood,450K/EPIC]": 0.8293528505392912
+ },
+ "no_linear_route": {
+  "cover90_hc": 0.7070671378091873,
+  "mean_sigma_years_hc": 4.856758152647511,
+  "cover90_hc[Platform=27K]": 0.4174757281553398,
+  "cover90_hc[Platform=450K]": 0.71171875,
+  "cover90_hc[Platform=EPIC]": 0.8143712574850299,
+  "cover90_hc[Tissue=Blood]": 0.7339755464987032,
+  "cover90_hc[Tissue=Saliva]": 0.15267175572519084,
+  "cover90_hc[blood,450K/EPIC]": 0.7465331278890601
+ }
+}

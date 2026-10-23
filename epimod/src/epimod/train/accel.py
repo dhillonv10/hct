@@ -83,7 +83,8 @@ def _pairs(meta: pd.DataFrame, rows: np.ndarray, cfg: AccelConfig) -> tuple[np.n
                 if len(ok):
                     for j in rng.choice(ok, size=min(3, len(ok)), replace=False):
                         block.append((pos[i], pos[ctrl[j]]))
-            out += block; wts += [1.0 / len(block)] * len(block)
+            if block:      # a condition with no age-matched controls contributes no pairs
+                out += block; wts += [1.0 / len(block)] * len(block)
     pairs = np.array(out, dtype=np.int64).reshape(-1, 2)
     w = np.array(wts, dtype=np.float32)
     if len(pairs) > cfg.max_pairs:

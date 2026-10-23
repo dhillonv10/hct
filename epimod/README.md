@@ -10,20 +10,26 @@ Longevity-LLM (Qwen3-14B; [bioRxiv 2026.03.28.714980](https://www.biorxiv.org/co
 See [`docs/DESIGN.md`](docs/DESIGN.md) for what was and was not verifiable about that paper.
 This directory is self-contained and does not touch the `HCTFormer_*.py` files at the repo root.
 
-> Results, ablations and caveats: [`results/RESULTS.md`](results/RESULTS.md).
+## Results in brief
 
-## What is different
+On the 65 held-out ComputAge Bench studies (details, caveats and ablations in
+[`results/RESULTS.md`](results/RESULTS.md)):
 
-| | |
-|---|---|
-| **Genome-aware CpG tokens** | each CpG is embedded from chromosome, multi-scale genomic position, island/shelf, gene region, regulatory class, enhancer/DHS and probe design (+ an id embedding that is randomly hidden in training) |
-| **Epigenetic modules** | K sample-independent soft CpG sets feed a small transformer, so every unit is an inspectable CpG set and 10⁴ CpGs run on a CPU |
-| **Exact additive decomposition** | age = bias + Σ per-module contributions |
-| **Predictive distribution** | mean and sd of age, with post-hoc calibration on held-out studies |
-| **Real-profile augmentation** | masking, borrowed real missingness patterns, logit-space distortion, noise — nothing synthetic is generated |
-| **Cross-fitted acceleration head** | optional biological-age stage scored only on held-out studies / disease classes |
-
-Each is switchable (`ModelConfig` / `TrainConfig`), and `scripts/run_ablations.sh` measures them.
+* **Age accuracy:** median error on healthy controls **3.93 y** (3.77 y with cell-type-balanced
+  sampling) vs 3.68 y for an ElasticNet on the same CpGs/studies, and 4.15 / 5.34 / 7.5–8.0 y for
+  Horvath V2 / Horvath V1 / PhenoAge. On whole blood: 2.85 y vs 2.76 y (ElasticNet) vs 3.3–5.5 y
+  (published clocks). Competitive; **not better than a linear baseline**.
+* **Accelerated aging:** no better than the linear baselines; PhenoAge V2 is far ahead.
+* **Weak spots:** purified cell types, saliva, 27K arrays (none are well represented in training);
+  90% intervals cover only ~76–86% on new studies.
+* **What the design demonstrably adds:** prediction from CpGs the model never saw (r = 0.75, MedAE
+  8.5 y, destroyed by shuffling the genomic annotations); exact module-level decomposition of the
+  prediction; modest accuracy gains from the linear warm start, module transformer, probabilistic
+  loss and augmentation.
+* **Not supported by the ablations:** genomic context improving accuracy on seen CpGs; masked-CpG
+  pre-training; the acceleration head.
+* **Versus Insilico's Longevity-LLM:** their 4.34-year MAE (abstract) is not comparable — evaluation
+  set and metric unknown; I could only read the abstract.
 
 ## Quickstart
 
@@ -36,17 +42,19 @@ epimod prepare                           # download ComputAge Bench, pick a 16k-
 epimod train --out runs/full --train epochs=30
 epimod evaluate --out runs/eval --run full=runs/full
 epimod analyze --run runs/full --out runs/analysis
+epimod train --out runs/ctx_A --model cpg_split=A use_id_embedding=False linear_skip=False --train epochs=15
+epimod transfer --run runs/ctx_A --out runs/transfer      # prediction from CpGs never seen in training
 bash scripts/run_ablations.sh            # the full ablation suite
-pytest                                   # 27+ unit tests
+pytest                                   # 30 unit tests
 ```
 
 Using a trained model:
 
 ```python
 from epimod.train.loop import load_checkpoint
-model = load_checkpoint("runs/full/model.pt")          # needs the CpG ids in model.cpg_ids
+model = load_checkpoint("checkpoints/epimod_full.pt")          # needs the CpG ids in model.cpg_ids
 out = model.predict(beta)                              # beta: [samples, len(model.cpg_ids)], NaN = missing
-out["age"], out["age_lo"], out["age_hi"]               # years, calibrated 90% interval
+out["age"], out["age_lo"], out["age_hi"]               # years; 90% interval (calibrated on held-out training studies; overconfident on new ones)
 out["module_contrib_t"]                                # per-module additive contributions
 ```
 

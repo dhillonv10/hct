@@ -74,27 +74,35 @@ def describe_modules(model: EpiMod, cpgs: CpGTable, annotation: pd.DataFrame, to
     return pd.DataFrame(rows).set_index("module")
 
 
-def module_shift_table(contrib_t: np.ndarray, meta: pd.DataFrame, age_limits=(18, 90), min_n: int = 10) -> pd.DataFrame:
-    """Per condition: mean difference (cases - same-study controls) of each module's contribution,
-    in transformed-age units, with a Welch p-value. Rows are conditions, columns are modules.
+def module_shift_table(contrib_t: np.ndarray, meta: pd.DataFrame, age_limits=(18, 90), min_n: int = 10):
+    """Per condition: how much more each module contributes in cases than in healthy controls,
+    **adjusted for chronological age and study** (OLS: contribution ~ study + age + case).
 
-    Only studies that contain both cases and healthy controls are used, so batch effects cancel."""
+    Returns (estimates, p-values), rows = conditions, columns = modules, in transformed-age units
+    (about 21 years per unit in adulthood). Cases are often older than controls, so an unadjusted
+    difference would mostly measure the age gap rather than accelerated aging. Only studies with
+    >= 3 cases and >= 3 controls enter, so batch effects cancel within study."""
     m = meta.copy(); m["_i"] = np.arange(len(m))
     m = m[m.Age.between(*age_limits)]
-    out, pvals = {}, {}
+    est, pv = {}, {}
     for cond in sorted(set(m.Condition) - {"HC"}):
-        d_all, h_all = [], []
-        for gse, g in m.groupby("DatasetID"):
-            case, ctrl = g[g.Condition == cond]._i.to_numpy(), g[g.Condition == "HC"]._i.to_numpy()
-            if len(case) >= 3 and len(ctrl) >= 3:
-                mu = contrib_t[ctrl].mean(0)
-                d_all.append(contrib_t[case] - mu); h_all.append(contrib_t[ctrl] - mu)   # per-study centring
-        if not d_all or sum(len(x) for x in d_all) < min_n:
+        keep = [g for g, gg in m.groupby("DatasetID") if (gg.Condition == cond).sum() >= 3 and (gg.Condition == "HC").sum() >= 3]
+        sub = m[m.DatasetID.isin(keep) & m.Condition.isin([cond, "HC"])]
+        if len(sub) < min_n:
             continue
-        D, H = np.concatenate(d_all), np.concatenate(h_all)
-        out[cond] = D.mean(0) - H.mean(0)
-        pvals[cond] = stats.ttest_ind(D, H, equal_var=False).pvalue
-    return pd.DataFrame(out).T, pd.DataFrame(pvals).T
+        design = np.column_stack([
+            pd.get_dummies(sub.DatasetID).to_numpy(float),
+            (sub.Age.to_numpy(float) - sub.Age.mean()) / 10.0,
+            (sub.Condition == cond).to_numpy(float),
+        ])
+        Y = contrib_t[sub._i.to_numpy()]
+        beta = np.linalg.lstsq(design, Y, rcond=None)[0]
+        dof = len(sub) - np.linalg.matrix_rank(design)
+        s2 = ((Y - design @ beta) ** 2).sum(0) / max(dof, 1)
+        se = np.sqrt(np.linalg.pinv(design.T @ design)[-1, -1] * s2)
+        est[cond] = beta[-1]
+        pv[cond] = 2 * stats.t.sf(np.abs(beta[-1] / np.maximum(se, 1e-12)), max(dof, 1))
+    return pd.DataFrame(est).T, pd.DataFrame(pv).T
 
 
 def integrated_gradients(model: EpiMod, x: np.ndarray, baseline: np.ndarray | None = None, steps: int = 12) -> np.ndarray:

@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 KEEP = ["MedAE", "MedAE_18_90", "MedE", "AA2_hits", "AA2_tests", "AA1_hits", "AA1_tests", "score"]
@@ -16,8 +17,11 @@ KEEP = ["MedAE", "MedAE_18_90", "MedE", "AA2_hits", "AA2_tests", "AA1_hits", "AA
 def md(df: pd.DataFrame, floatfmt: str = "{:.2f}") -> str:
     cols = [df.index.name or ""] + [str(c) for c in df.columns]
     rows = ["| " + " | ".join(cols) + " |", "|" + "|".join(["---"] * len(cols)) + "|"]
-    for idx, r in df.iterrows():
-        cells = [str(idx)] + [floatfmt.format(v) if isinstance(v, float) else str(v) for v in r.values]
+    for i in range(len(df)):       # .iat keeps each column's own dtype (iterrows would upcast ints to floats)
+        cells = [str(df.index[i])]
+        for j in range(df.shape[1]):
+            v = df.iat[i, j]
+            cells.append(floatfmt.format(v) if isinstance(v, (float, np.floating)) else str(v))
         rows.append("| " + " | ".join(cells) + " |")
     return "\n".join(rows)
 

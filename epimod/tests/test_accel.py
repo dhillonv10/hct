@@ -46,3 +46,12 @@ def test_cross_fitting_scores_unseen_studies():
     case = (meta.Condition != "HC").to_numpy()
     base = t_to_age(feats["mu_t"])
     assert (pred - base)[case].mean() > (pred - base)[~case].mean()   # held-out studies still read older
+
+
+def test_conditions_without_age_matched_controls_are_skipped():
+    """Regression: a case group whose ages are all outside the window of every control gave 0 pairs."""
+    feats, meta = _toy(n_studies=4)
+    meta = meta.copy()
+    meta.loc[(meta.DatasetID == "GSE0") & (meta.Condition != "HC"), "Age"] = 95.0   # no control within 7 y
+    pred, mod = cross_fitted_age(feats, meta, fold_by="study", n_folds=2, cfg=AccelConfig(steps=20))
+    assert np.isfinite(pred).all()
