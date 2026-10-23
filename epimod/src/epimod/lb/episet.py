@@ -37,6 +37,7 @@ class SetConfig:
     moe_experts: int = 0             # 0 = dense FFN; >0 = sparse mixture of experts
     moe_top_k: int = 2
     moe_balance: float = 0.01
+    linear_route: bool = False       # add an explicit per-CpG linear term sum_i w_i z_i (extrapolates; cannot memorise cohorts)
 
 
 class MoEFFN(nn.Module):
@@ -112,6 +113,10 @@ class EpiSet(nn.Module):
         m = np.full(V + 1, 0.5, np.float32) if cpg_mean is None else np.append(cpg_mean, 0.5).astype(np.float32)
         s = np.full(V + 1, 0.25, np.float32) if cpg_std is None else np.append(np.maximum(cpg_std, 0.02), 0.25).astype(np.float32)
         self.register_buffer("cpg_mean", torch.as_tensor(m)); self.register_buffer("cpg_std", torch.as_tensor(s))
+        if cfg.linear_route:
+            self.lin_w = nn.Embedding(V + 1, 1, padding_idx=V); nn.init.zeros_(self.lin_w.weight)
+            self.lin_gain = nn.Parameter(torch.ones(len(ROLES)))      # per-view gain on the shared linear weights
+            self.lin_bias = nn.Embedding(len(ROLES), 1); nn.init.zeros_(self.lin_bias.weight)
         self.cls = nn.Parameter(torch.randn(d) * 0.02)
         self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])
         self.norm = nn.LayerNorm(d)
@@ -128,11 +133,17 @@ class EpiSet(nn.Module):
         ang = beta.unsqueeze(-1) * self.freqs
         phi = self.val_mlp(torch.cat([torch.sin(ang), torch.cos(ang), beta.unsqueeze(-1)], -1))
         x = self.id_proj(self.id_emb(ids)) + self.dir_proj(self.dir_emb(ids)) * z.unsqueeze(-1) + phi + self.role_emb(role)
-        return x * (~pad).unsqueeze(-1), pad
+        return x * (~pad).unsqueeze(-1), pad, z * (~pad)
+
+    def linear_term(self, cpg, role, pad, z):
+        """sum_i w[cpg_i] * z_i * gain[view] + bias[view] -- a ridge-like linear model in the standardised betas."""
+        ids = torch.where(pad, torch.full_like(cpg, self.pad_id), cpg)
+        w = self.lin_w(ids).squeeze(-1) * z * (~pad)
+        return (w * self.lin_gain[role]).sum(1) + self.lin_bias(role[:, 0]).squeeze(-1)
 
     def forward(self, cpg, beta, role, sex, clock=None):
         """cpg [B,T] long (<0 = padding), beta [B,T], role [B,T] long, sex [B] long, clock [B] long or None."""
-        x, pad = self.embed(cpg, beta, role)
+        x, pad, z = self.embed(cpg, beta, role)
         B = x.shape[0]
         head = self.cls.expand(B, -1) + self.sex_emb(sex)
         if clock is not None:
@@ -143,6 +154,8 @@ class EpiSet(nn.Module):
             x = blk(x, pad)
         h = self.norm(x[:, 0])
         mu, raw = self.age_head(h).unbind(-1)
+        if self.cfg.linear_route:
+            mu = mu + self.linear_term(cpg, role, pad[:, 1:], z)
         sigma = nn.functional.softplus(raw - 1.0) + 1e-2
         return mu, sigma, self.decade_head(h)
 

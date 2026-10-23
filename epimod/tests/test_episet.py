@@ -72,3 +72,27 @@ def test_pairwise_logit_flips_sign_when_donors_are_swapped():
     f = lambda x: m(cpg, x, role, sex)[0]
     assert torch.allclose(f(beta_a) - f(beta_b), -(f(beta_b) - f(beta_a)), atol=1e-6)
     assert not torch.allclose(f(beta_a), f(beta_b))                 # and the two views are actually distinguished
+
+
+def test_linear_route_is_noop_at_init_invariant_and_linear_in_z():
+    cfg = SetConfig(n_tokens_vocab=200, d_model=32, d_emb=16, n_layers=2, n_heads=2, linear_route=True)
+    torch.manual_seed(0)
+    m = EpiSet(cfg).eval()
+    cpg, beta, role, sex = _batch()
+    plain = EpiSet(SetConfig(n_tokens_vocab=200, d_model=32, d_emb=16, n_layers=2, n_heads=2)).eval()
+    plain.load_state_dict({k: v for k, v in m.state_dict().items() if not k.startswith("lin_")})
+    assert torch.allclose(m(cpg, beta, role, sex)[0], plain(cpg, beta, role, sex)[0], atol=1e-6)      # zero weights -> same model
+    with torch.no_grad():
+        m.lin_w.weight.normal_(0, 0.1)
+    base = m(cpg, beta, role, sex)[0]
+    pad = torch.full((4, 5), -1)                                                                        # padding and permutation invariance survive
+    out = m(torch.cat([cpg, pad], 1), torch.cat([beta, torch.rand(4, 5)], 1), torch.cat([role, torch.zeros(4, 5, dtype=torch.long)], 1), sex)[0]
+    perm = torch.randperm(cpg.shape[1])
+    assert torch.allclose(base, out, atol=1e-5) and torch.allclose(base, m(cpg[:, perm], beta[:, perm], role[:, perm], sex)[0], atol=1e-5)
+    # the added term is exactly sum_i w_i z_i * gain + bias
+    x, padm, z = m.embed(cpg, beta, role)
+    lin = m.linear_term(cpg, role, padm, z)
+    manual = (m.lin_w(cpg.clamp_min(0)).squeeze(-1) * z * m.lin_gain[role]).sum(1) + m.lin_bias(role[:, 0]).squeeze(-1)
+    assert torch.allclose(lin, manual, atol=1e-6)
+    (lin.sum()).backward()
+    assert m.lin_w.weight.grad is not None and m.lin_gain.grad is not None

@@ -42,16 +42,20 @@ v, m, values, alpha = best
 sigma = float(np.std(age_to_t(age_va) - m.predict_t(*Fva[:3], Fva[3])))
 print(f"selected on validation series: values={values} alpha={alpha} (val MAE {v:.2f}, sigma_t {sigma:.3f})", flush=True)
 
+preds = {}
 out = {"selected": {"values": values, "alpha": alpha, "val_mae": v}, "grid": grid}
 for lb in ("LB-0010", "LB-0002"):
     t = parsed[lb]; b = eval_single(t, vocab, uni); age = np.array(t.age)
     mu = m.predict_t(b["cpg"].numpy(), b["role"].numpy(), b["sex"].numpy(), b["beta"].numpy())
     o = np.arange(len(age)) % 2 == 1; splits = {"all": np.ones(len(age), bool), "even": ~o, "odd": o}
+    preds[f"{lb}/mu"] = mu; preds[f"{lb}/sigma"] = np.full(len(mu), sigma)
     if lb == "LB-0010":
         from epimod.age import t_to_age
-        pred = t_to_age(mu); out[lb] = {k: mae(pred[s], age[s]) for k, s in splits.items()}
+        pred = t_to_age(mu); preds["LB-0010/ridge"] = pred; out[lb] = {k: mae(pred[s], age[s]) for k, s in splits.items()}
     else:
         true = np.array([decade_label_to_id(l) for l in t.label]); post = decade_posterior(mu, np.full(len(mu), sigma)).argmax(1)
         out[lb] = {k: balanced_accuracy(post[s], true[s]) for k, s in splits.items()}
     print(lb, json.dumps(out[lb]), flush=True)
-json.dump(out, open(sys.argv[1] if len(sys.argv) > 1 else "lb_baselines_ext.json", "w"), indent=1)
+out_path = sys.argv[1] if len(sys.argv) > 1 else "lb_baselines_ext.json"
+json.dump(out, open(out_path, "w"), indent=1)
+np.savez(out_path.replace(".json", "_preds.npz"), **preds)

@@ -32,6 +32,7 @@ ap.add_argument("--bs-fixed", type=int, default=32, help="batch size of the (att
 ap.add_argument("--lr", type=float, default=1e-3); ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--threads", type=int, default=4); ap.add_argument("--full-pools", action="store_true",
                 help="derive pools from ALL eval prompts (secondary check; not the headline protocol)")
+ap.add_argument("--linear", action="store_true", help="add the explicit per-CpG linear route to the set transformer")
 ap.add_argument("--no-lb-eval", action="store_true")
 ap.add_argument("--eval-only", action="store_true", help="load runs/lb/<name>/model.pt and only run the LongevityBench evaluation")
 a = ap.parse_args()
@@ -48,7 +49,7 @@ vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
 bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24}
 cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads)
-mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk)
+mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk, linear_route=a.linear)
 if a.eval_only:
     ck = torch.load(out / "model.pt", map_location="cpu", weights_only=False)
     assert list(vocab.cpg_ids) == ck["vocab_ids"], "vocabulary differs from the trained model's (pools/flags changed?)"
