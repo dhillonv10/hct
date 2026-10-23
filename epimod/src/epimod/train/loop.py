@@ -102,7 +102,11 @@ def train(model: EpiMod, train_data: MethylData, val_data: MethylData | None, cf
     sex_f = (train_data.meta["Gender"] == "F").to_numpy().astype(np.float32)
     has_sex = train_data.meta["Gender"].isin(["F", "M"]).to_numpy()
     n_study = train_data.meta.groupby("DatasetID")["Age"].transform("size").to_numpy()
-    w = torch.as_tensor(n_study.astype(np.float64) ** -cfg.study_balance_power)
+    w_np = n_study.astype(np.float64) ** -cfg.study_balance_power
+    if cfg.celltype_balance_power > 0:
+        cell = train_data.meta["CellType"].fillna("NA")
+        w_np = w_np * cell.groupby(cell).transform("size").to_numpy().astype(np.float64) ** -cfg.celltype_balance_power
+    w = torch.as_tensor(w_np)
     template_pool = torch.from_numpy(X[np.random.RandomState(cfg.seed).choice(len(X), min(2048, len(X)), replace=False)].astype(np.float32))
 
     prior = None

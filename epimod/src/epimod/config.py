@@ -38,6 +38,7 @@ class TrainConfig:
     grad_clip: float = 1.0
     ema_decay: float = 0.995
     study_balance_power: float = 0.5   # sample weight ~ n_study ** -power
+    celltype_balance_power: float = 0.0  # >0 also up-weights rare annotated cell types (weight ~ n_celltype ** -power)
     warm_start_linear: bool = True     # initialise the linear route from a study-grouped ridge fit
     skip_lr_mult: float = 0.01         # lr multiplier for the per-CpG linear weights (they sum over ~1e4 CpGs)
     # loss weights

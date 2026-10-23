@@ -130,9 +130,20 @@ def run_evaluation(runs: dict[str, str | Path], out_dir: str | Path, elasticnet:
     # calibration of the predictive interval on healthy controls
     cal = {}
     hc = (bench.meta.Condition == "HC").to_numpy()
+    age = bench.meta.Age.to_numpy()
+    unc = {}
     for name, e in extras.items():
-        age = bench.meta.Age.to_numpy()
-        cal[name] = {"cover90_hc": float(np.mean((age[hc] >= e["lo"][hc]) & (age[hc] <= e["hi"][hc]))),
-                     "mean_sigma_years_hc": float(np.mean(e["sigma_years"][hc]))}
+        inside = (age >= e["lo"]) & (age <= e["hi"])
+        d = {"cover90_hc": float(inside[hc].mean()), "mean_sigma_years_hc": float(np.mean(e["sigma_years"][hc]))}
+        for col in ("Platform", "Tissue"):
+            for lvl in sorted(bench.meta[col].unique()):
+                m = hc & (bench.meta[col] == lvl).to_numpy()
+                if m.sum() >= 30:
+                    d[f"cover90_hc[{col}={lvl}]"] = float(inside[m].mean())
+        core = hc & bench.meta.Tissue.eq("Blood").to_numpy() & bench.meta.Platform.isin(["450K", "EPIC", "EPICv2"]).to_numpy()
+        d["cover90_hc[blood,450K/EPIC]"] = float(inside[core].mean())
+        cal[name] = d
+        unc[f"{name}:sigma_years"], unc[f"{name}:lo"], unc[f"{name}:hi"] = e["sigma_years"], e["lo"], e["hi"]
     (out_dir / "calibration.json").write_text(json.dumps(cal, indent=1))
+    pd.DataFrame(unc, index=bench.meta.index).to_csv(out_dir / "uncertainty.csv.gz")
     return summary
