@@ -63,17 +63,28 @@ class LBStore:
                        self.high_idx[mask], self.high_beta[mask], self.prof[mask])
 
 
-def load_lb_store(exclude_series: set[str] | None = None, min_age: float = 0.0, max_age: float = 105.0) -> LBStore:
-    exclude_series = set(exclude_series or ())
-    root = subdir("lb", "store")
-    universe = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
-    vocab = pd.Index(load_probe_annotation().index)
+def lb_meta(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
+            min_age: float = 0.0, max_age: float = 105.0) -> pd.DataFrame:
+    """Sample metadata of the usable ComputAge samples (QC'd, de-duplicated, LB series excluded)."""
     metas = []
     for split in ("train", "benchmark"):
         m = load_meta(split).copy(); m["split"] = split; metas.append(m)
     meta = pd.concat(metas)
     meta = meta[~meta.index.duplicated(keep="first")]
-    meta = meta[meta.Age.between(min_age, max_age) & ~meta.DatasetID.isin(exclude_series)]
+    meta = meta[meta.Age.between(min_age, max_age) & ~meta.DatasetID.isin(set(exclude_series or ()))]
+    if include_series is not None:
+        meta = meta[meta.DatasetID.isin(set(include_series))]
+    return meta
+
+
+def load_lb_store(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
+                  min_age: float = 0.0, max_age: float = 105.0) -> LBStore:
+    """Load profiles for the selected series only, so a train/validation split can be loaded as two
+    stores without ever holding (or copying) the full matrix."""
+    root = subdir("lb", "store")
+    universe = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
+    vocab = pd.Index(load_probe_annotation().index)
+    meta = lb_meta(exclude_series, include_series, min_age, max_age)
     counts = meta.groupby("DatasetID").size()
     S, U = len(meta), len(universe)
     low_idx = np.zeros((S, N_EXT), np.int32); high_idx = np.zeros((S, N_EXT), np.int32)
@@ -96,9 +107,8 @@ def load_lb_store(exclude_series: set[str] | None = None, min_age: float = 0.0, 
             low_beta[pos:pos + n], high_beta[pos:pos + n] = z["low_beta"][keep], z["high_beta"][keep]
             prof[pos:pos + n] = z["prof"][keep]
             ids.extend(samples[i] for i in keep); pos += n
-    assert pos <= S
-    meta = meta.loc[ids]
-    return LBStore(meta, universe, vocab, low_idx[:pos], low_beta[:pos], high_idx[:pos], high_beta[:pos], prof[:pos])
+    assert pos == S, (pos, S)
+    return LBStore(meta.loc[ids], universe, vocab, low_idx, low_beta, high_idx, high_beta, prof)
 
 
 # ----------------------------------------------------------------------------- task generators
@@ -164,3 +174,35 @@ def sample_pairs(ages: np.ndarray, n: int, rng: np.random.RandomState, min_gap: 
             ok &= ~(same & want_cross)
         ia.extend(a[ok]); ib.extend(b[ok])
     return np.array(ia[:n]), np.array(ib[:n])
+
+
+def load_lb_columns(cpg_ids, exclude_series: set[str] | None = None, min_age: float = 0.0, max_age: float = 105.0):
+    """Memory-light loader: only the requested CpG columns of the uint8 profiles.
+
+    Returns (meta with a ``split`` column, float32 beta matrix [S, k] with NaN = missing, ids actually found)."""
+    exclude_series = set(exclude_series or ())
+    root = subdir("lb", "store")
+    universe = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
+    cols = universe.get_indexer(list(cpg_ids))
+    found = cols >= 0
+    cols = cols[found]
+    metas = []
+    for split in ("train", "benchmark"):
+        m = load_meta(split).copy(); m["split"] = split; metas.append(m)
+    meta = pd.concat(metas)
+    meta = meta[~meta.index.duplicated(keep="first")]
+    meta = meta[meta.Age.between(min_age, max_age) & ~meta.DatasetID.isin(exclude_series)]
+    blocks, ids = [], []
+    for split in ("train", "benchmark"):
+        for f in sorted((root / split).glob("GSE*.npz")):
+            if f.stem not in set(meta.DatasetID):
+                continue
+            z = np.load(f, allow_pickle=False)
+            samples = z["samples"].tolist()
+            keep = [i for i, s in enumerate(samples) if s in meta.index and meta.at[s, "DatasetID"] == f.stem]
+            if not keep:
+                continue
+            x = z["prof"][keep][:, cols].astype(np.float32)
+            x[x == MISSING] = np.nan
+            blocks.append(x / 100.0); ids.extend(samples[i] for i in keep)
+    return meta.loc[ids], np.concatenate(blocks, axis=0), pd.Index(cpg_ids)[found]

@@ -3,15 +3,16 @@ import json, sys, time
 import numpy as np, pandas as pd
 
 from epimod.lb.baselines import DenseClock, PairLogit
-from epimod.lb.store import load_lb_store, lb_series, sample_pairs
+from epimod.lb.store import lb_meta, load_lb_store, lb_series, sample_pairs
 from epimod.lb.tasks import CLOCKS, build_vocab, eval_pair, load_parsed, make_pools, mae, pair_batch
 from epimod.lb.train import task_sets
 from epimod.train.loop import split_studies
 
-parsed = load_parsed(); store = load_lb_store(exclude_series=lb_series(parsed)); uni = store.universe
-tr_m, va_m = split_studies(store.meta, 0.15, 0)
-tr, va = store.subset(tr_m), store.subset(va_m)
-del store; import gc; gc.collect()
+parsed = load_parsed(); excl = lb_series(parsed)
+meta_all = lb_meta(excl); tr_m, va_m = split_studies(meta_all, 0.15, 0)
+tr = load_lb_store(exclude_series=excl, include_series=set(meta_all[tr_m].DatasetID))     # train and validation loaded separately:
+va = load_lb_store(exclude_series=excl, include_series=set(meta_all[va_m].DatasetID))     # peak memory = steady-state memory
+uni = tr.universe
 odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni, ext_mask=odd, pair_mask=odd); vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 age_tr, age_va = tr.meta.Age.to_numpy(float), va.meta.Age.to_numpy(float)

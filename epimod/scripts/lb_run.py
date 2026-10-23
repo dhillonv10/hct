@@ -17,7 +17,7 @@ import torch
 
 from epimod.lb.episet import SetConfig
 from epimod.lb.evaluate import evaluate
-from epimod.lb.store import load_lb_store, lb_series
+from epimod.lb.store import lb_meta, load_lb_store, lb_series
 from epimod.lb.tasks import build_vocab, load_parsed, make_pools
 from epimod.lb.train import ALL_TASKS, LBTrainConfig, Trainer, task_sets
 from epimod.train.loop import split_studies
@@ -36,10 +36,11 @@ ap.add_argument("--eval-only", action="store_true", help="load runs/lb/<name>/mo
 a = ap.parse_args()
 
 out = Path(a.out) / a.name; out.mkdir(parents=True, exist_ok=True)
-parsed = load_parsed(); store = load_lb_store(exclude_series=lb_series(parsed)); uni = store.universe
-tr_m, va_m = split_studies(store.meta, 0.15, 0)
-tr, va = store.subset(tr_m), store.subset(va_m)
-del store; import gc; gc.collect()
+parsed = load_parsed(); excl = lb_series(parsed)
+meta_all = lb_meta(excl); tr_m, va_m = split_studies(meta_all, 0.15, 0)
+tr = load_lb_store(exclude_series=excl, include_series=set(meta_all[tr_m].DatasetID))     # train and validation loaded separately:
+va = load_lb_store(exclude_series=excl, include_series=set(meta_all[va_m].DatasetID))     # peak memory = steady-state memory
+uni = tr.universe
 odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext_mask=odd, pair_mask=odd)
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
