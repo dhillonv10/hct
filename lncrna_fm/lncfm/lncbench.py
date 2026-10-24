@@ -216,9 +216,32 @@ def report(files, scope="dev_pruned"):
         print(f"| {p} | " + " | ".join(v.get(t, "") for t in order) + " |")
 
 
+def compare(spec_a: str, spec_b: str, scope="dev_all"):
+    """Paired bootstrap A - B on identical items. spec = 'file.json:provider-substring'. Needs runs made with --save-oof."""
+    from . import evalkit as ek
+    def load(spec):
+        f, prov = spec.rsplit(":", 1)
+        rows = [r for r in json.load(open(f)) if r.get("scope") == scope and prov in r["provider"] and "oof" in r]
+        return {r["task"]: r for r in rows}
+    A, B = load(spec_a), load(spec_b)
+    print(f"\n### {spec_a}  minus  {spec_b}   ({scope})\n| task | metric | A | B | delta [95% CI] | p(A<=B) |\n|---|---|---|---|---|---|")
+    for t in A:
+        if t not in B or A[t]["kind"] == "multi":
+            continue
+        ra, rb = A[t], B[t]
+        ok = [i for i, (x, z) in enumerate(zip(ra["oof"], rb["oof"])) if x is not None and z is not None]
+        y = np.array(ra["y"])[ok]
+        assert np.allclose(y, np.array(rb["y"])[ok]), f"items differ for {t}: run both with the same --max-n/--trunc"
+        d, lo, hi, p = ek.paired_diff(y, np.array(ra["oof"], dtype=float)[ok], np.array(rb["oof"], dtype=float)[ok], ra["kind"])
+        key = "auroc" if ra["kind"] == "clf" else "spearman"
+        print(f"| {t} | {key} | {ra[key]:.3f} | {rb[key]:.3f} | {d:+.3f} [{lo:+.3f},{hi:+.3f}] | {p:.3f} |")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    cp = sub.add_parser("compare")
+    cp.add_argument("a"); cp.add_argument("b"); cp.add_argument("--scope", default="dev_all")
     rp = sub.add_parser("report")
     rp.add_argument("files", nargs="+")
     rp.add_argument("--scope", default="dev_pruned", choices=["dev_all", "dev_pruned", "test_all", "test_pruned"])
@@ -233,6 +256,9 @@ def main(argv=None):
     r.add_argument("--out", default=None)
     sub.add_parser("list")
     a = ap.parse_args(argv)
+    if a.cmd == "compare":
+        compare(a.a, a.b, a.scope)
+        return
     if a.cmd == "report":
         report(a.files, a.scope)
         return
