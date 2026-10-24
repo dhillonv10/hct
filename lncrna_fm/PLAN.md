@@ -4,6 +4,9 @@
 > **[verified]** = checked against the live source during this session (file listing, API, README);
 > **[design]** = implemented or specified but not run at scale; **[assumption]** = my estimate, flagged so you can check it.
 
+> **Update (LncBench v2).** §10 at the end of this file describes the two-layer benchmark (molecular + AML clinical) that
+> supersedes the v1 benchmark in §5/§6, with new results. The verdicts in §0 still stand; §10.9 says what v2 adds.
+
 ## 0. Bottom line (read this first)
 
 **Verdict: worth continuing, not yet proven, and the evidence says "start with transfer, run the from-scratch model alongside it".**
@@ -310,3 +313,141 @@ Do not skip stage 2: it is the cheapest experiment and the one most likely to ch
 8. **Licences.** RiNALMo and RNA-FM are AGPL-3.0, NT-v2 is CC-BY-NC-SA. Check these before any clinical or commercial use.
 9. **Release pins.** GENCODE v50 / M39, GTEx v8 (GENCODE v26 IDs), ENCODE GRCh38 + GENCODE V29 quantifications, TCGA STAR counts (GENCODE v36).
    Genes whose Ensembl IDs do not exist in v50 are silently dropped when joining.
+
+
+---
+
+## 10. LncBench v2: two-layer benchmark (molecular + AML), measured
+
+Code: `lncfm/lncbench.py` (runner), `splits.py`, `eclip.py`, `aml/`, `finetune.py`, `cnn.py`. Results: `results/v2/`.
+Everything below was run in the CPU sandbox on **800 genes per gene-level task, first 400 nt, identical items for every model**
+(RBP tasks at full size: 1,738 K562 / 1,396 HepG2 expressed lncRNAs). The numbers are real but small-sample; section 10.10 lists what that does and does not support.
+
+### 10.1 What is in v2
+
+| layer | task | label (all public lab or clinical data) | metric |
+|---|---|---|---|
+| 1 | `loc_reg`, `loc_clf` | ENCODE nuclear/cytosolic RNA-seq, 15 cell lines | Spearman / AUROC |
+| 1 | `tau_reg`, `testis_clf`, `brain_clf` | GTEx v8 tissue specificity | Spearman / AUROC |
+| 1 | `rbp_K562` (43 RBPs), `rbp_HepG2` (35 RBPs) | ENCODE eCLIP IDR peaks overlapping the transcript's exons; negatives = expressed lncRNAs without peaks | macro AUROC **stratified by expression x length** |
+| 1 sanity | `coding_clf` | GENCODE | AUROC (see 10.3: solved by length alone) |
+| 2b | `aml_vs_normal_reg`, `_resid_reg`, `_resid_clf` | AML (TARGET, n=300) vs normal marrow (n=300), label reliability (split-half) 0.97-0.98; `_resid_` removes what mean expression + length explain | Spearman / AUROC |
+| 2b | `aml_npm1_reg` | NPM1-mutant vs wild-type, BeatAML + TCGA-LAML combined; cross-cohort reliability 0.58; top hits are the known HOX-antisense lncRNAs (HOXB-AS3, HOXA-AS2/3, HOXB-AS2, BAALC-AS1) | Spearman |
+| 2a | `npm1`, `flt3_itd`, `eln_adverse`, `induction_cr`, `os` | BeatAML (adult, initial diagnosis, n = 273-345) -> external TCGA-LAML (adult, 151) and TARGET (paediatric, 300) | AUROC / C-index |
+
+**Splits and controls.** Dev = leave-chromosome-group-out 5-fold over non-test chromosomes (fold sizes balanced to 470-559 on localization). **Locked test = chr8/13/18/21**, scored only with `--final`.
+Homology: pairs of lncRNAs sharing >= 40% of the shorter transcript's 10-mers are flagged; the threshold comes from the measured edge distribution (25% flags 77% of genes, 40% flags 14%, 50% flags 7%, i.e. 25% was catching Alu/L1 sharing, not paralogy).
+Only ~1% of the *expressed* genes used in these tasks are flagged, so pruning barely moves any number; it is reported anyway (`dev_all` vs `dev_pruned`).
+Every comparison includes a **sequence-free baseline** (`expr_len`: expression and/or length only), length+GC, k-mer spectra, a one-hot CNN, and my pilot model; paired bootstrap for model-vs-model claims.
+
+**Data facts checked while building** (live APIs): ENCODE has 252 eCLIP experiments for 168 RBPs (K562 145, HepG2 105); BeatAML has 653 patients with open RNA-seq in the GDC, 632 of which link to cBioPortal clinical records
+(ELN-2017, NPM1, FLT3-ITD, induction response, survival); TCGA-LAML 151; TARGET 2,162 (899 in the curated study with outcomes and censoring). BeatAML drug-response data (Vizome) is not reachable from here.
+
+### 10.2 Layer 1: dev results on homology-pruned items (higher is better; CIs in `results/v2/report_dev_pruned.md`)
+
+| model | loc_reg | loc_clf | tau_reg | testis_clf | brain_clf | rbp_K562 | rbp_HepG2 | coding_clf |
+|---|---|---|---|---|---|---|---|---|
+| expression/length only | 0.110 | 0.554 | 0.090 | 0.513 | 0.521 | 0.470 | 0.459 | **0.892** |
+| length + GC | 0.126 | 0.602 | 0.119 | 0.479 | 0.522 | 0.491 | 0.505 | 0.736 |
+| k-mer spectrum | 0.283 | 0.756 | 0.306 | 0.575 | 0.590 | 0.565 | 0.579 | 0.816 |
+| one-hot CNN (trained on ~700 genes) | 0.187 | 0.659 | 0.097 | 0.498 | 0.554 | 0.534 | 0.535 | 0.805 |
+| my 0.89M pilot (frozen) | 0.203 | 0.779 | 0.315 | 0.573 | 0.606 | 0.587 | 0.598 | 0.789 |
+| **RiNALMo-micro (frozen)** | **0.315** | **0.796** | 0.292 | **0.615** | 0.522 | **0.619** | **0.616** | **0.921** |
+
+Paired differences on identical items (`results/v2/paired_comparisons.md`):
+
+| contrast | loc_reg | loc_clf | tau_reg | testis_clf | brain_clf | coding_clf | rbp_K562 (over 43 RBPs) | rbp_HepG2 (over 35 RBPs) |
+|---|---|---|---|---|---|---|---|---|
+| RiNALMo - k-mer | +0.034 [-0.007,+0.078] | **+0.040** [+0.018,+0.063] | -0.012 [-0.062,+0.033] | **+0.042** [+0.001,+0.084] | **-0.065** [-0.133,-0.002] | **+0.105** [+0.074,+0.136] | **+0.055** [+0.033,+0.078], 34/43 RBPs | **+0.038** [+0.021,+0.055], 26/35 |
+| pilot - k-mer | **-0.079** [-0.145,-0.009] | +0.023 [-0.004,+0.051] | +0.007 [-0.036,+0.049] | -0.004 [-0.054,+0.043] | +0.017 [-0.036,+0.066] | -0.027 [-0.056,0.000] | +0.023 [-0.001,+0.046] | **+0.020** [+0.003,+0.038] |
+| RiNALMo - pilot | **+0.112** [+0.055,+0.170] | +0.017 [-0.007,+0.044] | -0.019 [-0.065,+0.027] | +0.046 [-0.002,+0.093] | **-0.082** [-0.150,-0.016] | **+0.132** [+0.101,+0.161] | **+0.032** [+0.011,+0.054] | **+0.018** [+0.003,+0.035] |
+
+What this shows:
+1. **The benchmark separates models, which is its job.** RBP binding and localization spread the models out with paired intervals that exclude 0; tissue specificity and the AML tasks (10.4) do not.
+2. **RBP binding has real sequence signal beyond its confounds.** Within expression x length strata, the sequence-free baseline is at chance (0.47), length+GC is at chance (0.49-0.50), and k-mers reach 0.57-0.58 (k-mer minus length+GC = +0.074 on both cell lines, 33/43 and 33/35 RBPs). The expression-only baseline's *unstratified* macro-AUROC is 0.559 (K562) and 0.549 (HepG2) and falls to 0.472 / 0.468 once stratified, which is exactly the confound the stratification removes; the sequence models barely move (k-mer 0.567 -> 0.565 on K562).
+3. **Frozen RiNALMo-micro is the best single model on RBP (+0.04 to +0.055 over k-mers), localization classification and the testis task**, ties on regression localization and tissue specificity, and is **worse on brain-specificity** (-0.065). It is not a uniform win.
+4. **My 0.89M pilot is roughly k-mer level**: small gains on RBP, a loss on localization regression at 400 nt (it tied k-mers on whole transcripts in v1, so input length matters for it). It is far below RiNALMo on RBP, localization regression and the sanity task.
+5. **A CNN trained from scratch on ~700 genes is weak** (0.10-0.19 where k-mers get 0.28-0.31). That is expected at this size and is why the CNN row must be re-run on the full data on your machine (10.9).
+6. **`coding_clf` is not a test.** Transcript length alone gives AUROC 0.892; it is a pipeline check.
+
+### 10.3 Layer 2b: which lncRNAs are leukaemia-associated (gene level, `results/v2/report_dev_pruned.md`)
+
+| model | aml_vs_normal_reg (raw) | aml_vs_normal_resid_reg | aml_vs_normal_resid_clf | aml_npm1_reg |
+|---|---|---|---|---|
+| expression/length only | **0.274** | -0.077 | 0.568 | 0.028 |
+| length + GC | 0.050 | 0.091 | 0.538 | -0.071 |
+| k-mer | 0.239 | 0.235 | 0.634 | -0.021 |
+| CNN | 0.138 | 0.148 | 0.559 | -0.009 |
+| my pilot | 0.276 | 0.235 | 0.595 | -0.098 |
+| RiNALMo-micro | 0.256 | 0.254 | 0.624 | -0.015 |
+
+- The **raw fold-change label is confounded**: expression alone gives rho 0.274, as good as any sequence model, which is why the expression-corrected `_resid_` labels exist. On those the sequence-free baseline falls to ~0 and sequence models reach rho 0.24-0.25 / AUROC 0.60-0.63.
+  The sequence models are tied within noise on the regression label (RiNALMo - k-mer: +0.018 [-0.025,+0.063]; pilot - k-mer: -0.002 [-0.053,+0.046]); on the tercile classification the pilot is slightly lower (-0.038 [-0.079,+0.001]). So: **sequence carries modest information about which lncRNAs are leukaemia-up-regulated beyond expression, and a k-mer spectrum already captures it.**
+- **No model predicts which lncRNAs are NPM1-associated** (all rho within -0.10..0.03), even though the labels are reliable (0.58 cross-cohort). The HOX-antisense lncRNAs behind that signal are regulated by genomic context, not by their transcript sequence. This is a useful "limits of sequence" task, not a task a better sequence model should be expected to win.
+
+### 10.4 Layer 2a: patient-level AML (`results/v2/aml_patient.txt`)
+
+BeatAML (adult, initial diagnosis) 5-fold CV x3; external cohorts are scored with the model fit on all of BeatAML, genes z-scored within each cohort, top-1,000 genes by raw variance. Mean +- SE across folds; external = value [95% CI over patients].
+
+| task (n) | age only | lncRNA | mRNA | lncRNA + age |
+|---|---|---|---|---|
+| `npm1` (345; 109 mutated) CV AUROC | 0.562 | **0.987** | 0.987 | 0.986 |
+| ...external TCGA-LAML (151; 38 mutated) | 0.475 | **0.966** [0.92,1.00] | 0.966 | 0.966 |
+| `flt3_itd` (345; 92) CV AUROC | 0.437 | 0.888 | 0.908 | 0.887 |
+| `eln_adverse` vs favourable (252) CV AUROC | 0.649 | 0.989 | 0.988 | 0.989 |
+| `induction_cr` (273; 199 CR) CV AUROC | 0.572 | 0.665 | 0.701 | 0.665 |
+| ...external TARGET (paediatric, 297) | 0.480 | 0.630 [0.56,0.70] | 0.653 | 0.630 |
+| `os` (342; 161 deaths) CV C-index | 0.699 (age + ELN: 0.710) | 0.717 | 0.715 | **0.730** (+ELN 0.729) |
+| ...external TCGA-LAML OS (130) | **0.669** [0.60,0.73] | 0.608 [0.54,0.67] | 0.635 | 0.619 |
+| ...external TARGET OS (300) | 0.545 [0.48,0.60] | **0.619** [0.57,0.68] | 0.638 | 0.621 |
+
+Reading it honestly:
+- **lncRNA expression carries essentially the same information as mRNA expression** for every task (differences <= 0.04), and reads out genotype very well: NPM1 0.987 in BeatAML and **0.966 in an independent adult cohort**. ELN adverse-vs-favourable at 0.989 is largely the same fact (ELN is built from the mutations the transcriptome reveals), so it shows readout of the genotype, not new prognostic information.
+- **Prognosis is the weak part.** Within BeatAML, lncRNA + age is 0.730 against 0.710 for age + ELN (+0.020; SE ~0.01, not tested for significance). On external cohorts lncRNA expression does *not* beat age in adults (TCGA 0.608-0.619 vs 0.669) but does in children (TARGET 0.62 vs 0.545). Treatment era, cohort, and transplant differ across these sets and are not modelled.
+- The sequence-embedding "tied" feature set exists (`--emb`) but was **not run in v2**; in the solid-tumour experiments of §6 it was a null.
+- These are n = 150-350 problems; treat the third decimal as noise.
+
+### 10.5 The Marcucci / Garzon lncRNA paper (GSE63646)
+I could not find an NEJM paper by Marcucci on lncRNAs; the match is Garzon et al., PNAS 2014 (PMID 25512507; Marcucci co-author). Its public GEO series GSE63646 is the **RNA-seq component only**: 71 samples, 8,702 lncRNAs by symbol, age for 48, ELN group for 37, **no survival or response data**.
+The 148-patient prognostic cohort is not in that series. So it cannot be a prognosis benchmark. It can be a small independent expression set to cross-check the direction of the 2b labels, and its published 48-lncRNA signature a literature case study. Neither is wired in.
+
+### 10.6 Adaptation ladder smoke test (`results/v2/ladder_smoke.txt`)
+RiNALMo-micro, `loc_reg`, 500 genes, 256 nt, fold 0 only (95 test genes), 3 epochs, CPU: frozen 0.429, LoRA 0.428, top-2 layers 0.449, full 0.423; paired differences vs frozen all have 95% intervals of about +-0.13. **This validates the code, not the ranking.**
+It also measured cost on CPU (2 contended threads, batch 8 x 256 nt): LoRA 184,801 trainable parameters at 6.6 s/step, top-2 layers 5.5M at 4.2 s/step, full 33.5M at 4.8 s/step. **LoRA was not faster than full fine-tuning**: it saves optimizer memory, not backward-pass compute. On a 33M model that memory is not the constraint, so LoRA is only worth it if it generalises better, which the real run on 2,500+ genes and 5 folds will show.
+
+### 10.7 Bugs found and fixed while building v2 (the checks that now exist)
+- AML expression matrix and sample table were in **different row orders**, so every patient label was effectively shuffled: NPM1 prediction looked like chance and NPM1-associated lncRNAs looked unreproducible (cross-cohort rho 0.10). After aligning by ID: AUROC 0.987 and rho 0.58. `load_cohort` now asserts alignment.
+- Top-variable-gene selection ran on z-scored data (every gene has variance 1), i.e. random. Now uses raw-expression variance.
+- eCLIP peak files are gzip-compressed under a `.bed` name; homology edges at 25% containment flagged 77% of genes (now 40%, 14%); two quadratic gene-matching loops; a test-scope bookkeeping bug; a TARGET cohort whose sampled patients mostly lacked outcome data.
+- RBP labels are confounded by expression **and transcript length** (at full-length input, length+GC alone reached macro-AUROC 0.64 before stratifying on both; in the 400-nt tables length is hidden from the sequence models, which is why length+GC reads ~0.50 there). The benchmark now reports expression x length stratified AUROC and flags tasks with too few positives as underpowered.
+
+### 10.8 What the locked test says
+The locked test was scored once per model (`results/v2/report_test_pruned.md`). With ~100 genes per gene-level task (80 for AML, 90/78 for RBP, ~1-9 scoreable RBPs) its intervals are +-0.15, so it can only catch gross overfitting, and it does not contradict the dev results: e.g. k-mer 0.430 [0.26,0.56] vs dev 0.283 on `loc_reg`, RiNALMo 0.785 vs dev 0.796 on `loc_clf`. On the RBP tasks the test set holds a median of ~2 positives per RBP, so those rows are marked underpowered and should be ignored; use the dev macro-average.
+(Honesty note: smoke runs of the *baselines* during development printed locked-test numbers; no model, threshold or design choice was made from them.)
+
+### 10.9 What v2 adds to the model question
+- **Build on RiNALMo, and aim the adaptation at RBP binding and localization.** That is where a frozen RiNALMo already beats k-mers with paired intervals excluding zero and where the benchmark has headroom (RBP 0.62 vs a chance level of 0.47). Tissue specificity, brain, and the AML gene-level tasks are not where an adapted model will show gains (k-mers already tie; some are label-limited).
+- **Open question the M4 run answers:** does adapting RiNALMo (LoRA / top layers / full / continual pretraining) beat the frozen probe on RBP and localization on the full data? The smoke test could not tell.
+- **Clinical layer:** lncRNA expression is informative for AML genotype and weakly for survival, and sequence models predict leukaemia-associated lncRNAs to a modest, k-mer-saturated degree. The FM's clinical value, if any, will have to come from a task where sequence knowledge matters (e.g. variant effect, binding), not from patient-level expression.
+
+### 10.10 Limits of this sandbox run (read before trusting any number)
+- 800 genes per gene-level task, first 400 nt, CPU only, 4 cores. CIs are wide; the paired intervals above are the reliable statements, point estimates are not.
+- The pilot is a 0.89M model trained for one pass; it is a reference, not a candidate. The CNN was trained on ~700 genes and is under-powered.
+- AML cohorts here: BeatAML primary specimens only (346 of 653 patients); TARGET 300 patients (all with outcomes); TCGA-LAML 151. The M4 script downloads more. OS time origin and treatment heterogeneity are not modelled; external survival uses age as the only shared covariate.
+- Clipping to 400 nt hides transcript length from every sequence model, while the sequence-free `expr_len` baseline sees the true length; that is deliberate for matched input but it changes what length can explain (see the RBP note in 10.7).
+- Cross-cohort normalisation is a per-cohort gene z-score; no batch-correction method was compared.
+- MPS/CUDA paths and the full ladder were not run. Locked-test numbers are too noisy to rank models.
+
+### 10.11 Run it on your M4
+```bash
+export LNCFM_DATA=$HOME/lncfm_data LNCFM_RUNS=$HOME/lncfm_runs
+scripts/m4_run_all.sh check     # selfcheck (CPU-vs-MPS parity) + measured speed: do this first
+scripts/m4_run_all.sh data      # downloads; BeatAML/TARGET RNA-seq are the slow part (set --target-aml / --beat higher for the full cohorts)
+scripts/m4_run_all.sh quick     # reproduce the tables above (800 genes, 400 nt)  ~1-2 h
+scripts/m4_run_all.sh full      # full-size tasks, 1000-nt input, locked test, CNN on all data
+scripts/m4_run_all.sh ladder    # frozen / LoRA / top-2 / full on loc_reg, tau_reg, rbp_K562, 5 folds
+scripts/m4_run_all.sh aml       # patient layer incl. sequence-tied embeddings (--emb random kmer rinalmo-micro)
+python -m lncfm.lncbench report $LNCFM_RUNS/v2/full_*.json --scope dev_pruned
+python -m lncfm.lncbench compare "$LNCFM_RUNS/v2/full_rinalmo.json:rinalmo" "$LNCFM_RUNS/v2/full_baselines.json:kmer"
+```
+Go / no-go for building on RiNALMo: on the full data, an adapted model must beat the **frozen** RiNALMo probe on `rbp_K562` and `rbp_HepG2` (paired CI over RBPs excluding 0) and on `loc_clf`; otherwise keep the frozen features and spend the effort on the clinical layer and new labels (m6A, half-life, in-cell structure).

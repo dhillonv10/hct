@@ -184,12 +184,16 @@ def _fmt(r):
     return f"{s}: n={r.get('n')}"
 
 
+def _ok(r, k):
+    return k in r and r[k] is not None and r[k] == r[k]
+
+
 def _val(r):
-    if "macro_auroc_strat_expr_len" in r:
+    if _ok(r, "macro_auroc_strat_expr_len"):
         return r["macro_auroc_strat_expr_len"], r.get("macro_auroc_strat_expr_len_lo"), r.get("macro_auroc_strat_expr_len_hi")
-    if "auroc" in r and r["auroc"] == r["auroc"]:
+    if _ok(r, "auroc"):
         return r["auroc"], r.get("auroc_lo"), r.get("auroc_hi")
-    if "spearman" in r:
+    if _ok(r, "spearman"):
         return r["spearman"], r.get("spearman_lo"), r.get("spearman_hi")
     return None, None, None
 
@@ -208,7 +212,7 @@ def report(files, scope="dev_pruned"):
         v, lo, hi = _val(r)
         if v is None:
             continue
-        flag = "*" if r.get("underpowered") else ""
+        flag = "*" if (_ok(r, "underpowered") and r["underpowered"]) else ""
         out.setdefault(r["provider"], {})[r["task"]] = f"{v:.3f} [{lo:.2f},{hi:.2f}]{flag}" if lo is not None else f"{v:.3f}{flag}"
     print(f"\n**scope: {scope}**  (rho for *_reg, AUROC for *_clf, expression+length-stratified macro-AUROC for rbp_*; * = underpowered)\n")
     print("| provider | " + " | ".join(order) + " |\n|---|" + "---|" * len(order))

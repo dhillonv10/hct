@@ -1,0 +1,389 @@
+[
+ {
+  "task": "npm1",
+  "features": "age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.561680828037211,
+  "se": 0.01600879325809928,
+  "n": 345
+ },
+ {
+  "task": "npm1",
+  "features": "age",
+  "cohort": "tcga_laml",
+  "n": 151,
+  "metric": "AUROC",
+  "value": 0.4754308337214719,
+  "lo": 0.37650829542413705,
+  "hi": 0.5892804621848737
+ },
+ {
+  "task": "npm1",
+  "features": "lnc",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.986676670453266,
+  "se": 0.0035522854666687237,
+  "n": 345
+ },
+ {
+  "task": "npm1",
+  "features": "lnc",
+  "cohort": "tcga_laml",
+  "n": 151,
+  "metric": "AUROC",
+  "value": 0.9659990684676293,
+  "lo": 0.9191151059725826,
+  "hi": 0.9988302046390283
+ },
+ {
+  "task": "npm1",
+  "features": "mrna",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9873496873496873,
+  "se": 0.004385987832933736,
+  "n": 345
+ },
+ {
+  "task": "npm1",
+  "features": "mrna",
+  "cohort": "tcga_laml",
+  "n": 151,
+  "metric": "AUROC",
+  "value": 0.9655333022822543,
+  "lo": 0.9159528318189019,
+  "hi": 0.9997611865258924
+ },
+ {
+  "task": "npm1",
+  "features": "lnc+age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9862253487253486,
+  "se": 0.003650891829569514,
+  "n": 345
+ },
+ {
+  "task": "npm1",
+  "features": "lnc+age",
+  "cohort": "tcga_laml",
+  "n": 151,
+  "metric": "AUROC",
+  "value": 0.9659990684676292,
+  "lo": 0.919229919171508,
+  "hi": 0.9988302046390282
+ },
+ {
+  "task": "flt3_itd",
+  "features": "age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.43676795474525093,
+  "se": 0.014968357622577342,
+  "n": 345
+ },
+ {
+  "task": "flt3_itd",
+  "features": "lnc",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.8878335053319574,
+  "se": 0.010784928904448399,
+  "n": 345
+ },
+ {
+  "task": "flt3_itd",
+  "features": "mrna",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9077989527194892,
+  "se": 0.01013478128039598,
+  "n": 345
+ },
+ {
+  "task": "flt3_itd",
+  "features": "lnc+age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.8871146275274241,
+  "se": 0.010891172536409924,
+  "n": 345
+ },
+ {
+  "task": "eln_adverse",
+  "features": "age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.6491844553913519,
+  "se": 0.013948891908980458,
+  "n": 252
+ },
+ {
+  "task": "eln_adverse",
+  "features": "lnc",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9887210363072433,
+  "se": 0.002292351241853977,
+  "n": 252
+ },
+ {
+  "task": "eln_adverse",
+  "features": "mrna",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9881408502098157,
+  "se": 0.00304430620364595,
+  "n": 252
+ },
+ {
+  "task": "eln_adverse",
+  "features": "lnc+age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.9888268564130632,
+  "se": 0.002312115787288763,
+  "n": 252
+ },
+ {
+  "task": "induction_cr",
+  "features": "age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.5722317867317867,
+  "se": 0.015173699520927984,
+  "n": 273
+ },
+ {
+  "task": "induction_cr",
+  "features": "age",
+  "cohort": "target_aml",
+  "n": 297,
+  "metric": "AUROC",
+  "value": 0.4801543209876543,
+  "lo": 0.40845066351573545,
+  "hi": 0.5620225132663565
+ },
+ {
+  "task": "induction_cr",
+  "features": "lnc",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.6650773300773302,
+  "se": 0.014870297175413336,
+  "n": 273
+ },
+ {
+  "task": "induction_cr",
+  "features": "lnc",
+  "cohort": "target_aml",
+  "n": 297,
+  "metric": "AUROC",
+  "value": 0.6297530864197531,
+  "lo": 0.5557439423603217,
+  "hi": 0.7026171171171172
+ },
+ {
+  "task": "induction_cr",
+  "features": "mrna",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.7007466422466423,
+  "se": 0.019571168579327922,
+  "n": 273
+ },
+ {
+  "task": "induction_cr",
+  "features": "mrna",
+  "cohort": "target_aml",
+  "n": 297,
+  "metric": "AUROC",
+  "value": 0.6530246913580249,
+  "lo": 0.5758019448821018,
+  "hi": 0.7272371315460755
+ },
+ {
+  "task": "induction_cr",
+  "features": "lnc+age",
+  "cohort": "beataml_cv",
+  "metric": "AUROC",
+  "value": 0.6654916564916565,
+  "se": 0.015422434491345132,
+  "n": 273
+ },
+ {
+  "task": "induction_cr",
+  "features": "lnc+age",
+  "cohort": "target_aml",
+  "n": 297,
+  "metric": "AUROC",
+  "value": 0.6300617283950617,
+  "lo": 0.5559180139783587,
+  "hi": 0.7031667743977161
+ },
+ {
+  "task": "os",
+  "features": "age",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.6985901968180206,
+  "se": 0.00578015792744081,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "age",
+  "cohort": "tcga_laml",
+  "n": 130,
+  "metric": "C-index",
+  "value": 0.6693741450068399,
+  "lo": 0.602617373433252,
+  "hi": 0.7335352685326693
+ },
+ {
+  "task": "os",
+  "features": "age",
+  "cohort": "target_aml",
+  "n": 300,
+  "metric": "C-index",
+  "value": 0.5447145237013479,
+  "lo": 0.4824175547909519,
+  "hi": 0.5986244770809497
+ },
+ {
+  "task": "os",
+  "features": "age+eln",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7096314348806577,
+  "se": 0.007420361519079085,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "lnc",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7166692481261165,
+  "se": 0.00966954380097311,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "lnc",
+  "cohort": "tcga_laml",
+  "n": 130,
+  "metric": "C-index",
+  "value": 0.6080711354309165,
+  "lo": 0.5433974208010992,
+  "hi": 0.6710464445489466
+ },
+ {
+  "task": "os",
+  "features": "lnc",
+  "cohort": "target_aml",
+  "n": 300,
+  "metric": "C-index",
+  "value": 0.6186203240951083,
+  "lo": 0.5695403583219409,
+  "hi": 0.6754248656044065
+ },
+ {
+  "task": "os",
+  "features": "mrna",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7151085964389987,
+  "se": 0.012773463884005456,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "mrna",
+  "cohort": "tcga_laml",
+  "n": 130,
+  "metric": "C-index",
+  "value": 0.6350889192886456,
+  "lo": 0.5697492839475694,
+  "hi": 0.6953617036282257
+ },
+ {
+  "task": "os",
+  "features": "mrna",
+  "cohort": "target_aml",
+  "n": 300,
+  "metric": "C-index",
+  "value": 0.6377025594426776,
+  "lo": 0.5852206715912966,
+  "hi": 0.6850468978446447
+ },
+ {
+  "task": "os",
+  "features": "lnc+age",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7295968648312628,
+  "se": 0.009387857453440491,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "lnc+age",
+  "cohort": "tcga_laml",
+  "n": 130,
+  "metric": "C-index",
+  "value": 0.6191860465116279,
+  "lo": 0.5546150688565128,
+  "hi": 0.6839777687174771
+ },
+ {
+  "task": "os",
+  "features": "lnc+age",
+  "cohort": "target_aml",
+  "n": 300,
+  "metric": "C-index",
+  "value": 0.6214599424504014,
+  "lo": 0.5756406457891023,
+  "hi": 0.6759202047640354
+ },
+ {
+  "task": "os",
+  "features": "mrna+age",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7297094314090812,
+  "se": 0.012163524511901282,
+  "n": 342
+ },
+ {
+  "task": "os",
+  "features": "mrna+age",
+  "cohort": "tcga_laml",
+  "n": 130,
+  "metric": "C-index",
+  "value": 0.6480848153214774,
+  "lo": 0.5859892797822158,
+  "hi": 0.7078517641669985
+ },
+ {
+  "task": "os",
+  "features": "mrna+age",
+  "cohort": "target_aml",
+  "n": 300,
+  "metric": "C-index",
+  "value": 0.6395199151900651,
+  "lo": 0.5882801347612221,
+  "hi": 0.685010099969605
+ },
+ {
+  "task": "os",
+  "features": "lnc+age+eln",
+  "cohort": "beataml_cv",
+  "metric": "C-index",
+  "value": 0.7294128484937009,
+  "se": 0.009322722041003513,
+  "n": 342
+ }
+]

@@ -25,6 +25,8 @@ Protocol: dev = chromosome-group 5-fold CV; locked test = chr8/13/18/21 (scored 
 reported on all items and on the homology-pruned subset; sequence-free baselines (`expr_len`) and an untrained twin must
 be in every comparison; paired bootstrap for model-vs-model claims (`lncbench report`, `scripts/compare.py`).
 
+Measured results, caveats and the go/no-go criteria are in `PLAN.md` section 10; raw outputs are in `results/v2/`.
+
 Everything below this line is the v1 toolkit (pretraining, Option B, TCGA solid tumours) and still works.
 
 ---

@@ -1,0 +1,24 @@
+[loc_reg] layer 1 kind=reg items=800 (dev 692, locked test 108, homology-flagged 0.4%)
+  rinalmo-micro@400       dev_all: rho 0.316 [0.25,0.37] n=692  dev_pruned: rho 0.315 [0.26,0.37] n=689  test_pruned: rho 0.434 [0.26,0.56] n=108
+[loc_clf] layer 1 kind=clf items=800 (dev 700, locked test 100, homology-flagged 0.4%)
+  rinalmo-micro@400       dev_all: AUROC 0.794 [0.76,0.83] n=700  dev_pruned: AUROC 0.796 [0.76,0.83] n=697  test_pruned: AUROC 0.785 [0.68,0.88] n=100
+[tau_reg] layer 1 kind=reg items=800 (dev 697, locked test 103, homology-flagged 0.6%)
+  rinalmo-micro@400       dev_all: rho 0.293 [0.22,0.36] n=697  dev_pruned: rho 0.292 [0.22,0.36] n=692  test_pruned: rho 0.326 [0.13,0.49] n=103
+[testis_clf] layer 1 kind=clf items=800 (dev 697, locked test 103, homology-flagged 0.6%)
+  rinalmo-micro@400       dev_all: AUROC 0.617 [0.58,0.66] n=697  dev_pruned: AUROC 0.615 [0.57,0.65] n=692  test_pruned: AUROC 0.620 [0.50,0.74] n=103
+[brain_clf] layer 1 kind=clf items=800 (dev 697, locked test 103, homology-flagged 0.6%)
+  rinalmo-micro@400       dev_all: AUROC 0.526 [0.47,0.58] n=697  dev_pruned: AUROC 0.522 [0.46,0.58] n=692  test_pruned: AUROC 0.663 [0.52,0.78] n=103
+[rbp_K562] layer 1 kind=multi items=800 (dev 710, locked test 90, homology-flagged 1.2%)
+  rinalmo-micro@400       dev_all: macroAUROC 0.550 | expr-strat 0.542 | expr+len-strat 0.547 (RBPs 39)  dev_pruned: macroAUROC 0.551 | expr-strat 0.544 | expr+len-strat 0.548 (RBPs 39)  test_pruned: n=None
+[rbp_HepG2] layer 1 kind=multi items=800 (dev 722, locked test 78, homology-flagged 1.1%)
+  rinalmo-micro@400       dev_all: macroAUROC 0.575 | expr-strat 0.575 | expr+len-strat 0.571 (RBPs 35)  dev_pruned: macroAUROC 0.573 | expr-strat 0.575 | expr+len-strat 0.571 (RBPs 35)  test_pruned: macroAUROC 0.611 | expr-strat 0.691 | expr+len-strat 0.808 (RBPs 1 UNDERPOWERED)
+[coding_clf] layer 1 kind=clf items=800 (dev 717, locked test 83, homology-flagged 0.9%)
+  rinalmo-micro@400       dev_all: AUROC 0.921 [0.90,0.94] n=717  dev_pruned: AUROC 0.921 [0.90,0.94] n=710  test_pruned: AUROC 0.924 [0.85,0.97] n=83
+[aml_vs_normal_reg] layer 2b kind=reg items=800 (dev 719, locked test 81, homology-flagged 1.5%)  label reliability: {'split_half_rho': 0.966, 'n_aml': 300, 'n_normal': 300}
+  rinalmo-micro@400       dev_all: rho 0.258 [0.18,0.32] n=719  dev_pruned: rho 0.256 [0.19,0.33] n=708  test_pruned: rho 0.334 [0.09,0.53] n=80
+[aml_vs_normal_resid_reg] layer 2b kind=reg items=800 (dev 719, locked test 81, homology-flagged 1.5%)  label reliability: {'split_half_rho': 0.966, 'n_aml': 300, 'n_normal': 300}
+  rinalmo-micro@400       dev_all: rho 0.256 [0.18,0.33] n=719  dev_pruned: rho 0.254 [0.19,0.31] n=708  test_pruned: rho 0.471 [0.26,0.67] n=80
+[aml_vs_normal_resid_clf] layer 2b kind=clf items=800 (dev 709, locked test 91, homology-flagged 1.2%)  label reliability: {'split_half_rho': 0.966, 'n_aml': 300, 'n_normal': 300}
+  rinalmo-micro@400       dev_all: AUROC 0.624 [0.58,0.66] n=709  dev_pruned: AUROC 0.624 [0.58,0.66] n=699  test_pruned: AUROC 0.609 [0.48,0.71] n=91
+[aml_npm1_reg] layer 2b kind=reg items=800 (dev 719, locked test 81, homology-flagged 1.0%)  label reliability: {'cross_cohort_rho': 0.583, 'n_genes': 4302}
+  rinalmo-micro@400       dev_all: rho -0.015 [-0.09,0.05] n=719  dev_pruned: rho -0.015 [-0.08,0.07] n=711  test_pruned: rho -0.051 [-0.25,0.13] n=81

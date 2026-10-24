@@ -21,9 +21,14 @@ case "$stage" in
     python -m lncfm.aml.data clinical
     python -m lncfm.aml.data download --target-aml 600 --target-normal 400 ;;      # raise for the full cohorts
   quick)
-    python -m lncfm.lncbench run --providers expr_len lengc kmer cnn rinalmo-micro --tasks all \
-        --trunc 400 --max-n 800 --final --save-oof --out "$OUT/quick.json"
-    for s in dev_pruned test_pruned; do python -m lncfm.lncbench report "$OUT/quick.json" --scope $s; done ;;
+    # gene-level tasks subsampled to 800 genes; the RBP tasks must run at FULL size (at 800 genes they have ~10 positives
+    # per RBP and every model collapses to chance)
+    python -m lncfm.lncbench run --providers expr_len lengc kmer cnn rinalmo-micro \
+        --tasks loc_reg loc_clf tau_reg testis_clf brain_clf coding_clf aml_vs_normal_reg aml_vs_normal_resid_reg aml_vs_normal_resid_clf aml_npm1_reg \
+        --trunc 400 --max-n 800 --final --save-oof --out "$OUT/quick_a.json"
+    python -m lncfm.lncbench run --providers expr_len lengc kmer cnn rinalmo-micro --tasks rbp_K562 rbp_HepG2 \
+        --trunc 400 --final --save-oof --out "$OUT/quick_b.json"
+    for s in dev_pruned test_pruned; do python -m lncfm.lncbench report "$OUT"/quick_a.json "$OUT"/quick_b.json --scope $s; done ;;
   full)
     python -m lncfm.lncbench run --providers expr_len lengc kmer cnn --tasks all --final --save-oof --out "$OUT/full_baselines.json"
     python -m lncfm.lncbench run --providers rinalmo-micro --tasks all --trunc 1000 --final --save-oof --out "$OUT/full_rinalmo.json"

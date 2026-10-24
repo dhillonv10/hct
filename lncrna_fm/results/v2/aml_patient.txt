@@ -1,0 +1,33 @@
+
+[2a:npm1] BeatAML n=345, positives=109; external: ['tcga_laml']
+  age                        BeatAML CV AUROC 0.562 +- 0.016 | tcga_laml 0.475 [0.38,0.59] n=151
+  lnc                        BeatAML CV AUROC 0.987 +- 0.004 | tcga_laml 0.966 [0.92,1.00] n=151
+  mrna                       BeatAML CV AUROC 0.987 +- 0.004 | tcga_laml 0.966 [0.92,1.00] n=151
+  lnc+age                    BeatAML CV AUROC 0.986 +- 0.004 | tcga_laml 0.966 [0.92,1.00] n=151
+
+[2a:flt3_itd] BeatAML n=345, positives=92; external: none
+  age                        BeatAML CV AUROC 0.437 +- 0.015
+  lnc                        BeatAML CV AUROC 0.888 +- 0.011
+  mrna                       BeatAML CV AUROC 0.908 +- 0.010
+  lnc+age                    BeatAML CV AUROC 0.887 +- 0.011
+
+[2a:eln_adverse] BeatAML n=252, positives=105; external: none
+  age                        BeatAML CV AUROC 0.649 +- 0.014
+  lnc                        BeatAML CV AUROC 0.989 +- 0.002
+  mrna                       BeatAML CV AUROC 0.988 +- 0.003
+  lnc+age                    BeatAML CV AUROC 0.989 +- 0.002
+
+[2a:induction_cr] BeatAML n=273, positives=199; external: ['target_aml']
+  age                        BeatAML CV AUROC 0.572 +- 0.015 | target_aml 0.480 [0.41,0.56] n=297
+  lnc                        BeatAML CV AUROC 0.665 +- 0.015 | target_aml 0.630 [0.56,0.70] n=297
+  mrna                       BeatAML CV AUROC 0.701 +- 0.020 | target_aml 0.653 [0.58,0.73] n=297
+  lnc+age                    BeatAML CV AUROC 0.665 +- 0.015 | target_aml 0.630 [0.56,0.70] n=297
+
+[2a:os] BeatAML n=342, deaths=161; external: ['tcga_laml', 'target_aml']
+  age                        BeatAML CV C-index 0.699 +- 0.006 | tcga_laml 0.669 [0.60,0.73] n=130 | target_aml 0.545 [0.48,0.60] n=300
+  age+eln                    BeatAML CV C-index 0.710 +- 0.007
+  lnc                        BeatAML CV C-index 0.717 +- 0.010 | tcga_laml 0.608 [0.54,0.67] n=130 | target_aml 0.619 [0.57,0.68] n=300
+  mrna                       BeatAML CV C-index 0.715 +- 0.013 | tcga_laml 0.635 [0.57,0.70] n=130 | target_aml 0.638 [0.59,0.69] n=300
+  lnc+age                    BeatAML CV C-index 0.730 +- 0.009 | tcga_laml 0.619 [0.55,0.68] n=130 | target_aml 0.621 [0.58,0.68] n=300
+  mrna+age                   BeatAML CV C-index 0.730 +- 0.012 | tcga_laml 0.648 [0.59,0.71] n=130 | target_aml 0.640 [0.59,0.69] n=300
+  lnc+age+eln                BeatAML CV C-index 0.729 +- 0.009

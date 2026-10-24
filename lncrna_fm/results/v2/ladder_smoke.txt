@@ -1,0 +1,13 @@
+task loc_reg (reg) n=500 dev=440 | device=cpu model=rinalmo-micro | folds [0]
+  [frozen fold 0] trainable=481 steps=105 0.00s/step best_val=0.425 (129.3s)
+  -> frozen {'spearman': 0.429, 'n': 95}
+  [lora   fold 0] trainable=184,801 steps=105 6.56s/step best_val=0.272 (729.7s)
+  -> lora {'spearman': 0.428, 'n': 95}
+  [topk   fold 0] trainable=5,540,003 steps=105 4.20s/step best_val=0.383 (482.8s)
+  -> topk {'spearman': 0.449, 'n': 95}
+  [full   fold 0] trainable=33,482,893 steps=105 4.83s/step best_val=0.354 (599.4s)
+  -> full {'spearman': 0.423, 'n': 95}
+paired difference vs frozen probe (same items):
+  lora   - frozen: -0.001 [-0.138,+0.130]  p(<=0)=0.512
+  topk   - frozen: +0.019 [-0.073,+0.115]  p(<=0)=0.335
+  full   - frozen: -0.006 [-0.126,+0.117]  p(<=0)=0.539
