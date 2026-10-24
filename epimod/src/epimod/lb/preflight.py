@@ -48,19 +48,22 @@ def parity(T, dev: torch.device, kinds) -> list[tuple[str, bool, str]]:
             finally:
                 T.model, T.dev, T.log_tau = old
             rel = abs(l_dev - l_cpu) / max(abs(l_cpu), 1e-6)
-            bad = []
-            for n, gc in g_cpu.items():
-                gd = g_dev.get(n)
-                nc = float(gc.norm())
-                if nc < 1e-6:
+            names = [n for n in g_cpu if n in g_dev]
+            vc = torch.cat([g_cpu[n].flatten() for n in names]); vd = torch.cat([g_dev[n].flatten() for n in names])
+            gcos = float((vc * vd).sum() / (float(vc.norm()) * float(vd.norm()) + 1e-12)); total = float(vc.norm())
+            bad = [] if gcos > 0.999 else [("ALL (global gradient)", f"cos {gcos:.4f}")]
+            for n, gc in g_cpu.items():                  # parameters that carry signal (>= 2% of the gradient norm) must agree individually;
+                nc = float(gc.norm())                    # near-zero gradients are float noise and are only covered by the global check
+                if nc < 0.02 * total:
                     continue
+                gd = g_dev.get(n)
                 if gd is None:
                     bad.append((n, "no gradient on device")); continue
                 cos = float((gc * gd).sum() / (nc * float(gd.norm()) + 1e-12)); ratio = float(gd.norm()) / nc
-                if cos < 0.98 or not 0.8 < ratio < 1.25:
+                if cos < 0.99 or not 0.9 < ratio < 1.1:
                     bad.append((n, f"cos {cos:.3f}, norm ratio {ratio:.2f}"))
             ok = rel < 5e-3 and not bad
-            out.append((f"parity[{kind}]", ok, f"loss {l_dev:.5f} vs cpu {l_cpu:.5f} (rel {rel:.2e}); {len(g_cpu)} grads" + (f"; worst: {bad[:3]}" if bad else "")))
+            out.append((f"parity[{kind}]", ok, f"loss {l_dev:.5f} vs cpu {l_cpu:.5f} (rel {rel:.2e}); global gradient cos {gcos:.5f}; {len(g_cpu)} grads" + (f"; worst: {bad[:3]}" if bad else "")))
         except Exception as e:
             out.append((f"parity[{kind}]", False, f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}"))
     return out
@@ -82,7 +85,7 @@ def run(make_trainer, work: Path, lr: float, dev: torch.device, steps: int = 240
     T = make_trainer(work / "parity", LongConfig(lr=lr))
     for name, ok, detail in parity(T, dev, T.cfg.tasks):
         rec(name, ok, detail)
-    del T
+    del T; import gc; gc.collect()
     # 3 ---------------------------------------------------------------- mini run
     try:
         ev = max(10, steps // 4)
