@@ -89,7 +89,33 @@ CLINICAL_PLACEHOLDER
 
 ## 7. Compute and hardware
 
-COMPUTE_PLACEHOLDER
+**Counted training cost** (PyTorch `FlopCounterMode`, forward + backward, per nucleotide) **[measured]**:
+
+| preset | params | MFLOP / nt | FLOPs for 1e9 nt |
+|---|---|---|---|
+| tiny | 0.89M | 1.41 | 1.4e15 |
+| small | 6.67M | 10.4 | 1.0e16 |
+| base | 38.8M | 58.9 | 5.9e16 |
+
+**Corpus size.** Human + mouse lncRNA, all isoforms: 195.8 + 143.7 = 339.5 Mnt; unique at gene level only ~75 Mnt
+(36k genes per species at ~1 kb). The 3,000-step pilot sees ~77 Mnt, i.e. **about one pass over the unique content**, so it is
+far from converged and says little about the ceiling. 1e9 nt is ~13 passes over the gene-level content. **[measured / arithmetic]**
+
+**Wall-clock on your M4 is not something I could measure** (the sandbox is a 4-core CPU box: ~32k nt/s per single-thread
+process on the tiny model, i.e. ~45 GFLOP/s). Run `python -m lncfm.speedtest` and read "achieved TFLOP/s". The projection is then plain arithmetic:
+
+| effective TFLOP/s on the M4 **[assumption, measure it]** | small, 1e9 nt | base, 1e9 nt |
+|---|---|---|
+| 0.3 | 9.6 h | 55 h |
+| 1.0 | 2.9 h | 16 h |
+| 3.0 | 1.0 h | 5.5 h |
+
+**CUDA / Colab H100.** An H100 would train even `base` on 1e9 nt in minutes to tens of minutes (assuming 100-300 effective TFLOP/s for
+a model this small; **[assumption]**). So a rented GPU is *not* needed for the from-scratch arm. It is needed for Evo 2 7B (CUDA +
+flash-attn) or Evo 2 1B (Hopper + FP8) experiments. Check current Colab availability and pricing yourself; I did not.
+
+**Where time actually goes locally:** the benchmark with external models (RiNALMo-micro ~0.5 s per 400-nt sequence on 2 CPU
+threads here), TCGA downloads (~25 min per cohort through the GDC API), and ENCODE (57 files).
 
 ---
 
@@ -101,4 +127,24 @@ RUN_PLACEHOLDER
 
 ## 9. Threats to validity (read before trusting any number)
 
-THREATS_PLACEHOLDER
+1. **Pilot scale.** 0.89M parameters, ~77 Mnt seen (about one pass), input clipped to 400 nt. A weak pilot result does not falsify the full-size
+   plan; a good one does not prove it. The learning curve (§5) is the only evidence about scaling.
+2. **Small n, many comparisons.** CV tasks use n=800 subsamples to match what external models can afford on CPU. I use paired bootstrap
+   on identical items, but ~6 tasks x several contrasts are uncorrected: treat p between 0.01 and 0.05 as suggestive.
+3. **Leakage controls are partial.** Chromosome-grouped folds stop neighbouring/duplicated loci straddling train and test; they do
+   *not* stop paralogs or the same transposable-element family on different chromosomes. A near-duplicate-removed analysis was **not run**.
+   Pretraining excludes the val/test chromosomes of human lncRNAs; mouse is fully included (no labels from mouse are used).
+4. **Label caveats.** Localization comes from polyA+ RNA-seq only, gene-level labels are attached to one representative isoform, and
+   expression level is a possible confounder that I did not regress out. GTEx tissue labels are dominated by testis (43% of expressed lncRNAs).
+   Ortholog labels are synteny-defined (noisy); the 56 "named" pairs are the cleanest but are biased towards well-studied genes.
+5. **Clinical track.** TCGA only, no external validation cohort. The clinical baseline is age + stage where stage exists (LGG: age only; gender
+   came back empty from my GDC query and is not used), so it is weaker than a real clinical model: in LGG the lncRNA signal
+   largely proxies IDH/1p19q molecular subtype, which I did not include as a baseline. C-indices are 10-fold CV means with SEs across folds.
+6. **Untested paths.** MPS and CUDA code paths (parity check provided in `selfcheck`), continual pretraining beyond a 25-step smoke test,
+   HyenaDNA / NT-v2 / Caduceus / Evo 2 (blocked or incompatible, see §4), and every Colab/H100 claim.
+7. **Bugs found and fixed during this work** (so you know the checks exist): the conv blocks' GroupNorm made embeddings depend on batch
+   padding (cosine 0.10 between the same sequence alone vs padded for a trained model; now 2e-7, regression-tested by `selfcheck`);
+   TCGA censoring times ignored follow-up records (death rate inflated to 52% in KIRC; now 33%); the LUAD clinical baseline dropped stage.
+8. **Licences.** RiNALMo and RNA-FM are AGPL-3.0, NT-v2 is CC-BY-NC-SA. Check these before any clinical or commercial use.
+9. **Release pins.** GENCODE v50 / M39, GTEx v8 (GENCODE v26 IDs), ENCODE GRCh38 + GENCODE V29 quantifications, TCGA STAR counts (GENCODE v36).
+   Genes whose Ensembl IDs do not exist in v50 are silently dropped when joining.
