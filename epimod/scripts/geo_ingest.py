@@ -17,6 +17,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("cmd", choices=["discover", "screen", "ingest"])
 ap.add_argument("--threads", type=int, default=8); ap.add_argument("--workers", type=int, default=3)
 ap.add_argument("--max-gb", type=float, default=80.0); ap.add_argument("--max-series", type=int, default=100000)
+ap.add_argument("--unlabeled", action="store_true", help="ingest the screened series WITHOUT a usable age label (self-supervised pretraining data)")
 ap.add_argument("--min-samples", type=int, default=8); ap.add_argument("--max-samples", type=int, default=1500)
 a = ap.parse_args()
 root = subdir("geo")
@@ -45,7 +46,9 @@ elif a.cmd == "screen":
 
 else:
     recs = [json.loads(f.read_text()) for f in (root / "screen").glob("GSE*.json")]
-    ok = [r for r in recs if r["ok"] and r["gse"] not in excluded_series and not (set(r.get("related", [])) & excluded_series)]
+    hold = set((root / "holdout.txt").read_text().split()) if (root / "holdout.txt").exists() else set()
+    excluded_series |= hold
+    ok = [r for r in recs if (not r["ok"] if a.unlabeled else r["ok"]) and "file" in r and r["gse"] not in excluded_series and not (set(r.get("related", [])) & excluded_series)]
     ok.sort(key=lambda r: r["bytes"])
     chosen, tot = [], 0.0
     for r in ok:
@@ -57,11 +60,11 @@ else:
     skip = set(computage.index)
     for t in parsed.values():
         skip |= set(t.gsm) | set(t.gsm_b)
-    store_dir = subdir("lb", "store_lite", "geo")
+    store_dir = subdir("lb", "store_lite", "geo_unlabeled" if a.unlabeled else "geo")
     log = open(root / "ingest.jsonl", "a")
     t0 = time.time()
     with ProcessPoolExecutor(a.workers) as ex:
-        futs = {ex.submit(geo.ingest_one, r["gse"], r["file"], r["gpl"], lite, skip, root, store_dir): r["gse"] for r in chosen}
+        futs = {ex.submit(geo.ingest_one, r["gse"], r["file"], r["gpl"], lite, skip, root, store_dir, not a.unlabeled, "meta_unlabeled" if a.unlabeled else "meta"): r["gse"] for r in chosen}
         for i, f in enumerate(as_completed(futs), 1):
             try:
                 res = f.result()
@@ -69,5 +72,5 @@ else:
                 res = {"gse": futs[f], "status": f"error: {str(e)[:150]}"}
             log.write(json.dumps(res) + "\n"); log.flush()
             if i % 10 == 0:
-                m = geo.geo_meta()
+                m = geo.geo_unlabeled_meta() if a.unlabeled else geo.geo_meta()
                 print(f"{i}/{len(futs)} series processed | {len(m)} samples from {m.DatasetID.nunique() if len(m) else 0} series | {round(time.time() - t0)}s", flush=True)

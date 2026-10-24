@@ -208,8 +208,10 @@ def screen_one(gse: str, out_dir: Path) -> dict:
 
 
 # ----------------------------------------------------------------------------------------- ingestion
-def ingest_one(gse: str, fname: str, gpl: str, lite: pd.Index, skip_gsm: set[str], root: Path, store_dir: Path) -> dict:
-    meta_f = root / "meta" / f"{gse}.parquet"
+def ingest_one(gse: str, fname: str, gpl: str, lite: pd.Index, skip_gsm: set[str], root: Path, store_dir: Path,
+               require_age: bool = True, meta_name: str = "meta") -> dict:
+    """``require_age=False`` keeps samples without an age label (Age = NaN): for self-supervised pretraining only."""
+    meta_f = root / meta_name / f"{gse}.parquet"
     if meta_f.exists():
         return {"gse": gse, "status": "done-before"}
     t0 = time.time()
@@ -247,7 +249,7 @@ def ingest_one(gse: str, fname: str, gpl: str, lite: pd.Index, skip_gsm: set[str
         v = np.clip(v, 0.0, 1.0)
         tab = tab.set_index("gsm")
         pos = {c: i for i, c in enumerate(X.columns)}
-        keep = [g for g in X.columns if g in tab.index and np.isfinite(tab.at[g, "age"]) and not tab.at[g, "tumor"]
+        keep = [g for g in X.columns if g in tab.index and (np.isfinite(tab.at[g, "age"]) or not require_age) and not tab.at[g, "tumor"]
                 and g not in skip_gsm and np.isfinite(v[:, pos[g]]).mean() > 0.02]
         if len(keep) < 8:
             return {"gse": gse, "status": f"too-few-samples {len(keep)}"}
@@ -261,7 +263,7 @@ def ingest_one(gse: str, fname: str, gpl: str, lite: pd.Index, skip_gsm: set[str
         meta = pd.DataFrame({"DatasetID": gse, "PlatformID": gpl, "Tissue": tab.loc[keep, "tissue"].str.slice(0, 80).to_numpy(),
                              "CellType": "", "Gender": tab.loc[keep, "sex"].replace("", "U").to_numpy(), "Age": tab.loc[keep, "age"].to_numpy(float),
                              "Condition": "NA", "Class": "", "Platform": label, "split": "geo"}, index=pd.Index(keep, name="SampleID"))
-        (root / "meta").mkdir(parents=True, exist_ok=True)
+        (root / meta_name).mkdir(parents=True, exist_ok=True)
         meta.to_parquet(meta_f)
         return {"gse": gse, "status": "ok", "n": len(keep), "coverage": float((prof != MISSING).mean()), "sec": round(time.time() - t0)}
     finally:
@@ -281,6 +283,16 @@ def heme_holdout(write: bool = True) -> list[str]:
     if write:
         (subdir("geo") / "holdout.txt").write_text("\n".join(sorted(hit)) + "\n")
     return sorted(hit)
+
+
+def geo_unlabeled_meta() -> pd.DataFrame:
+    """Samples ingested without an age label (self-supervised pretraining only), minus held-out series."""
+    files = sorted((subdir("geo") / "meta_unlabeled").glob("GSE*.parquet"))
+    m = pd.concat([pd.read_parquet(f) for f in files]) if files else pd.DataFrame()
+    hold = subdir("geo") / "holdout.txt"
+    if len(m) and hold.exists():
+        m = m[~m.DatasetID.isin(set(hold.read_text().split()))]
+    return m
 
 
 def geo_meta() -> pd.DataFrame:
