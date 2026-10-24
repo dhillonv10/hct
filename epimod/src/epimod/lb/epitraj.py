@@ -76,9 +76,11 @@ class EpiHier(EpiSet):
     # ------------------------------------------------------------------------------------------ encoder
     def encode(self, cpg, beta, role, sex, clock=None):
         """-> (h [B,d] latent state, block states [B,nb,d], non-empty-block mask [B,nb])."""
+        dev = self.cls.device
+        cpg, beta, role, sex = cpg.to(dev), beta.to(dev), role.to(dev), sex.to(dev)
+        clock = None if clock is None else clock.to(dev)
         x, pad, _ = self.embed(cpg, beta, role)
         B, T, d = x.shape
-        dev = x.device
         ids = torch.where(pad, torch.full_like(cpg, self.pad_id), cpg)
         blk = self.block_of[ids]
         ar = torch.arange(T, device=dev)
@@ -119,7 +121,7 @@ class EpiHier(EpiSet):
     # ------------------------------------------------------------------------------------------ masked reconstruction
     def reconstruct(self, h, gblocks, tgt):
         """beta of masked CpGs ``tgt`` [B,Q] (vocabulary ids) from their identity, block context and the sample state."""
-        ids = tgt.clamp(min=0)
+        ids = tgt.to(h.device).clamp(min=0)
         e = self.id_proj(self.id_emb(ids))
         gb = gblocks.gather(1, self.block_of[ids].clamp(max=self.nb - 1).unsqueeze(-1).expand(-1, -1, gblocks.shape[-1]))
         return torch.sigmoid(self.recon(torch.cat([e, gb, h.unsqueeze(1).expand(-1, tgt.shape[1], -1)], -1)).squeeze(-1))

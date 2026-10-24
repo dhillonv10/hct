@@ -8,7 +8,9 @@ pairwise lists are estimated from CpG identities (no values, no labels) in the O
 headline numbers are on the EVEN-numbered prompts. Every LongevityBench evaluation is appended to
 ``lb_eval_log.jsonl`` so the number of variants scored is on record.
 """
-import argparse, json, pickle, time
+import argparse, json, os, pickle, sys, time
+if "mps" in sys.argv or "auto" in sys.argv:        # must be set before torch is imported
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 from dataclasses import asdict
 from pathlib import Path
 
@@ -38,6 +40,7 @@ ap.add_argument("--w-mask", type=float, default=1.0)
 ap.add_argument("--max-minutes", type=float, default=0.0, help="stop cleanly (checkpoint written) after this many minutes; rerun to resume")
 ap.add_argument("--moe-level", default="token", choices=["token", "sample"])
 ap.add_argument("--linear", action="store_true", help="add the explicit per-CpG linear route to the set transformer")
+ap.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps", "auto"])
 ap.add_argument("--no-lb-eval", action="store_true")
 ap.add_argument("--eval-only", action="store_true", help="load runs/lb/<name>/model.pt and only run the LongevityBench evaluation")
 a = ap.parse_args()
@@ -53,7 +56,7 @@ pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
 bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24, "mask": 16}
-cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads, w_mask=a.w_mask, max_minutes=a.max_minutes)
+cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads, device=a.device, w_mask=a.w_mask, max_minutes=a.max_minutes)
 if a.model == "hier":
     from epimod.lb.epitraj import HierConfig
     mcfg = HierConfig(d_model=a.d, local_layers=a.local_layers, global_layers=a.global_layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level)

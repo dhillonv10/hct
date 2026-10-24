@@ -22,6 +22,12 @@ from .store import LBStore, sample_pairs
 from .tasks import (CLOCKS, Pools, Vocab, balanced_accuracy, clock_batch, decade_of, decade_posterior, extremes_batch, extremes_cache,
                     fixed_batch, mae, pair_batch, sex_ids)
 
+def resolve_device(name: str) -> torch.device:
+    if name == "auto":
+        name = "cuda" if torch.cuda.is_available() else "mps" if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available() else "cpu"
+    return torch.device(name)
+
+
 ALL_TASKS = ("extremes", "fixed", "clock", "pair")
 
 
@@ -46,6 +52,7 @@ class LBTrainConfig:
     eval_every: int = 250
     seed: int = 0
     threads: int = 4
+    device: str = "cpu"             # cpu | cuda | mps | auto
     max_minutes: float = 0.0         # >0: stop cleanly after this long (a checkpoint is written at every eval); rerun to resume
 
 
@@ -70,9 +77,10 @@ def task_sets(parsed: dict, universe: pd.Index) -> TaskSets:
 
 def _loss_single(model, b, age_t, age, cfg):
     mu, sigma, dec = model(b["cpg"], b["beta"], b["role"], b["sex"], b.get("clock"))
+    age_t = age_t.to(mu.device)
     nll = (0.5 * ((age_t - mu) / sigma) ** 2 + torch.log(sigma)).mean()
     hub = nn.functional.smooth_l1_loss(mu, age_t, beta=0.05)
-    ce = nn.functional.cross_entropy(dec, torch.as_tensor(decade_of(age)))
+    ce = nn.functional.cross_entropy(dec, torch.as_tensor(decade_of(age)).to(mu.device))
     return nll + cfg.w_huber * hub + cfg.w_decade * ce, {"nll": float(nll.detach()), "hub": float(hub.detach()), "ce": float(ce.detach())}
 
 
@@ -90,6 +98,7 @@ class Trainer:
         else:
             self.model = EpiSet(mcfg, vocab.mean, vocab.std)
         self.v2u = invert_vocab(vocab.u2m, len(vocab))
+        self.dev = resolve_device(cfg.device); self.model.to(self.dev)
         self.cache = extremes_cache(store_tr, pools) if "extremes" in cfg.tasks else None
         self.val_cache = extremes_cache(store_val, pools) if (store_val is not None and "extremes" in cfg.tasks) else None
         self.age = store_tr.meta.Age.to_numpy(np.float64)
@@ -101,7 +110,7 @@ class Trainer:
             w = w * (dens[bins] ** -cfg.age_balance)
         self.p = w / w.sum()
         self.series = store_tr.meta.DatasetID.to_numpy()
-        self.log_tau = nn.Parameter(torch.tensor(math.log(cfg.pair_temp)))
+        self.log_tau = nn.Parameter(torch.tensor(math.log(cfg.pair_temp), device=self.dev))
         self.clock_pool = [c for c in CLOCKS if c in sets.clock_u]
 
     # ----------------------------------------------------------------------------- batches
@@ -116,18 +125,18 @@ class Trainer:
             va, vb = pair_batch(self.tr, self.vocab, ia, ib, 160, self.pools.pair)
             mua, siga, _ = m(va["cpg"], va["beta"], va["role"], va["sex"])
             mub, sigb, _ = m(vb["cpg"], vb["beta"], vb["role"], vb["sex"])
-            y = torch.as_tensor((self.age[ia] > self.age[ib]).astype(np.float32))
+            y = torch.as_tensor((self.age[ia] > self.age[ib]).astype(np.float32)).to(self.dev)
             tau = self.log_tau.exp()
             bce = nn.functional.binary_cross_entropy_with_logits((mua - mub) / tau, y)
-            ta, tb = torch.as_tensor(age_to_t(self.age[ia]), dtype=torch.float32), torch.as_tensor(age_to_t(self.age[ib]), dtype=torch.float32)
+            ta, tb = (torch.as_tensor(age_to_t(self.age[k]), dtype=torch.float32).to(self.dev) for k in (ia, ib))
             aux = 0.5 * (nn.functional.smooth_l1_loss(mua, ta, beta=0.05) + nn.functional.smooth_l1_loss(mub, tb, beta=0.05))
             return bce + cfg.w_pair_age * aux, {"bce": float(bce.detach()), "aux": float(aux.detach())}
         if kind == "mask":                                   # masked-CpG reconstruction (hierarchical model only)
             rows = self._rows(n)
             vc, vb, tc, tb = mask_batch(profile_matrix(self.tr.prof, rows, self.v2u), self.rng, float(np.exp(self.rng.uniform(np.log(0.02), np.log(0.3)))))
             h, gb, _ = m.encode(torch.as_tensor(vc), torch.as_tensor(vb), torch.full(vc.shape, ROLES["fixed"]), torch.as_tensor(sex_ids(self.tr.meta, rows)))
-            err = (m.reconstruct(h, gb, torch.as_tensor(tc)) - torch.as_tensor(tb)).abs()
-            loss = torch.where(err < 0.05, 0.5 * err.square() / 0.05, err - 0.025)[torch.as_tensor(tc >= 0)].mean()
+            err = (m.reconstruct(h, gb, torch.as_tensor(tc)) - torch.as_tensor(tb).to(self.dev)).abs()
+            loss = torch.where(err < 0.05, 0.5 * err.square() / 0.05, err - 0.025)[torch.as_tensor(tc >= 0).to(self.dev)].mean()
             return cfg.w_mask * loss, {"mask": float(loss.detach())}
         rows = self._rows(n)
         if kind == "extremes":
@@ -168,7 +177,7 @@ class Trainer:
             vc, vb, tc, tb = mask_batch(profile_matrix(v.prof, rows[:500], self.v2u), np.random.RandomState(7), 0.1)
             h, gb, _ = model.encode(torch.as_tensor(vc), torch.as_tensor(vb), torch.full(vc.shape, ROLES["fixed"]), torch.as_tensor(sex_ids(v.meta, rows[:500])))
             ok = tc >= 0
-            out["mask_mae"] = float(np.abs(model.reconstruct(h, gb, torch.as_tensor(tc)).numpy() - tb)[ok].mean())
+            out["mask_mae"] = float(np.abs(model.reconstruct(h, gb, torch.as_tensor(tc)).cpu().numpy() - tb)[ok].mean())
         if "pair" in self.cfg.tasks:
             ia, ib = sample_pairs(age, 1000, rng, 10.0, v.meta.DatasetID.to_numpy())
             va, vb = pair_batch(v, self.vocab, ia, ib, 160, self.pools.pair)
@@ -208,12 +217,12 @@ class Trainer:
         for step in range(start, cfg.steps + 1):
             model.train()
             total, parts = 0.0, {}
-            loss = torch.zeros(())
+            loss = torch.zeros((), device=self.dev)
             for kind in cfg.tasks:
                 l, d = self.step_loss(kind)
                 loss = loss + l; parts.update({f"{kind}_{k}": v for k, v in d.items()})
             if model.cfg.moe_experts > 0:
-                loss = loss + model.cfg.moe_balance * model.moe_aux()
+                loss = loss + model.cfg.moe_balance * model.moe_aux().to(self.dev)
             opt.zero_grad(set_to_none=True); loss.backward()
             nn.utils.clip_grad_norm_(params, 1.0); opt.step(); sched.step()
             with torch.no_grad():
