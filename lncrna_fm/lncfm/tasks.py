@@ -20,7 +20,7 @@ import pandas as pd
 from . import gencode, paths
 
 # ----------------------------------------------------------------------------- folds
-# 5 chromosome groups, roughly balanced by lncRNA gene count in GENCODE human.
+# 5 leave-chromosome-group-out folds. NOT balanced: fold sizes range ~15%-31% of genes (fold 4 holds 8 chromosomes).
 _FOLD_GROUPS = [
     ["chr1", "chr10", "chr21", "chrY"],
     ["chr2", "chr12", "chr19", "chr22"],

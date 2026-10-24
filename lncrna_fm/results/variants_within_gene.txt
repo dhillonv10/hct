@@ -1,0 +1,25 @@
+233 SNVs in 8 genes; 154 pathogenic / 79 benign
+random:tiny                                  within-gene AUROC 0.531 [0.416,0.633]  (genes used: 6)
+    gene  n_path  n_ben  auroc
+    RMRP      29      9  0.337
+  RNU2-2      19      6  0.693
+  RNU4-2      21      8  0.583
+RNU4ATAC      28      9  0.548
+  RNU7-1       5     13  0.523
+SNORD118      15     30  0.549
+full_3000.pt within-gene AUROC 0.545 [0.426,0.618]  (genes used: 6)
+    gene  n_path  n_ben  auroc
+    RMRP      29      9  0.579
+  RNU2-2      19      6  0.544
+  RNU4-2      21      8  0.661
+RNU4ATAC      28      9  0.508
+  RNU7-1       5     13  0.600
+SNORD118      15     30  0.467
+mlm_3000.pt within-gene AUROC 0.558 [0.456,0.637]  (genes used: 6)
+    gene  n_path  n_ben  auroc
+    RMRP      29      9  0.567
+  RNU2-2      19      6  0.614
+  RNU4-2      21      8  0.696
+RNU4ATAC      28      9  0.500
+  RNU7-1       5     13  0.569
+SNORD118      15     30  0.487

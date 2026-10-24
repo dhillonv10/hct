@@ -1,0 +1,4 @@
+retrieval: 17971 human queries, pool of 36103 mouse genes; all=17971, strict=2823, named=56
+           shared10mer  retr/all    n=17971 MRR=0.045 hit@10=0.052 hit@100=0.069 medrank=7932 (random hit@10=0.0008)
+           shared10mer  retr/strict n=2823  MRR=0.061 hit@10=0.072 hit@100=0.086 medrank=12816 (random hit@10=0.0003)
+           shared10mer  retr/named  n=56    MRR=0.377 hit@10=0.411 hit@100=0.429 medrank=384 (random hit@10=0.0008)
