@@ -15,10 +15,12 @@ import torch
 from torch import nn
 
 from ..age import age_to_t, t_to_age
-from .episet import EpiSet, SetConfig
+from ..data.annotation import load_probe_annotation
+from .epitraj import EpiHier, HierConfig, block_assignment, invert_vocab, mask_batch, profile_matrix
+from .episet import ROLES, EpiSet, SetConfig
 from .store import LBStore, sample_pairs
 from .tasks import (CLOCKS, Pools, Vocab, balanced_accuracy, clock_batch, decade_of, decade_posterior, extremes_batch, extremes_cache,
-                    fixed_batch, mae, pair_batch)
+                    fixed_batch, mae, pair_batch, sex_ids)
 
 ALL_TASKS = ("extremes", "fixed", "clock", "pair")
 
@@ -31,7 +33,8 @@ class LBTrainConfig:
     weight_decay: float = 0.02
     warmup: int = 150
     ema: float = 0.995
-    bs: dict = field(default_factory=lambda: {"extremes": 32, "fixed": 32, "clock": 32, "pair": 24})
+    bs: dict = field(default_factory=lambda: {"extremes": 32, "fixed": 32, "clock": 32, "pair": 24, "mask": 16})
+    w_mask: float = 1.0
     w_huber: float = 1.0
     w_decade: float = 0.3
     w_pair_age: float = 0.3
@@ -43,6 +46,7 @@ class LBTrainConfig:
     eval_every: int = 250
     seed: int = 0
     threads: int = 4
+    max_minutes: float = 0.0         # >0: stop cleanly after this long (a checkpoint is written at every eval); rerun to resume
 
 
 @dataclass
@@ -81,7 +85,11 @@ class Trainer:
         torch.set_num_threads(cfg.threads); torch.manual_seed(cfg.seed)
         self.rng = np.random.RandomState(cfg.seed)
         mcfg = replace(mcfg, n_tokens_vocab=len(vocab))
-        self.model = EpiSet(mcfg, vocab.mean, vocab.std)
+        if isinstance(mcfg, HierConfig):
+            self.model = EpiHier(mcfg, block_assignment(vocab.cpg_ids, load_probe_annotation(), mcfg.block_size), vocab.mean, vocab.std)
+        else:
+            self.model = EpiSet(mcfg, vocab.mean, vocab.std)
+        self.v2u = invert_vocab(vocab.u2m, len(vocab))
         self.cache = extremes_cache(store_tr, pools) if "extremes" in cfg.tasks else None
         self.val_cache = extremes_cache(store_val, pools) if (store_val is not None and "extremes" in cfg.tasks) else None
         self.age = store_tr.meta.Age.to_numpy(np.float64)
@@ -114,6 +122,13 @@ class Trainer:
             ta, tb = torch.as_tensor(age_to_t(self.age[ia]), dtype=torch.float32), torch.as_tensor(age_to_t(self.age[ib]), dtype=torch.float32)
             aux = 0.5 * (nn.functional.smooth_l1_loss(mua, ta, beta=0.05) + nn.functional.smooth_l1_loss(mub, tb, beta=0.05))
             return bce + cfg.w_pair_age * aux, {"bce": float(bce.detach()), "aux": float(aux.detach())}
+        if kind == "mask":                                   # masked-CpG reconstruction (hierarchical model only)
+            rows = self._rows(n)
+            vc, vb, tc, tb = mask_batch(profile_matrix(self.tr.prof, rows, self.v2u), self.rng, float(np.exp(self.rng.uniform(np.log(0.02), np.log(0.3)))))
+            h, gb, _ = m.encode(torch.as_tensor(vc), torch.as_tensor(vb), torch.full(vc.shape, ROLES["fixed"]), torch.as_tensor(sex_ids(self.tr.meta, rows)))
+            err = (m.reconstruct(h, gb, torch.as_tensor(tc)) - torch.as_tensor(tb)).abs()
+            loss = torch.where(err < 0.05, 0.5 * err.square() / 0.05, err - 0.025)[torch.as_tensor(tc >= 0)].mean()
+            return cfg.w_mask * loss, {"mask": float(loss.detach())}
         rows = self._rows(n)
         if kind == "extremes":
             b = extremes_batch(self.tr, self.vocab, self.cache, rows, cfg.drop, self.rng, cfg.tail_shift)
@@ -149,6 +164,11 @@ class Trainer:
             b = clock_batch(v, self.vocab, rows, self.sets.clock_u, names, self.sets.clock_max, rng)
             pred, _, _ = model.predict_age(b["cpg"], b["beta"], b["role"], b["sex"], b["clock"])
             out["clock_mae"] = mae(pred, age[rows])
+        if "mask" in self.cfg.tasks:
+            vc, vb, tc, tb = mask_batch(profile_matrix(v.prof, rows[:500], self.v2u), np.random.RandomState(7), 0.1)
+            h, gb, _ = model.encode(torch.as_tensor(vc), torch.as_tensor(vb), torch.full(vc.shape, ROLES["fixed"]), torch.as_tensor(sex_ids(v.meta, rows[:500])))
+            ok = tc >= 0
+            out["mask_mae"] = float(np.abs(model.reconstruct(h, gb, torch.as_tensor(tc)).numpy() - tb)[ok].mean())
         if "pair" in self.cfg.tasks:
             ia, ib = sample_pairs(age, 1000, rng, 10.0, v.meta.DatasetID.to_numpy())
             va, vb = pair_batch(v, self.vocab, ia, ib, 160, self.pools.pair)
@@ -177,6 +197,7 @@ class Trainer:
         for p in ema.parameters():
             p.requires_grad_(False)
         best, best_state, hist, t0 = float("inf"), None, [], time.time()
+        t_run0 = time.time()
         start = 1
         if self.ckpt_path is not None and self.ckpt_path.exists():          # resume after a restart
             ck = torch.load(self.ckpt_path, map_location="cpu", weights_only=False)
@@ -214,6 +235,10 @@ class Trainer:
                                 "sched": sched.state_dict(), "log_tau": self.log_tau.detach(), "best": best, "best_state": best_state,
                                 "hist": hist, "rng": self.rng.get_state()}, tmp)
                     os.replace(tmp, self.ckpt_path)
+                if cfg.max_minutes > 0 and (time.time() - t_run0) / 60 > cfg.max_minutes and step < cfg.steps:
+                    self.log(f"[segment] time budget reached at step {step}; checkpoint written, rerun to resume")
+                    self.model = ema
+                    return {"history": hist, "best_val_score": best, "stopped_at": step}
         ema.load_state_dict(best_state if best_state is not None else ema.state_dict())
         self.model = ema
         return {"history": hist, "best_val_score": best}

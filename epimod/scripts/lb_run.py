@@ -32,6 +32,10 @@ ap.add_argument("--bs-fixed", type=int, default=32, help="batch size of the (att
 ap.add_argument("--lr", type=float, default=1e-3); ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--threads", type=int, default=4); ap.add_argument("--full-pools", action="store_true",
                 help="derive pools from ALL eval prompts (secondary check; not the headline protocol)")
+ap.add_argument("--model", default="set", choices=["set", "hier"], help="set = flat set transformer (EpiSet); hier = EpiTrajectory-L")
+ap.add_argument("--local-layers", type=int, default=2); ap.add_argument("--global-layers", type=int, default=3)
+ap.add_argument("--w-mask", type=float, default=1.0)
+ap.add_argument("--max-minutes", type=float, default=0.0, help="stop cleanly (checkpoint written) after this many minutes; rerun to resume")
 ap.add_argument("--moe-level", default="token", choices=["token", "sample"])
 ap.add_argument("--linear", action="store_true", help="add the explicit per-CpG linear route to the set transformer")
 ap.add_argument("--no-lb-eval", action="store_true")
@@ -49,17 +53,29 @@ pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
 bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24}
-cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads)
-mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level, linear_route=a.linear)
+cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads, w_mask=a.w_mask, max_minutes=a.max_minutes)
+if a.model == "hier":
+    from epimod.lb.epitraj import HierConfig
+    mcfg = HierConfig(d_model=a.d, local_layers=a.local_layers, global_layers=a.global_layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level)
+else:
+    mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level, linear_route=a.linear)
 if a.eval_only:
     ck = torch.load(out / "model.pt", map_location="cpu", weights_only=False)
     assert list(vocab.cpg_ids) == ck["vocab_ids"], "vocabulary differs from the trained model's (pools/flags changed?)"
     from epimod.lb.episet import EpiSet
-    model = EpiSet(SetConfig(**ck["cfg"]), vocab.mean, vocab.std); model.load_state_dict(ck["state"]); model.eval()
+    if ck["args"].get("model") == "hier":
+        from epimod.data.annotation import load_probe_annotation
+        from epimod.lb.epitraj import EpiHier, HierConfig, block_assignment
+        hc = HierConfig(**ck["cfg"]); model = EpiHier(hc, block_assignment(vocab.cpg_ids, load_probe_annotation(), hc.block_size), vocab.mean, vocab.std)
+    else:
+        model = EpiSet(SetConfig(**ck["cfg"]), vocab.mean, vocab.std)
+    model.load_state_dict(ck["state"]); model.eval()
     cfg = LBTrainConfig(tasks=tuple(ck["args"]["tasks"].split(",")))
 else:
     tr_ = Trainer(tr, va, vocab, sets, pools, mcfg, cfg, log=lambda s: print(s, flush=True), ckpt_path=out / "ckpt.pt")
     t0 = time.time(); res = tr_.fit(); res["train_sec"] = round(time.time() - t0)
+    if "stopped_at" in res:
+        print(f"segment finished at step {res['stopped_at']}; rerun the same command to resume", flush=True); raise SystemExit(0)
     model = tr_.model
     print(f"params: {sum(p.numel() for p in model.parameters()):,} | best val score {res['best_val_score']:.4f}", flush=True)
     torch.save({"state": model.state_dict(), "cfg": asdict(model.cfg), "vocab_ids": list(vocab.cpg_ids), "args": vars(a)}, out / "model.pt")

@@ -268,7 +268,26 @@ def ingest_one(gse: str, fname: str, gpl: str, lite: pd.Index, skip_gsm: set[str
         Path(path).unlink(missing_ok=True)
 
 
+HEME = re.compile(r"leuk[a]?emi|myeloid|myelodys|myeloma|myeloprolif|lymphoblast|myeloblast|blast crisis|hematologic|haematologic|CAR[- ]T", re.I)
+HEME_CASE = re.compile(r"\b(AML|MDS|CML|CLL|MPN|ALL|T-ALL|B-ALL)\b")
+
+
+def heme_holdout(write: bool = True) -> list[str]:
+    """Series about haematological malignancy (AML, MDS, leukaemia ...), held out of every training corpus so that
+    disease / age-acceleration analyses on such cohorts stay clean.  Matched on series title and summary."""
+    s = pd.read_parquet(subdir("geo") / "series.parquet")
+    text = (s.title.fillna("") + " " + s.summary.fillna(""))
+    hit = s[text.str.contains(HEME) | text.str.contains(HEME_CASE)].gse.tolist()
+    if write:
+        (subdir("geo") / "holdout.txt").write_text("\n".join(sorted(hit)) + "\n")
+    return sorted(hit)
+
+
 def geo_meta() -> pd.DataFrame:
-    """Metadata of every ingested sample (empty frame if nothing was ingested)."""
+    """Metadata of every ingested sample, minus the held-out series in geo/holdout.txt (empty frame if nothing ingested)."""
     files = sorted((subdir("geo") / "meta").glob("GSE*.parquet"))
-    return pd.concat([pd.read_parquet(f) for f in files]) if files else pd.DataFrame()
+    m = pd.concat([pd.read_parquet(f) for f in files]) if files else pd.DataFrame()
+    hold = subdir("geo") / "holdout.txt"
+    if len(m) and hold.exists():
+        m = m[~m.DatasetID.isin(set(hold.read_text().split()))]
+    return m
