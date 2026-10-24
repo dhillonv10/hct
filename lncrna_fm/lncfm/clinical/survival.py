@@ -65,10 +65,13 @@ def fit_predict(Xtr, ttr, etr, Xte, l2_grid=(1e-3, 1e-2, 1e-1, 1.0), seed=0):
 
 
 def clin_matrix(C: pd.DataFrame):
+    """Age (+ stage with a missing-indicator when >=50% of patients have it, + gender).
+    A strong clinical baseline matters: a weak one makes any molecular feature set look useful."""
     X = pd.DataFrame({"age": C.age.fillna(C.age.median())})
-    if C.stage.notna().mean() > 0.8:
-        X["stage"] = C.stage.map(lambda s: {"I": 1, "II": 2, "III": 3, "IV": 4}.get(str(s).replace("Stage ", "").rstrip("ABC "), np.nan))
-        X["stage"] = X.stage.fillna(X.stage.median())
+    st = C.stage.map(lambda s: {"I": 1, "II": 2, "III": 3, "IV": 4}.get(str(s).replace("Stage ", "").rstrip("ABC "), np.nan))
+    if st.notna().mean() >= 0.5:
+        X["stage"] = st.fillna(st.median())
+        X["stage_missing"] = st.isna().astype(float)
     if C.gender.nunique() > 1:
         X["male"] = (C.gender == "male").astype(float)
     return X.values.astype(np.float32)
