@@ -1,0 +1,14 @@
+# Python >= 3.10. On Apple silicon: plain `pip install torch` gives MPS support.
+torch>=2.3
+numpy
+pandas
+scipy
+scikit-learn
+lifelines
+requests
+tqdm
+matplotlib
+# optional
+ViennaRNA        # RNA folding features (aux pretraining target); pip wheel exists for macOS arm64
+multimolecule    # RiNALMo / RNA-FM wrappers for the "Option B" frozen-feature arm
+transformers     # NT-v2 / HyenaDNA wrappers for the "Option B" arm
