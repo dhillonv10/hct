@@ -52,7 +52,7 @@ odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext_mask=odd, pair_mask=odd)
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
-bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24}
+bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24, "mask": 16}
 cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads, w_mask=a.w_mask, max_minutes=a.max_minutes)
 if a.model == "hier":
     from epimod.lb.epitraj import HierConfig
