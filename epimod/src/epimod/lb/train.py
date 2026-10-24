@@ -102,26 +102,30 @@ class Trainer:
         self.cache = extremes_cache(store_tr, pools) if "extremes" in cfg.tasks else None
         self.val_cache = extremes_cache(store_val, pools) if (store_val is not None and "extremes" in cfg.tasks) else None
         self.age = store_tr.meta.Age.to_numpy(np.float64)
+        lab = np.isfinite(self.age); self.lab_idx = np.flatnonzero(lab)          # unlabeled samples feed only the masked-reconstruction task
         n_study = store_tr.meta.groupby("DatasetID")["Age"].transform("size").to_numpy()
         w = n_study.astype(np.float64) ** -cfg.study_power
+        self.p_all = w / w.sum()
         if cfg.age_balance > 0:
-            bins = np.minimum((self.age // 10).astype(int), 10)
-            dens = np.bincount(bins, minlength=11).astype(np.float64)
+            bins = np.zeros(len(self.age), int); bins[lab] = np.minimum((self.age[lab] // 10).astype(int), 10)
+            dens = np.bincount(bins[lab], minlength=11).astype(np.float64)
             w = w * (dens[bins] ** -cfg.age_balance)
+        w = np.where(lab, w, 0.0)
         self.p = w / w.sum()
         self.series = store_tr.meta.DatasetID.to_numpy()
         self.log_tau = nn.Parameter(torch.tensor(math.log(cfg.pair_temp), device=self.dev))
         self.clock_pool = [c for c in CLOCKS if c in sets.clock_u]
 
     # ----------------------------------------------------------------------------- batches
-    def _rows(self, n):
-        return self.rng.choice(self.tr.n, n, p=self.p)
+    def _rows(self, n, any_row: bool = False):
+        return self.rng.choice(self.tr.n, n, p=self.p_all if any_row else self.p)
 
     def step_loss(self, kind: str):
         cfg, m = self.cfg, self.model
         n = cfg.bs[kind]
         if kind == "pair":
-            ia, ib = sample_pairs(self.age, n, self.rng, 10.0, self.series)
+            ia, ib = sample_pairs(self.age[self.lab_idx], n, self.rng, 10.0, self.series[self.lab_idx])
+            ia, ib = self.lab_idx[ia], self.lab_idx[ib]
             va, vb = pair_batch(self.tr, self.vocab, ia, ib, 160, self.pools.pair)
             mua, siga, _ = m(va["cpg"], va["beta"], va["role"], va["sex"])
             mub, sigb, _ = m(vb["cpg"], vb["beta"], vb["role"], vb["sex"])
@@ -131,8 +135,8 @@ class Trainer:
             ta, tb = (torch.as_tensor(age_to_t(self.age[k]), dtype=torch.float32).to(self.dev) for k in (ia, ib))
             aux = 0.5 * (nn.functional.smooth_l1_loss(mua, ta, beta=0.05) + nn.functional.smooth_l1_loss(mub, tb, beta=0.05))
             return bce + cfg.w_pair_age * aux, {"bce": float(bce.detach()), "aux": float(aux.detach())}
-        if kind == "mask":                                   # masked-CpG reconstruction (hierarchical model only)
-            rows = self._rows(n)
+        if kind == "mask":                                   # masked-CpG reconstruction (hierarchical model only; labels not needed)
+            rows = self._rows(n, any_row=True)
             vc, vb, tc, tb = mask_batch(profile_matrix(self.tr.prof, rows, self.v2u), self.rng, float(np.exp(self.rng.uniform(np.log(0.02), np.log(0.3)))))
             h, gb, _ = m.encode(torch.as_tensor(vc), torch.as_tensor(vb), torch.full(vc.shape, ROLES["fixed"]), torch.as_tensor(sex_ids(self.tr.meta, rows)))
             err = (m.reconstruct(h, gb, torch.as_tensor(tc)) - torch.as_tensor(tb).to(self.dev)).abs()

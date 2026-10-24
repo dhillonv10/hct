@@ -41,6 +41,8 @@ ap.add_argument("--max-minutes", type=float, default=0.0, help="stop cleanly (ch
 ap.add_argument("--moe-level", default="token", choices=["token", "sample"])
 ap.add_argument("--linear", action="store_true", help="add the explicit per-CpG linear route to the set transformer")
 ap.add_argument("--device", default="cpu", choices=["cpu", "cuda", "mps", "auto"])
+ap.add_argument("--unlabeled", action="store_true", help="also train the masked-reconstruction task on the label-free GEO series")
+ap.add_argument("--heads", type=int, default=4); ap.add_argument("--d-emb", type=int, default=64); ap.add_argument("--bs-mult", type=float, default=1.0)
 ap.add_argument("--no-lb-eval", action="store_true")
 ap.add_argument("--eval-only", action="store_true", help="load runs/lb/<name>/model.pt and only run the LongevityBench evaluation")
 a = ap.parse_args()
@@ -48,20 +50,23 @@ a = ap.parse_args()
 out = Path(a.out) / a.name; out.mkdir(parents=True, exist_ok=True)
 parsed = load_parsed(); excl = lb_series(parsed)
 meta_all = lb_meta(excl); tr_m, va_m = split_studies(meta_all, 0.15, 0)
-tr = load_lb_store(exclude_series=excl, include_series=set(meta_all[tr_m].DatasetID))     # train and validation loaded separately:
+tr_series = set(meta_all[tr_m].DatasetID)
+if a.unlabeled:
+    full = lb_meta(excl, unlabeled=True); tr_series |= set(full[full.Age.isna()].DatasetID)
+tr = load_lb_store(exclude_series=excl, include_series=tr_series, unlabeled=a.unlabeled)     # train and validation loaded separately:
 va = load_lb_store(exclude_series=excl, include_series=set(meta_all[va_m].DatasetID))     # peak memory = steady-state memory
 uni = tr.universe
 odd = np.arange(500) % 2 == 1
 pools = make_pools(parsed, uni) if a.full_pools else make_pools(parsed, uni, ext_mask=odd, pair_mask=odd)
 vocab = build_vocab(tr, parsed, pools); sets = task_sets(parsed, uni)
 print(f"train {tr.n} samples | val {va.n} samples ({va.meta.DatasetID.nunique()} series) | vocab {len(vocab)} | pools low/high/pair {len(pools.low)}/{len(pools.high)}/{len(pools.pair)}", flush=True)
-bs = {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24, "mask": 16}
+bs = {k: max(1, int(round(v * a.bs_mult))) for k, v in {"extremes": 32, "fixed": a.bs_fixed, "clock": 32, "pair": 24, "mask": 16}.items()}
 cfg = LBTrainConfig(tasks=tuple(a.tasks.split(",")), bs=bs, steps=a.steps, lr=a.lr, age_balance=a.age_balance, tail_shift=a.tail_shift, seed=a.seed, threads=a.threads, device=a.device, w_mask=a.w_mask, max_minutes=a.max_minutes)
 if a.model == "hier":
     from epimod.lb.epitraj import HierConfig
-    mcfg = HierConfig(d_model=a.d, local_layers=a.local_layers, global_layers=a.global_layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level)
+    mcfg = HierConfig(d_model=a.d, d_emb=a.d_emb, n_heads=a.heads, local_layers=a.local_layers, global_layers=a.global_layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level)
 else:
-    mcfg = SetConfig(d_model=a.d, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level, linear_route=a.linear)
+    mcfg = SetConfig(d_model=a.d, d_emb=a.d_emb, n_heads=a.heads, n_layers=a.layers, moe_experts=a.moe, moe_top_k=a.topk, moe_level=a.moe_level, linear_route=a.linear)
 if a.eval_only:
     ck = torch.load(out / "model.pt", map_location="cpu", weights_only=False)
     assert list(vocab.cpg_ids) == ck["vocab_ids"], "vocabulary differs from the trained model's (pools/flags changed?)"

@@ -69,7 +69,7 @@ class LBStore:
 
 
 def lb_meta(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
-            min_age: float = 0.0, max_age: float = 105.0, geo: bool = True) -> pd.DataFrame:
+            min_age: float = 0.0, max_age: float = 105.0, geo: bool = True, unlabeled: bool = False) -> pd.DataFrame:
     """Sample metadata of the usable ComputAge samples (QC'd, de-duplicated, LB series excluded)."""
     metas = []
     for split in ("train", "benchmark"):
@@ -79,9 +79,14 @@ def lb_meta(exclude_series: set[str] | None = None, include_series: set[str] | N
         g = geo_meta()
         if len(g):
             metas.append(g)
+    if unlabeled:                    # samples without an age label: usable for self-supervised objectives only (Age = NaN)
+        from ..data.geo import geo_unlabeled_meta
+        u = geo_unlabeled_meta()
+        if len(u):
+            metas.append(u)
     meta = pd.concat(metas)
     meta = meta[~meta.index.duplicated(keep="first")]
-    meta = meta[meta.Age.between(min_age, max_age) & ~meta.DatasetID.isin(set(exclude_series or ()))]
+    meta = meta[(meta.Age.between(min_age, max_age) | (meta.Age.isna() & unlabeled)) & ~meta.DatasetID.isin(set(exclude_series or ()))]
     if include_series is not None:
         meta = meta[meta.DatasetID.isin(set(include_series))]
     return meta
@@ -91,7 +96,7 @@ _ARRAYS = ("low_idx", "low_beta", "high_idx", "high_beta", "prof")
 
 
 def load_lb_store(exclude_series: set[str] | None = None, include_series: set[str] | None = None,
-                  min_age: float = 0.0, max_age: float = 105.0, cache: bool = True, geo: bool = True) -> LBStore:
+                  min_age: float = 0.0, max_age: float = 105.0, cache: bool = True, geo: bool = True, unlabeled: bool = False) -> LBStore:
     """Load profiles for the selected series only, so a train/validation split can be loaded as two
     stores without ever holding (or copying) the full matrix.
 
@@ -101,7 +106,7 @@ def load_lb_store(exclude_series: set[str] | None = None, include_series: set[st
     root = subdir("lb", "store_lite")                    # compact store: see lb/lite.py
     universe = load_lite_universe()
     vocab = pd.Index(load_probe_annotation().index)
-    meta = lb_meta(exclude_series, include_series, min_age, max_age, geo)
+    meta = lb_meta(exclude_series, include_series, min_age, max_age, geo, unlabeled)
     key = hashlib.md5(json.dumps([sorted(meta.index), len(universe), "lite-v1"]).encode()).hexdigest()[:16]
     cdir = subdir("lb", "cache") / key
     if cache and (cdir / "done").exists():
@@ -115,7 +120,7 @@ def load_lb_store(exclude_series: set[str] | None = None, include_series: set[st
     prof = np.empty((S, U), np.uint8)
     ids: list[str] = []
     pos = 0
-    for split in ("train", "benchmark", "geo"):
+    for split in ("train", "benchmark", "geo", "geo_unlabeled"):
         for f in sorted((root / split).glob("GSE*.npz")):
             if f.stem not in counts.index:
                 continue
