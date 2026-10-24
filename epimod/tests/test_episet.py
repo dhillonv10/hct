@@ -116,3 +116,13 @@ def test_sample_level_moe_routes_whole_samples_and_stays_invariant():
     assert torch.allclose(base, out, atol=1e-5) and torch.allclose(base, m(cpg[:, perm], beta[:, perm], role[:, perm], sex)[0], atol=1e-5)
     m.train(); mu, sig, dec = m(cpg, beta, role, sex); (mu.sum() + m.moe_aux()).backward()
     assert m.blocks[0].ffn.router.weight.grad is not None
+
+
+def test_sample_level_sparse_compute_matches_dense_computation():
+    torch.manual_seed(1)
+    ffn = MoEFFN(16, 32, n_experts=4, top_k=2, dropout=0.0, sample_level=True).eval()
+    x = torch.randn(5, 7, 16); pad = torch.zeros(5, 7, dtype=torch.bool); pad[1, 5:] = True
+    fast = ffn(x, pad)
+    ffn.sparse_compute = False
+    slow = ffn(x, pad)
+    assert torch.allclose(fast, slow, atol=1e-5)

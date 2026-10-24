@@ -49,6 +49,7 @@ class MoEFFN(nn.Module):
     def __init__(self, d: int, ff: int, n_experts: int, top_k: int, dropout: float, sample_level: bool = False):
         super().__init__()
         self.E, self.k, self.sample_level = n_experts, top_k, sample_level
+        self.sparse_compute = True
         self.router = nn.Linear(d, n_experts)
         self.w1 = nn.Parameter(torch.randn(n_experts, d, ff) * d**-0.5)
         self.b1 = nn.Parameter(torch.zeros(n_experts, ff))
@@ -67,9 +68,18 @@ class MoEFFN(nn.Module):
             probs = torch.softmax(self.router(x), -1)                               # [B,T,E]
         topv, topi = probs.topk(self.k, dim=-1)
         gates = torch.zeros_like(probs).scatter(-1, topi, topv / topv.sum(-1, keepdim=True))
-        h = torch.nn.functional.gelu(torch.einsum("btd,edf->btef", x, self.w1) + self.b1)
-        y = torch.einsum("btef,efd->bted", self.drop(h), self.w2) + self.b2
-        out = (gates.unsqueeze(-1) * y).sum(2)
+        if self.sample_level and self.sparse_compute:      # whole samples are routed: run each expert only on its samples
+            g = gates[:, 0, :]
+            out = torch.zeros_like(x)
+            for e in range(self.E):
+                idx = (g[:, e] > 0).nonzero(as_tuple=True)[0]
+                if idx.numel():
+                    y = self.drop(torch.nn.functional.gelu(x[idx] @ self.w1[e] + self.b1[e])) @ self.w2[e] + self.b2[e]
+                    out = out.index_add(0, idx, g[idx, e].view(-1, 1, 1) * y)
+        else:
+            h = torch.nn.functional.gelu(torch.einsum("btd,edf->btef", x, self.w1) + self.b1)
+            y = torch.einsum("btef,efd->bted", self.drop(h), self.w2) + self.b2
+            out = (gates.unsqueeze(-1) * y).sum(2)
         n = live.sum().clamp_min(1.0)
         frac = ((gates > 0).float() * live.unsqueeze(-1)).sum((0, 1)) / (n * self.k)
         mean_p = (probs * live.unsqueeze(-1)).sum((0, 1)) / n

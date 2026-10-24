@@ -32,4 +32,8 @@ if "clock" in tasks:
     b = eval_clock(parsed["LB-0195"], vocab, uni)
     out["LB-0195/pred"] = t_to_age(model.predict_all(b["cpg"], b["beta"], b["role"], b["sex"], b["clock"])[0])
 np.savez(sys.argv[2], **out)
+import json, time
+from pathlib import Path
+with open(Path(sys.argv[2]).parent / "predict_log.jsonl", "a") as f:        # every benchmark scoring is on record
+    f.write(json.dumps({"time": time.strftime("%F %T"), "model": sys.argv[1], "out": sys.argv[2], "keys": sorted(out)}) + "\n")
 print({k: v.shape for k, v in out.items()})
