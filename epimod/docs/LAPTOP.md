@@ -7,6 +7,8 @@ checks them on your machine in minutes. A multi-day run only starts if every pre
 
 ## 0. Offline path (recommended): use the data bundle instead of sections 1-2
 ```bash
+cat epimod_bundle.tar.gz.part-* > epimod_bundle.tar.gz       # the bundle is delivered in two parts
+shasum -a 256 epimod_bundle.tar.gz                           # must equal b7fa7c79a99107904d9eaba2f5c21ad516fc71c40279a3603c059fdd7ffc249b
 tar -xzf epimod_bundle.tar.gz && cd epimod_bundle           # -> data/, code.tar, MANIFEST.json  (~0.45 GB; ~1.2 GB unpacked)
 mkdir code && tar -xf code.tar -C code
 python3 -c "import platform; print(platform.machine())"      # must print arm64
