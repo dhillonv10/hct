@@ -5,7 +5,21 @@ It was developed in a Linux cloud container, where the whole pipeline (data, mod
 recovery) was tested on CPU. **The MPS-specific numerics could not be tested there**, so the run begins with a pre-flight that
 checks them on your machine in minutes. A multi-day run only starts if every pre-flight check passes.
 
-## 1. Setup (once)
+## 0. Offline path (recommended): use the data bundle instead of sections 1-2
+```bash
+tar -xzf epimod_bundle.tar.gz && cd epimod_bundle           # -> data/, code.tar, MANIFEST.json  (~0.45 GB; ~1.2 GB unpacked)
+mkdir code && tar -xf code.tar -C code
+python3 -c "import platform; print(platform.machine())"      # must print arm64
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ./code/epimod pytest                          # the ONLY step that needs the internet (once)
+python code/epimod/scripts/make_bundle.py verify .           # must print: ... ALL OK
+export EPIMOD_DATA=$PWD/data
+cd code/epimod && pytest -q && python scripts/train_mps.py --name base1 --preset base
+```
+The bundle holds the compact training data (ComputAge, public GEO series, the label-free GEO series, the twin cohort), the parsed
+benchmark prompts, sample metadata, the probe annotation and a code snapshot. Nothing is downloaded at run time.
+
+## 1. Setup (once; online path)
 ```bash
 git clone https://github.com/dhillonv10/hct && cd hct && git checkout claude/gifted-albattani-1hvuiq
 python3 -c "import platform; print(platform.machine())"      # must print arm64 (native Python, not Rosetta)
