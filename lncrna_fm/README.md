@@ -1,5 +1,34 @@
 # lncfm: a local-first lncRNA foundation-model toolkit
 
+**Start here for the benchmark: LncBench v2** (two layers, leakage-controlled, built to run on a Mac).
+
+```bash
+python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+export LNCFM_DATA=$HOME/lncfm_data LNCFM_RUNS=$HOME/lncfm_runs
+scripts/m4_run_all.sh check      # selfcheck (incl. MPS vs CPU parity) + speed on your machine
+scripts/m4_run_all.sh data       # public data: GENCODE, GTEx, ENCODE (fractionation + eCLIP), BeatAML / TCGA-LAML / TARGET
+scripts/m4_run_all.sh quick      # baselines + frozen RiNALMo on 800 genes/task, 400 nt
+scripts/m4_run_all.sh full       # everything, whole benchmark + locked test
+scripts/m4_run_all.sh ladder     # frozen / LoRA / top-k / full fine-tuning of RiNALMo
+scripts/m4_run_all.sh aml        # patient-level AML tasks with external validation
+```
+
+| layer | tasks | label source | what it asks |
+|---|---|---|---|
+| 1 molecular | `loc_reg/clf`, `tau_reg`, `testis_clf`, `brain_clf` | ENCODE fractionation, GTEx | where is it, in which tissue |
+| 1 molecular | `rbp_K562`, `rbp_HepG2` (multi-label) | ENCODE eCLIP IDR peaks | which RNA-binding proteins bind it (expression- and length-controlled) |
+| 1 sanity | `coding_clf` | GENCODE | easy tier only |
+| 2b AML, gene level | `aml_vs_normal_*`, `aml_npm1_reg` | TARGET marrow vs normal; BeatAML + TCGA-LAML | which lncRNAs are leukaemia / NPM1-associated |
+| 2a AML, patient level | `npm1`, `flt3_itd`, `eln_adverse`, `induction_cr`, `os` | BeatAML (dev) -> TCGA-LAML, TARGET (external) | does lncRNA expression carry genotype / risk / outcome |
+
+Protocol: dev = chromosome-group 5-fold CV; locked test = chr8/13/18/21 (scored only with `--final`); every metric is
+reported on all items and on the homology-pruned subset; sequence-free baselines (`expr_len`) and an untrained twin must
+be in every comparison; paired bootstrap for model-vs-model claims (`lncbench report`, `scripts/compare.py`).
+
+Everything below this line is the v1 toolkit (pretraining, Option B, TCGA solid tumours) and still works.
+
+---
+
 Everything here was written to run on a laptop (CPU / Apple MPS / CUDA, pure PyTorch, no custom kernels) and to be
 **benchmarked against honest baselines before you spend days training**. Read `PLAN.md` first: it has the reasoning,
 the measured pilot results, and what I could *not* test from the cloud sandbox I developed this in.

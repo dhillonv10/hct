@@ -66,6 +66,18 @@ def main():
         last = float(loss)
     print(f"[4] overfit loss {first:.3f} -> {last:.3f}")
     assert last < first
+    # LoRA wrapper: identical to the base layer at init, and only the adapters receive gradients
+    import torch.nn as nn
+    from .finetune import LoRALinear
+    base = nn.Linear(16, 8)
+    lora = LoRALinear(base, r=4, alpha=8, dropout=0.0)
+    xx = torch.randn(5, 16)
+    assert torch.allclose(lora(xx), base(xx), atol=1e-6), "LoRA must start exactly at the pretrained layer"
+    for p_ in base.parameters():
+        p_.requires_grad = False
+    lora(xx).sum().backward()
+    assert lora.A.grad is not None and lora.B.grad is not None and base.weight.grad is None
+    print("[4b] LoRA wrapper: exact at init; gradients reach only A and B")
     dev = pick_device("auto")
     if dev.type != "cpu":
         m.eval()
