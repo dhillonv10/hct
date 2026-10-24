@@ -3,9 +3,10 @@
   1. the device computes (a matmul is finite);
   2. forward + backward parity: for every task, the same weights and the same real batch give the same loss and the same
      gradients on the accelerator and on the CPU (catches unsupported / wrongly implemented ops);
-  3. a real mini-run on real data: validation must improve, an injected NaN must be skipped, the run must resume from its
+  3. overfitting one fixed batch: the loss must fall below 60% of its start;
+  4. a real mini-run on real data: validation must not diverge, an injected NaN must be skipped, the run must resume from its
      checkpoint, the exported model must reproduce the validation score on the CPU, and the CPU cross-check must agree;
-  4. speed and memory, so the length of the run can be planned."""
+  5. speed and memory, so the length of the run can be planned."""
 from __future__ import annotations
 
 import copy
@@ -69,6 +70,22 @@ def parity(T, dev: torch.device, kinds) -> list[tuple[str, bool, str]]:
     return out
 
 
+def overfit(T, lr: float, steps: int = 120):
+    """Train on ONE fixed batch per task (identical every step): the multi-task loss must fall sharply if gradients, optimizer and
+    device all work.  Independent of generalisation, so it is reliable within a couple of minutes."""
+    from torch import nn
+    model = T.model; model.eval()                                   # dropout off so the loss can fall smoothly
+    params = list(model.parameters()) + [T.log_tau]
+    opt = torch.optim.AdamW(params, lr=lr * 2, weight_decay=0.0)
+    losses = []
+    for _ in range(steps):
+        T.rng = np.random.RandomState(123)
+        loss = sum(T.step_loss(k)[0] for k in T.cfg.tasks)
+        opt.zero_grad(set_to_none=True); loss.backward(); nn.utils.clip_grad_norm_(params, 1.0); opt.step()
+        losses.append(float(loss.detach()))
+    return float(np.mean(losses[:3])), float(np.mean(losses[-3:])), losses
+
+
 def run(make_trainer, work: Path, lr: float, dev: torch.device, steps: int = 240, log=print) -> bool:
     """``make_trainer(run_dir, long_cfg)`` -> LongTrainer.  Returns True when every check passes."""
     results: list[tuple[str, bool, str]] = []
@@ -85,6 +102,12 @@ def run(make_trainer, work: Path, lr: float, dev: torch.device, steps: int = 240
     T = make_trainer(work / "parity", LongConfig(lr=lr))
     for name, ok, detail in parity(T, dev, T.cfg.tasks):
         rec(name, ok, detail)
+    # 2b --------------------------------------------------------------- can it learn at all on this device?
+    try:
+        t0 = time.time(); a0, a1, ls = overfit(T, lr); ok = math.isfinite(a1) and a1 < 0.6 * a0
+        rec("overfit one batch", ok, f"multi-task loss {a0:.3f} -> {a1:.3f} in {len(ls)} steps ({a1 / a0:.0%} of the start; need < 60%); {len(ls) / (time.time() - t0):.2f} steps/s")
+    except Exception as e:
+        rec("overfit one batch", False, f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}")
     del T; import gc; gc.collect()
     # 3 ---------------------------------------------------------------- mini run
     try:
@@ -100,7 +123,7 @@ def run(make_trainer, work: Path, lr: float, dev: torch.device, steps: int = 240
         h = res["history"]; scores = [r["val_score"] for r in h]
         rec("mini-run finite", len(h) >= 3 and all(s is not None and math.isfinite(s) for s in scores), f"val scores {scores}")
         gain = (scores[0] - scores[-1]) / scores[0] if scores and scores[0] else float("nan")
-        rec("mini-run learns", gain > 0.05, f"validation score improved {gain:.1%} over {res['step']} steps (need > 5%)")
+        rec("mini-run not diverging", scores[-1] <= scores[0] * 1.05, f"validation score changed {gain:+.1%} over {res['step']} steps (informational: the big drop usually comes later; must not get worse by > 5%)")
         rec("NaN guard", res["bad_steps"] >= 1 and res["step"] == steps, f"{res['bad_steps']} bad step(s) skipped, run reached step {res['step']}")
         cc = [l for l in logs if "[cpu-check]" in l]
         rel = float(cc[-1].split("rel diff ")[1].rstrip("%)")) / 100 if cc else float("nan")

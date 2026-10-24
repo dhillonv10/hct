@@ -32,7 +32,7 @@ python scripts/train_mps.py --name base1 --preset base       # ~3M parameters: h
 python scripts/train_mps.py --name large1 --preset large     # ~25M parameters: only if base looks healthy
 ```
 1. **Pre-flight** (~5-15 min, first start only): the GPU must reproduce the CPU's loss and gradients for every task on real
-   batches; a real mini-run must make validation improve by > 5%, skip an injected NaN, resume from its checkpoint, export a model
+   batches; overfitting one fixed batch must cut the loss below 60%; a real mini-run must not diverge, skip an injected NaN, resume from its checkpoint, export a model
    that scores the same on the CPU, and agree with a CPU recomputation of the validation score. It prints `[PASS]` / `[FAIL]` lines and the
    measured speed, from which you can plan the run length. On any `[FAIL]` nothing is started: send me the lines.
 2. **Training** under a supervisor: a crash restarts the worker from its last checkpoint (it gives up after 3 restarts without

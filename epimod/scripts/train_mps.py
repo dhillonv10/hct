@@ -6,7 +6,7 @@
     cat runs/run1/status.json                                        # progress at any time
 
 What happens: (1) a pre-flight on the real data - the GPU must reproduce the CPU's loss and gradients for every task, the
-mini-run must learn, skip an injected NaN, resume from its checkpoint and export a model that scores the same on the CPU;
+loss on one fixed batch must fall below 60%, the mini-run must not diverge, skip an injected NaN, resume from its checkpoint and export a model that scores the same on the CPU;
 (2) the training worker runs under a supervisor that restarts it from its last checkpoint after a crash (and gives up if it
 keeps crashing without progress); (3) training stops by itself when validation stops improving (LR halved up to 3 times).
 `caffeinate` keeps the Mac awake for the duration.  Output: runs/<name>/{model.pt (best), status.json, summary.json, train.log}."""
