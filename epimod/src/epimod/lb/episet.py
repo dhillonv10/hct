@@ -191,7 +191,7 @@ class EpiSet(nn.Module):
             sl = slice(i, i + batch_size)
             mu, sig, dec = self(cpg[sl], beta[sl], role[sl], sex[sl], None if clock is None else clock[sl])
             mus.append(mu); sigs.append(sig * self.sigma_scale); decs.append(dec)
-        return torch.cat(mus).double().cpu().numpy(), torch.cat(sigs).double().cpu().numpy(), torch.cat(decs).cpu().numpy()
+        return torch.cat(mus).cpu().double().numpy(), torch.cat(sigs).cpu().double().numpy(), torch.cat(decs).cpu().numpy()
 
     @torch.no_grad()
     def predict_age(self, cpg, beta, role, sex, clock=None, batch_size: int = 128):
@@ -201,5 +201,5 @@ class EpiSet(nn.Module):
             sl = slice(i, i + batch_size)
             mu, sig, _ = self(cpg[sl], beta[sl], role[sl], sex[sl], None if clock is None else clock[sl])
             out_mu.append(mu); out_sig.append(sig * self.sigma_scale)
-        mu, sig = torch.cat(out_mu).double().cpu().numpy(), torch.cat(out_sig).double().cpu().numpy()
+        mu, sig = torch.cat(out_mu).cpu().double().numpy(), torch.cat(out_sig).cpu().double().numpy()
         return t_to_age(mu), sig * dage_dt(mu), mu

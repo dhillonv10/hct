@@ -1,59 +1,71 @@
-# Running EpiTrajectory-L / EpiSet on your own machine
+# Training EpiTrajectory-L on a MacBook (Apple-silicon GPU / MPS only)
 
-Everything in this repository was developed in a cloud container (4 CPU cores, no GPU, 2-hour job cap, ephemeral disk). The
-code is device-aware (`--device auto|cpu|mps|cuda`), so a laptop GPU lets the same code run bigger models for much longer.
-The GPU paths (MPS / CUDA) are **untested** — run the smoke check below first.
+`scripts/train_mps.py` is the single entry point. It is MPS-only: it refuses to start without the Apple GPU.
+It was developed in a Linux cloud container, where the whole pipeline (data, model, trainer, safeguards, resume, crash
+recovery) was tested on CPU. **The MPS-specific numerics could not be tested there**, so the run begins with a pre-flight that
+checks them on your machine in minutes. A multi-day run only starts if every pre-flight check passes.
 
-## 1. Setup
+## 1. Setup (once)
 ```bash
 git clone https://github.com/dhillonv10/hct && cd hct && git checkout claude/gifted-albattani-1hvuiq
+python3 -c "import platform; print(platform.machine())"      # must print arm64 (native Python, not Rosetta)
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ./epimod pytest        # the default torch wheel includes MPS on Apple silicon and CUDA on Linux/Windows
-cd epimod && pytest -q                # 50+ tests, a minute on CPU
-export EPIMOD_DATA=$HOME/epimod_data  # ~20 GB free is enough
+pip install -e ./epimod pytest                               # torch >= 2.2 ships with MPS support
+cd epimod && pytest -q                                       # ~1 min; must be all green
+export EPIMOD_DATA=$HOME/epimod_data                         # ~20 GB free is enough
 ```
+Mac settings for a long run: keep it **plugged in**, lid **open** (a closed lid sleeps the machine even under `caffeinate` unless
+an external display is attached), and turn on *System Settings > Battery > Options > Prevent automatic sleeping when the display is off*.
 
-## 2. Build the data (resumable; run it again after any interruption)
+## 2. Build the data (resumable)
 ```bash
-python scripts/bootstrap.py --workers 4            # hours; ComputAge + GEO + label-free GEO + twin cohort (raw IDATs, ~10 GB)
-python scripts/bootstrap.py --only geo-unlabeled   # re-run one stage
+python scripts/bootstrap.py --workers 6
 ```
-The GEO ingestion is polite to NCBI (one request every 0.4 s for the listing). The kept data is a few GB; downloads are deleted.
-Read the `audit` output: GSM / series overlap with the benchmark prompts must be 0 and no LB-0190 profile may match.
+Downloads ComputAge Bench and the public GEO methylation series (keeping only a compact 9,098-CpG panel), the label-free GEO series
+for masked-reconstruction pretraining, and the twin cohort (raw IDATs, ~10 GB). Run it again after any interruption. The last stage
+is a leakage audit: GSM and series overlap with the benchmark prompts must both be 0. Leukaemia / AML / MDS / myeloma series are
+held out of every training set so disease analyses on such cohorts stay clean.
 
-## 3. Smoke check (20 steps, ~minutes) — do this before any long run
+## 3. Train
 ```bash
-python scripts/lb_run.py --model hier --name smoke --out runs --tasks extremes,fixed,clock,pair,mask \
-       --steps 20 --bs-fixed 8 --unlabeled --device auto --no-lb-eval
+python scripts/train_mps.py --name base1 --preset base       # ~3M parameters: hours; do this first
+python scripts/train_mps.py --name large1 --preset large     # ~25M parameters: only if base looks healthy
 ```
-If `--device auto` fails on MPS/CUDA, report the traceback; `--device cpu` always works.
+1. **Pre-flight** (~5-15 min, first start only): the GPU must reproduce the CPU's loss and gradients for every task on real
+   batches; a real mini-run must make validation improve by > 5%, skip an injected NaN, resume from its checkpoint, export a model
+   that scores the same on the CPU, and agree with a CPU recomputation of the validation score. It prints `[PASS]` / `[FAIL]` lines and the
+   measured speed, from which you can plan the run length. On any `[FAIL]` nothing is started: send me the lines.
+2. **Training** under a supervisor: a crash restarts the worker from its last checkpoint (it gives up after 3 restarts without
+   progress, or 30 in total). `caffeinate` keeps the Mac awake while it runs.
+3. **It stops by itself when validation stops improving.** Validation is on whole held-out series. The learning rate is held after a
+   warm-up; if the best validation score improves by less than 0.5% over 6 evaluations (6,000 steps) the LR is halved and the best
+   weights restored; after 3 such halvings the run is declared converged. There is no step budget and no fixed schedule, so it
+   runs exactly as long as it keeps improving. Slow, steady progress is not mistaken for a plateau.
 
-## 4. Pretraining presets (all resumable: rerun the same command and it continues from `runs/<name>/ckpt.pt`)
+Safeguards during the run: non-finite or spiking steps are skipped; a run of bad steps rolls back to the last good checkpoint with a
+halved LR; checkpoints are written atomically and one generation is kept; every 25 evaluations the validation score is recomputed
+on the CPU and compared (a mismatch above 10% stops the run); `status.json` is updated at every evaluation.
+
+## 4. Watch and control
 ```bash
-# base: what was run in the cloud (1.8M parameters)
-python scripts/lb_run.py --model hier --name hier_base --out runs --tasks extremes,fixed,clock,pair,mask \
-       --steps 3000 --bs-fixed 8 --age-balance 1.0 --unlabeled --device auto --no-lb-eval
-
-# scale-up for a GPU (~15-25M parameters; adjust --bs-mult to your memory)
-python scripts/lb_run.py --model hier --name hier_large --out runs --tasks extremes,fixed,clock,pair,mask \
-       --d 192 --heads 6 --d-emb 96 --local-layers 3 --global-layers 6 --steps 30000 --bs-mult 2 \
-       --bs-fixed 8 --age-balance 1.0 --unlabeled --device auto --no-lb-eval
-# keep a Mac awake:  caffeinate -i python scripts/lb_run.py ...
+cat runs/base1/status.json            # step, best score, lr, steps/s, bad steps, elapsed hours
+tail -f runs/base1/train.log
+touch runs/base1/STOP                 # clean stop at the next step; rerun the same command to resume later
 ```
-Validation is on whole held-out series (never samples); the best checkpoint by validation score is what is saved to `model.pt`.
+The best model so far is always in `runs/base1/model.pt`. When it ends, `runs/base1/summary.json` says why
+(`converged`, `stop-file`, `max-hours`, or `unstable` which needs a human).
 
-## 5. Evaluation (needs the baselines once)
+## 5. Evaluate (score the benchmark ONCE per final model)
 ```bash
-python scripts/lb_baselines.py preds/baselines.json; python scripts/lb_baselines_ext.py preds/baselines_ext.json
-python scripts/lb_predict.py runs/hier_large/model.pt preds/hier_large.npz          # scores the benchmark prompts ONCE per model
-python scripts/lb_report.py report.md "simple baselines=preds/baselines_all.npz" "EpiTrajectory-L=preds/hier_large.npz" --ref "simple baselines"
-python scripts/hier_impute_eval.py runs/hier_large/model.pt impute.json                # methylome completion vs mean / ridge
-python scripts/traj_train.py runs/hier_large/model.pt runs/hier_large/traj --epochs 8  # dynamics on the twin cohort
-python scripts/traj_train.py runs/hier_large/model.pt runs/hier_large/traj --epochs 8 --perm   # negative control
-python scripts/disease_signal.py --beta your_betas.csv --meta your_meta.csv --age-col age --group-col status --control Control   # AML etc.
+python scripts/lb_baselines.py preds/baselines.json && python scripts/lb_baselines_ext.py preds/baselines_ext.json
+python scripts/lb_predict.py runs/large1/model.pt preds/large1.npz
+python scripts/hier_impute_eval.py runs/large1/model.pt impute.json                     # methylome completion vs mean / ridge
+python scripts/traj_train.py runs/large1/model.pt runs/large1/traj --epochs 8             # dynamics on the twin cohort
+python scripts/traj_train.py runs/large1/model.pt runs/large1/traj --epochs 8 --perm      # negative control
+python scripts/disease_signal.py --beta your_betas.csv --meta your_meta.csv --age-col age --group-col status --control Control
 ```
-(`preds/baselines_all.npz` is the merge of the two baseline `*_preds.npz` files; see `results/LB_RESULTS.md` §10.)
+(`lb_report.py` builds the comparison table; see `results/LB_RESULTS.md` section 10 for how the baseline files are merged.)
 
-## 6. Rules of the evaluation (keep them if you change things)
-Choose models on the validation series only; score the benchmark once per final model; report paired bootstrap intervals; the
-leukaemia / AML / MDS series are held out of training so disease analyses on such cohorts stay clean.
+## 6. Rules to keep
+Choose models on the validation series only; score the benchmark once per final model; report paired bootstrap intervals; do not
+tune on the held-out AML cohorts.
