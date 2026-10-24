@@ -29,7 +29,7 @@ def work(link):
     url = link.replace("ftp://ftp.ebi.ac.uk/", "https://ftp.ebi.ac.uk/")
     z = download(url, tmp / name)
     t0 = time.time(); b = zip_betas(z, tab)
-    np.savez(out, names=np.array(list(b)), X=np.stack(list(b.values())))
+    np.savez(out, names=np.array(list(b), dtype=str), X=np.stack(list(b.values())) if b else np.zeros((0, len(tab.cpg)), np.float32))
     Path(z).unlink(missing_ok=True)
     return name, f"{len(b)} arrays in {time.time() - t0:.0f}s"
 
@@ -40,7 +40,9 @@ with ThreadPoolExecutor(3) as ex:
 
 names, X = [], []
 for f in sorted(parts.glob("*.npz")):
-    z = np.load(f); names += z["names"].tolist(); X.append(z["X"])
+    z = np.load(f)
+    if len(z["names"]):
+        names += z["names"].tolist(); X.append(z["X"])
 X = np.vstack(X); sid = pd.Series(range(len(names)), index=names)
 g = sdrf[sdrf["Array Data File"].astype(str).str.endswith("_Grn.idat")].copy()
 g["sample_id"] = g["Array Data File"].str.replace("_Grn.idat", "", regex=False)

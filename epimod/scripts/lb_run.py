@@ -75,7 +75,8 @@ else:
     tr_ = Trainer(tr, va, vocab, sets, pools, mcfg, cfg, log=lambda s: print(s, flush=True), ckpt_path=out / "ckpt.pt")
     t0 = time.time(); res = tr_.fit(); res["train_sec"] = round(time.time() - t0)
     if "stopped_at" in res:
-        print(f"segment finished at step {res['stopped_at']}; rerun the same command to resume", flush=True); raise SystemExit(0)
+        torch.save({"state": tr_.model.state_dict(), "cfg": asdict(tr_.model.cfg), "vocab_ids": list(vocab.cpg_ids), "args": vars(a)}, out / "model_partial.pt")
+        print(f"segment finished at step {res['stopped_at']} (EMA weights saved to model_partial.pt); rerun the same command to resume", flush=True); raise SystemExit(0)
     model = tr_.model
     print(f"params: {sum(p.numel() for p in model.parameters()):,} | best val score {res['best_val_score']:.4f}", flush=True)
     torch.save({"state": model.state_dict(), "cfg": asdict(model.cfg), "vocab_ids": list(vocab.cpg_ids), "args": vars(a)}, out / "model.pt")

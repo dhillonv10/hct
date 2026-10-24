@@ -10,9 +10,16 @@ from epimod.paths import subdir
 
 ck = torch.load(sys.argv[1], map_location="cpu", weights_only=False)
 parsed = load_parsed()
-uni = pd.Index(pd.read_parquet(subdir("lb") / "universe.parquet")["cpg"].values)
+from epimod.lb.lite import load_lite_universe
+uni = load_lite_universe()          # model vocabularies are subsets of the compact universe (all benchmark-prompt CpGs)
 ids = pd.Index(ck["vocab_ids"]); u2m = np.full(len(uni), -1, np.int64); pos = uni.get_indexer(ids); u2m[pos[pos >= 0]] = np.flatnonzero(pos >= 0)
-model = EpiSet(SetConfig(**ck["cfg"])); model.load_state_dict(ck["state"]); model.eval()
+if ck["args"].get("model") == "hier":
+    from epimod.data.annotation import load_probe_annotation
+    from epimod.lb.epitraj import EpiHier, HierConfig, block_assignment
+    hc = HierConfig(**ck["cfg"]); model = EpiHier(hc, block_assignment(ids, load_probe_annotation(), hc.block_size))
+else:
+    model = EpiSet(SetConfig(**ck["cfg"]))
+model.load_state_dict(ck["state"]); model.eval()
 vocab = Vocab(u2m, ids, model.cpg_mean[:-1].numpy(), model.cpg_std[:-1].numpy())
 tasks = set(ck["args"]["tasks"].split(","))
 out = {}
