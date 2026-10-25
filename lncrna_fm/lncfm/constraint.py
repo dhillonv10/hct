@@ -91,6 +91,13 @@ def build_gene_rows(row, tx_exons, scorer):
     lo = V_wt_logodds(scorer, seq)                                   # (L, 4) log p(base) per position (unmasked)
     rows, refmis = [], 0
     ba = {c: i for i, c in enumerate(BASES)}
+    bounds, cum = [], 0                                           # transcript offsets of exon-exon junctions
+    for st, en in sorted(ex, reverse=(strand == "-")):
+        cum += en - st + 1
+        bounds.append(cum)
+    bounds = np.array(bounds[:-1]) if len(bounds) > 1 else np.array([])
+    isgc = np.array([c in "GC" for c in seq], float)
+    gc25 = np.convolve(isgc, np.ones(51), "same") / np.convolve(np.ones(L), np.ones(51), "same")
     for off in range(1, L - 1):
         ref = seq[off]
         if ref not in ba:
@@ -104,8 +111,10 @@ def build_gene_rows(row, tx_exons, scorer):
             if hit is not None and hit[1] != gref.replace("U", "T"):
                 refmis += 1
                 hit = None
+            dj = float(np.abs(bounds - off).min()) if len(bounds) else 999.0
             rows.append((row.gene_id, off, ctx_class(seq[off - 1], ref, seq[off + 1], alt), float(lo[off, ba[ref]] - lo[off, ba[alt]]),
-                         int(hit is not None), hit[0] if hit else 0.0))
+                         int(hit is not None), hit[0] if hit else 0.0, float(gc25[off]), np.log1p(min(dj, 50.0)), off / L,
+                         float(min(off, L - 1 - off) < 25)))
     return rows, refmis
 
 
@@ -128,10 +137,14 @@ def V_wt_logodds(scorer, seq, win=1000, stride=500):
     return out
 
 
-def score_test(D, shuffle_seed=None):
-    """Context model + per-gene calibration, then the cluster-robust score test for the damage score. D: gene, ctx, dmg, y."""
+def score_test(D, shuffle_seed=None, adjust=(), score_col="dmg"):
+    """Context model (+ optional numeric covariates) + per-gene calibration, then the cluster-robust score test for `score_col`."""
     classes = {c: i for i, c in enumerate(sorted(D.ctx.unique()))}
     X = sp.csr_matrix((np.ones(len(D)), (np.arange(len(D)), D.ctx.map(classes).values)), shape=(len(D), len(classes)))
+    if adjust:
+        Z = D[list(adjust)].values.astype(float)
+        Z = (Z - Z.mean(0)) / (Z.std(0) + 1e-9)
+        X = sp.hstack([X, sp.csr_matrix(np.hstack([Z, Z ** 2]))]).tocsr()
     y = D.y.values.astype(float)
     m = LogisticRegression(C=100.0, max_iter=500).fit(X, y)
     eta = X @ m.coef_[0] + m.intercept_[0]
@@ -145,7 +158,7 @@ def score_test(D, shuffle_seed=None):
                 break
             d -= grad / hess
         p[ix] = 1 / (1 + np.exp(-(eta[ix] + d)))
-    s = D.dmg.values.copy()
+    s = D[score_col].values.astype(float).copy()
     if shuffle_seed is not None:
         rng = np.random.default_rng(shuffle_seed)
         for g, ix in D.groupby("gene").indices.items():
@@ -189,13 +202,20 @@ def main(argv=None):
             rr, mm = build_gene_rows(r, tx_exons, sc)
             rows += rr
             mis += mm
-        D = pd.DataFrame(rows, columns=["gene", "off", "ctx", "dmg", "y", "af"])
+        D = pd.DataFrame(rows, columns=["gene", "off", "ctx", "dmg", "y", "af", "gc25", "djunc", "relpos", "tx_end"])
         P(f"[{V.model_tag(m)}] {len(D)} possible SNVs; {int(D.y.sum())} observed in gnomAD ({100*D.y.mean():.1f}%); "
           f"reference-base disagreements with gnomAD: {mis}")
         beta, se, oe, p, ng = score_test(D)
         P(f"    damage score (per +1 SD within gene): beta = {beta:+.3f} (se {se:.3f}, z = {beta/se:+.2f}, {ng} genes)  "
           f"odds ratio of being observed = {np.exp(beta):.3f} [{np.exp(beta-1.96*se):.3f},{np.exp(beta+1.96*se):.3f}]")
         P("    observed / expected by within-gene damage decile (1 = least damaging ... 10 = most): " + " ".join(f"{x:.2f}" for x in oe))
+        adj = ("gc25", "djunc", "relpos", "tx_end")
+        b3, s3, oe3, _, _ = score_test(D, adjust=adj)
+        P(f"    ADJUSTED for local GC, distance to exon junction, relative position and transcript ends: beta = {b3:+.3f} (se {s3:.3f}, z = {b3/s3:+.2f}); "
+          f"O/E deciles " + " ".join(f"{x:.2f}" for x in oe3))
+        P("    each covariate used alone as the 'damage score' (to see what the language model could be mimicking): " +
+          "; ".join(f"{c}: beta {score_test(D, score_col=c)[0]:+.3f} (z {score_test(D, score_col=c)[0]/score_test(D, score_col=c)[1]:+.1f})"
+                    for c in ("gc25", "djunc", "relpos")))
         null = []
         for k in range(3):
             b_, s_, _, _, _ = score_test(D, shuffle_seed=k)

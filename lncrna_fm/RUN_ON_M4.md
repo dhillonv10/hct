@@ -23,6 +23,8 @@ export LNCFM_DATA=$HOME/lncfm_data LNCFM_RUNS=$HOME/lncfm_runs      # put these 
 | `scripts/m4_run_all.sh aml` | patient-level AML tasks, external validation | < 1 h |
 | `scripts/m4_run_all.sh genotype` | 14-gene AML genotype panel | minutes |
 | `scripts/m4_run_all.sh peak` | **peak-level RBP binding in lncRNAs** (the formulation the RNA literature uses; see `BENCHMARK_CATALOG.md`): K562 + HepG2, two negative types, k-mer / CNN / RiNALMo / RNA-FM, locked test | 1-2 h |
+| `scripts/m4_run_all.sh audit` | audit of the variant panel (permutation test, influence, substitution-class control, rare-variant background) | 30-60 min |
+| `scripts/m4_run_all.sh constraint` | population-constraint test, small-ncRNA positive control then 300 lncRNAs | 1-2 h (gnomAD queries) |
 | `scripts/m4_run_all.sh controls` | harness controls with RiNALMo (planted motif, shuffled labels, length leak) | minutes |
 | `scripts/m4_run_all.sh varscore` | **ncRNA variant-effect scoring** (ClinVar + gnomAD): RiNALMo-micro / mega / RNA-FM, RNA-structure change, CADD, within-gene AUROC, saves `combiner_micro.json` | 30-90 min |
 | `scripts/m4_run_all.sh cpt` | **the long job**: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs. Resumable: if it stops, run the same command again. `CPT_STEPS=40000 scripts/m4_run_all.sh cpt` for longer | hours to days |
@@ -64,3 +66,9 @@ Result JSON/text files land in `$LNCFM_RUNS/v2`. Send me that folder (without `e
 * The locked test set (chr8/13/18/21) is only scored with `--final`; do not tune on it.
 * RiNALMo / RNA-FM weights download from Hugging Face on first use (AGPL-3.0).
 * Not tested in the sandbox: the MPS path, the full ladder, and the full-size data. `check` tells you quickly if MPS is sane.
+
+## Localization against literature labels (optional, needs a download from you)
+`lncfm/locext.py` scores literature-curated localization labels (RNALocate) and the output of a published predictor on our split.
+The RNALocate site did not answer from my sandbox, so download the human table in a browser and run:
+`python -m lncfm.locext --labels RNALocate_human.tsv --id-col "<RNA symbol column>" --loc-col "<localization column>" --species-col "<species column>" --providers kmer rinalmo-micro --predictions tool_output.tsv`
+(it was tested only on a synthetic file). Its first output, the agreement between our ENCODE-derived label and the literature label, tells you whether the localization benchmark label is measuring what we think.

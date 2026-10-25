@@ -1,6 +1,6 @@
 # lncfm: a local-first lncRNA foundation-model toolkit
 
-**Read `BENCHMARK_CATALOG.md` first: which RNA benchmark tasks exist, how each translates to lncRNA, which of ours to trust.**
+**Read `TASK_DESIGN.md` (why each task is defensible) and `BENCHMARK_CATALOG.md` (which RNA tasks exist) first: which RNA benchmark tasks exist, how each translates to lncRNA, which of ours to trust.**
 
 **The benchmark: LncBench v2** (two layers, leakage-controlled, built to run on a Mac).
 
@@ -18,6 +18,8 @@ scripts/m4_run_all.sh sweep      # frozen-feature sweep: layers x pooling x tili
 scripts/m4_run_all.sh fms        # more foundation models: RNA-FM, RiNALMo-mega
 scripts/m4_run_all.sh retrieval  # human->mouse positional-ortholog retrieval
 scripts/m4_run_all.sh peak       # peak-level RBP binding in lncRNAs (101-nt windows, two negative types, CNN + language models)
+scripts/m4_run_all.sh audit      # audit of the ncRNA variant panel (what the headline number really measures)
+scripts/m4_run_all.sh constraint # population-constraint test on lncRNAs (+ positive-control small ncRNAs)
 scripts/m4_run_all.sh controls   # planted-signal / shuffled-label controls through the real pipeline
 scripts/m4_run_all.sh varscore   # ncRNA variant-effect scoring (ClinVar + gnomAD): RiNALMo / RNA-FM / RNA structure / CADD
 scripts/m4_run_all.sh cpt        # LONG + resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs
@@ -63,6 +65,9 @@ lncfm/
   cpt.py          "Option B": continual pretraining of an existing masked-LM on lncRNA
   speedtest.py    measure YOUR machine's throughput and project wall-clock; counts real FLOPs/nt
   variants.py, variant_eval.py   v1 within-gene ClinVar scoring of LncFM checkpoints (superseded by the three files below)
+  constraint.py   population-constraint test: does predicted damage track absence from gnomAD? (works for every lncRNA)
+  varaudit.py     audit of the ncRNA variant panel
+  locext.py       external localization labels + a published predictor's output, scored on our split (needs your download)
   controls.py     harness controls: planted motif must be found, shuffled labels must give 0.5, length-only label caught by covariates
   rbppeak.py      peak-level RBP binding in lncRNAs with within-transcript and other-RBP negatives (see BENCHMARK_CATALOG.md)
   ncvar.py        ClinVar SNVs -> ncRNA transcript coordinates (strand-aware, coding-gene and antisense filters), labelled sets

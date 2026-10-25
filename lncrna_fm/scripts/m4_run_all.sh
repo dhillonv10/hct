@@ -13,6 +13,8 @@
 #   scripts/m4_run_all.sh retrieval    # human->mouse positional-ortholog retrieval
 #   scripts/m4_run_all.sh varscore     # ncRNA variant-effect scoring: ClinVar + gnomAD, RiNALMo/RNA-FM/structure/CADD, within-gene AUROC
 #   scripts/m4_run_all.sh peak         # peak-level RBP binding in lncRNAs (the literature's formulation), K562 + HepG2, two negative types
+#   scripts/m4_run_all.sh audit        # audit of the ncRNA variant panel: permutation, influence, substitution class, rare-variant background
+#   scripts/m4_run_all.sh constraint   # population-constraint test: positive-control ncRNAs, then 300 lncRNAs, two models
 #   scripts/m4_run_all.sh controls     # harness controls with RiNALMo as well (does mean-pooling keep a planted motif? does it leak length?)
 #   scripts/m4_run_all.sh cpt          # LONG, resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs (CPT_STEPS=20000)
 #   scripts/m4_run_all.sh cpt_eval     # does the CPT model beat the frozen one?  variant scoring + RBP/localization probes
@@ -75,6 +77,12 @@ case "$stage" in
     done; done ;;
   controls)
     python -m lncfm.controls --providers kmer expr_len rinalmo-micro --n 600 --trunc 400 ;;
+  audit)
+    python -m lncfm.varaudit --bg common --models rinalmo-micro rnafm --out "$OUT/audit_common.txt"
+    python -m lncfm.varaudit --bg any    --models rinalmo-micro rnafm --out "$OUT/audit_any.txt" ;;     # needs ~2.4k extra scorings + CADD calls
+  constraint)
+    python -m lncfm.constraint --set core   --models rinalmo-micro rnafm --out "$OUT/constraint_core.txt"
+    python -m lncfm.constraint --set lncrna --n 300 --models rinalmo-micro rnafm --out "$OUT/constraint_lncrna.txt" ;;
   varscore)
     python -m lncfm.gnomad                                 # builds + prints the evaluation table (needs internet: gnomAD API)
     python -m lncfm.varscore eval --models rinalmo-micro --combine \
