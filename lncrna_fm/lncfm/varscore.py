@@ -560,6 +560,17 @@ def cmd_check(a):
     bad = sum(r.seq[r.offset] != r.ref_t.replace("T", "U") for r in d.itertuples())
     print(f"[4] reference base disagreements in {len(d)} sampled variants: {bad}")
     assert bad == 0
+    # offset <-> genomic position round trip on both strands, multi-exon transcripts included
+    tx_exons, tx_meta = ncvar.load_annotation()
+    rng = np.random.default_rng(0)
+    n = 0
+    for name in ("RMRP", "RNU4-2", "TERC", "MT-TL1", "MALAT1", "NEAT1"):
+        for t in [t for t, m in tx_meta.items() if m["gene_name"] == name][:2]:
+            ex, st = tx_exons[t], tx_meta[t]["strand"]
+            for off in rng.choice(ncvar.spliced_len(ex), min(40, ncvar.spliced_len(ex)), replace=False):
+                assert ncvar.tx_offset(ex, st, genomic_of_offset(ex, st, int(off))) == off
+                n += 1
+    print(f"[5] offset <-> genomic round trip OK on {n} positions (+ and - strand)")
     print("varscore check OK")
 
 

@@ -23,7 +23,7 @@ Everything below was measured on a 4-core CPU sandbox, so these are *pilot-scale
    localization (Δρ +0.10), testis-vs-rest and coding-vs-lncRNA at matched input (first 400 nt, n=800). Continual pretraining is implemented and smoke-tested but **not run at scale**.
    Evo-1 never saw a eukaryote; Evo 2 needs an NVIDIA GPU (1B also Hopper/FP8); Caduceus needs a port off `mamba_ssm`.
 4. **Negatives that matter.** (a) Ortholog retrieval: nothing learned beats the alignment-free shared-10-mer baseline (300 queries vs a 3,000-gene mouse pool: hit@10 0.375 on the 56 named pairs vs 0.21 for the best learned model; at full scale, 36,103 genes, shared 10-mers still give 0.41).
-   (b) Zero-shot ClinVar variant scoring is at chance (within-gene AUROC 0.55, CI includes 0.5), and ClinVar cannot support a lncRNA-wide variant benchmark at all (§6).
+   (b) Zero-shot ClinVar variant scoring *with my 0.89M pilot* is at chance (within-gene AUROC 0.55, CI includes 0.5), and ClinVar cannot support a lncRNA-wide variant benchmark at all (§6). **Update, §12:** with frozen RiNALMo-micro the same kind of score reaches 0.72 [0.61,0.83] within-gene on 13 small-ncRNA genes (mito tRNAs 0.84), and 0.84 [0.79,0.89] on the 7 nuclear genes when combined with CADD; still no usable ground truth for lncRNAs (only TERC).
    (c) Tying a patient model to lncRNA *sequence embeddings* gives no survival benefit, even with 60 training patients or RiNALMo embeddings.
 5. **The clinical hook that works today is expression, not sequence.** lncRNA expression alone predicts TCGA survival about as well as mRNA
    (C-index: LGG 0.84 / KIRC 0.69-0.71 / LUAD 0.60-0.62) and adds +0.02 (LUAD) to +0.03 (KIRC) over age + stage; those gains are the size of the fold-to-fold standard error (~0.015) and were not tested for significance (§6).
@@ -530,3 +530,67 @@ Release hygiene (must be decided before training, not after):
 - Pretraining excludes human chr8/13/18/21 (locked test) and chr9/16/22 (validation) by default. A released model keeps those exclusions and says so; otherwise the benchmark can no longer be used on it.
 - Model card with: data release pins (GENCODE v50, M39), exclusions, license, the exact benchmark table with CIs, and the homology caveat (a held-out chromosome is not a homology-held-out gene; the `leak` flag and pruned scope exist for this).
 - Maintenance: Hugging Face-compatible weights plus the `multimolecule`-style loading path, tests on CPU/MPS, and a pinned benchmark version.
+
+---
+
+## 12. Variant-effect scoring in ncRNA genes
+
+Question: can a sequence model rank which single-nucleotide variants in a non-coding RNA gene are pathogenic? This replaces the v1 attempt (§6, pilot model, AUROC 0.55 on 8 genes). Code: `lncfm/ncvar.py` (data), `gnomad.py` (extra benign set), `varscore.py` (scorers, evaluation, VCF scorer, saturation map). Results: `results/v4/`.
+
+### 12.1 The data, and what is wrong with "ClinVar lncRNA variants"
+ClinVar (file dated 2026-10-19) has 1,537,469 SNVs classed pathogenic / likely pathogenic (P/LP) or benign / likely benign (B/LB). Keeping only those that fall in exons of a non-coding gene, that ClinVar attributes to *that* gene, and that carry no coding consequence (missense, nonsense, splice site, ...) leaves **4,678 SNV-gene pairs: 220 P/LP and 4,458 B/LB in 583 genes**:
+
+| gene type | SNVs | P/LP | comment |
+|---|---|---|---|
+| lncRNA | 3,670 | 31 | **30 of the 31 are TERC**; 17 more P/LP records were dropped as belonging to an overlapping coding gene (see below) |
+| Mt_tRNA | 363 | 52 | the richest source: 22 mitochondrial tRNA genes |
+| snRNA | 120 | 81 | RNU4ATAC, RNU4-2, RNU2-2, RNU12, RNU7-1 |
+| ribozyme | 38 | 29 | RMRP |
+| snoRNA | 52 | 15 | SNORD118 |
+| miRNA / Mt_rRNA | 365 / 70 | 9 / 3 | too few per gene |
+
+Three things that matter for any claim:
+1. **There is essentially no lncRNA ground truth.** TERC (30 P/LP, 2 B/LB) is the only lncRNA with a real disease burden, and with 2 benign variants it cannot support a within-gene test (it enters only with the "any gnomAD-observed variant" background, which was not scored here). Before the attribution filter there were 48 lncRNA P/LP records; 17 of them belong to the neighbouring coding gene (LIX1L-AS1 is RBM8A / TAR syndrome, HNRNPK-AS1 is HNRNPK / Au-Kline, DSP-AS1, SCN1A-AS1, ...). Everything below is therefore about **small structured ncRNAs (snRNA, ribozyme, snoRNA, mitochondrial tRNA), not lncRNAs**, and nothing here shows the score works on lncRNAs.
+2. **Why the set is larger and cleaner than v1's.** v1 scored a hand-picked list of 8 genes, which could not include the 22 mitochondrial tRNA genes (the largest source; ClinVar names the contig `MT`, GENCODE `chrM`). While building the new mapping, two traps appeared and were fixed: excluding everything within 20 bp of a protein-coding exon removed RNU2-2 (it sits inside the 5' UTR exon of WDR74), so ClinVar's own molecular-consequence field is used instead; and TERC variants were being assigned to an antisense lncRNA on the opposite strand at the same locus, so ClinVar's gene attribution is now required. The final table checks the reference base of every variant against the transcript (0 mismatches in 4,678), and the transcript-offset mapping is tested to invert the genomic one on both strands (`varscore check`).
+3. **Benign examples are scarce**, so common population variants are added as presumed benign: gnomAD v4 (nuclear) or v3.1 (mitochondrial) variants with allele frequency >= 1e-4 that ClinVar has not classified (279 variants). Every analysis is repeated with ClinVar-only benign variants and with a stricter frequency (1e-3).
+
+One rule was added after looking: for lncRNA genes only, a pathogenic record that ClinVar also attributes to a protein-coding gene is dropped unless the disease name mentions the lncRNA (17 records; removes LIX1L-AS1 and HNRNPK-AS1 from the panel). A first version applied to every gene type wrongly removed RNU4-2 and most of SNORD118, whose disease names do not contain the gene symbol, so it was restricted. Effect on the headline: 0.712 [0.606,0.818] on 15 genes before, 0.721 [0.611,0.833] on 13 genes after (`results/v4/first_run_before_lncrna_rule_15genes.txt`).
+
+### 12.2 Evaluation (fixed before the numbers below were seen, apart from the rule above)
+Within-gene AUROC: for each gene with >= 3 pathogenic and >= 3 benign variants, how well does the score separate them inside that gene; mean over genes weighted by min(n_path, n_benign). Pooled AUROC is not used because gene identity alone separates the classes. 95% CIs resample genes and then variants within gene. **Panel: 13 genes, 585 variants (158 P/LP): 7 nuclear genes (RNU2-2, SNORD118, RNU4ATAC, RNU12, RNU4-2, RMRP, RNU7-1) and 6 mitochondrial tRNA genes (MT-TK, -TL1, -TW, -TS1, -TV, -TN).** All scores are oriented "higher = more damaging" and never flipped afterwards. Primary score: RiNALMo-micro masked log-odds (log p(ref) - log p(alt) with the variant position masked), frozen, zero-shot. Everything else is a comparison or an exploratory add-on.
+
+### 12.3 Results (`results/v4/final_main.txt`)
+Within-gene AUROC [95% CI]. Benign = ClinVar B/LB + gnomAD common.
+
+| score | all 13 genes | 7 nuclear genes | 6 mito tRNA genes |
+|---|---|---|---|
+| **RiNALMo-micro, masked log-odds (primary)** | **0.721** [0.611,0.833] | 0.687 [0.565,0.805] | **0.841** [0.668,0.946] |
+| same, position unmasked | 0.707 | 0.674 | 0.824 |
+| embedding distance (+-8 nt) | 0.571 | 0.573 | 0.565 |
+| ViennaRNA change in ensemble free energy | 0.523 | 0.470 | 0.711 |
+| transversion vs transition (no model) | 0.587 [0.505,0.669] | 0.629 [0.540,0.715] | 0.438 |
+| CADD v1.7 (public API; nuclear only) | n/a | 0.684 [0.554,0.810] | n/a |
+| combiner: LM + structure + baselines | 0.748 [0.662,0.824] | 0.739 [0.643,0.827] | 0.777 |
+| **combiner + CADD** (leave-one-gene-out) | **0.826** [0.768,0.876] | **0.843** [0.792,0.892] | 0.765 [0.634,0.885] |
+
+Robustness of the primary score to how the benign set is built (all genes; nuclear in brackets): common gnomAD AF >= 1e-4 **0.721** (0.687); AF >= 1e-3 0.757 (0.721); ClinVar B/LB only, 12 genes, 0.738 (0.675); ClinVar >= 1 star only 0.733 (0.700). CADD on the nuclear genes in the same four designs: 0.684, 0.779, 0.825, 0.688.
+
+Per gene (primary LM score / CADD / transversion): RNU4-2 **0.885** / 0.571 / 0.615; RNU2-2 **0.837** / 0.520 / 0.717; SNORD118 0.644 / 0.726 / 0.737; RNU12 0.658 / 0.413 / 0.652; RNU4ATAC 0.590 / **0.748** / 0.627; RNU7-1 0.393 / **0.880** / 0.483; RMRP 0.579 / **0.906** / 0.495; mitochondrial: MT-TL1 **0.972**, MT-TN 0.944, MT-TS1 0.843, MT-TV 0.795, MT-TW 0.650, MT-TK 0.648 (no CADD, transversion 0.39-0.63).
+
+### 12.4 Reading it honestly
+- **The signal is real but concentrated, and small-sample.** The zero-shot score is clearly above the no-model baselines only in the mitochondrial tRNAs (0.84 vs 0.44 for transversion, paired CI excludes 0). In the 7 nuclear genes it is 0.69, which is statistically indistinguishable from CADD (0.68) and from the substitution-type baseline (0.63). The error bars are +-0.12 because there are only 7 nuclear and 6 mitochondrial genes, and 6 of the 13 genes have <= 5 pathogenic variants.
+- **The language model and CADD fail on different genes.** CADD wins RMRP (0.91 vs 0.58), RNU7-1 (0.88 vs 0.39) and RNU4ATAC; the language model wins RNU4-2 (0.89 vs 0.57) and RNU2-2 (0.84 vs 0.52). Combining them gives 0.84 on the nuclear genes, +0.156 [+0.047,+0.272] over the language model alone. The combiner is evaluated leave-one-gene-out, so it is a genuine held-out-gene prediction. But the decision to add CADD to it came after an exploratory comparison of seven feature sets on these same 7 genes (the reported model is the all-features one, not the best of the seven: `LM + CADD + transversion` scored 0.831 against 0.828), and 7 genes is a small basis. Treat 0.84 as encouraging, not established.
+- **The combiner hurts the mitochondrial genes** (0.77 vs 0.84 for the raw LM score): its weights are driven by the nuclear genes. For chrM use the raw masked-LM score.
+- **RiNALMo has probably seen these genes.** It was pretrained on RNAcentral / Rfam-style ncRNA sequence, which contains snRNAs, RMRP and mitochondrial tRNAs and their relatives. The signal may be "this position is conserved across the family" learned from those sequences. That is a legitimate source of signal, but it is why nothing here transfers automatically to a lncRNA, which has no family alignment to remember.
+- **Structure and embedding-distance scores are null in the nuclear genes** (ViennaRNA free-energy change 0.47, embedding distance 0.57). Folding a +-75 nt window is a crude proxy for the real structure of a snRNP-bound RNA.
+- **The labels measure "looks like a clinically reported pathogenic site", not effect size.** P/LP variants are found where clinicians sequence and where the RNA is functional; benign / common variants are scattered elsewhere. Within-gene AUROC cannot separate "damaging" from "in the functional domain". CADD is trained on human-derived alleles, which correlates with population frequency, so it is favoured on the gnomAD-common benign set; it also leads on the ClinVar-only set (0.825 vs 0.675 nuclear, interval overlaps), so that is not the whole story.
+- **Not covered: insertions and deletions.** The best-known recurrent pathogenic RNU4-2 variant is a one-base insertion (n.64_65insT, to my knowledge of the literature), which this SNV-only pipeline cannot score. Splicing, regulatory and non-exonic variants are also out of scope. Research use only; this is not a clinical classifier.
+
+### 12.5 What is usable now
+1. **`varscore score`**: give it a GRCh38 VCF or a four-column table; it maps SNVs onto the exons of every annotated non-coding gene (strand-aware), and returns each score plus the combined score and its percentile among your variants in that gene. Best configuration by evidence: nuclear genes -> `combined + CADD` (`--cadd`, `combiner_micro_cadd.json`); mitochondrial tRNA genes -> raw masked-LM score; lncRNAs -> no validated use.
+2. **`varscore saturate --gene X`**: scores all 3 x length possible substitutions of one ncRNA and writes a per-position intolerance map (genomic coordinates included), e.g. for RMRP, RNU4-2, TERC or an MT-tRNA.
+3. **`varscore check`**: regression tests (batch/padding invariance 3e-6, score orientation, window bookkeeping, reference-base agreement).
+
+### 12.6 Where the long training run fits
+`scripts/m4_run_all.sh cpt` continually pretrains RiNALMo-micro on lncRNA, protein-coding replay, and **small ncRNAs (snRNA, snoRNA, tRNA, ...) with all 13 panel genes held out**, so `cpt_eval` is a clean held-out-gene test: does adaptation to ncRNA improve the zero-shot score? The run is resumable (checkpoint every 500 steps; re-run the same command after an interruption). Decision rule, set now: the CPT model counts as better only if its masked-LM within-gene AUROC exceeds the frozen model's with a paired CI (printed by `varscore eval` as "delta vs ...") that excludes 0 on the same variants, **and** it does not lose on `rbp_K562`, `rbp_HepG2`, `loc_clf`. With 13 genes that is a high bar; a smaller true effect than ~+0.1 will not be detectable, so a "no difference" outcome is the likely one and should be reported as such.
+Next in line, if this task is worth pushing: score indels with a windowed pseudo-log-likelihood ratio; add a second labelled source (e.g. a saturation-mutagenesis or MPRA study of an ncRNA, if one is public and can be verified); and test whether training on multi-species alignments (the GPN-MSA / PhyloGPN idea) beats any single-sequence model, which is the natural reason to build a dedicated ncRNA family.

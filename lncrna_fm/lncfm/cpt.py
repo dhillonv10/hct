@@ -185,6 +185,7 @@ def main(argv=None):
             model.save_pretrained(out / "hf"); tok.save_pretrained(out / "hf")
             torch.save({"opt": opt.state_dict(), "step": step + 1}, state_f)
     model.save_pretrained(out / "hf"); tok.save_pretrained(out / "hf")
+    torch.save({"opt": opt.state_dict(), "step": a.steps}, state_f)      # a finished run is not re-run by the same command
     print("saved", out / "hf", " -> evaluate with provider  local:" + str(out / "hf"))
 
 
