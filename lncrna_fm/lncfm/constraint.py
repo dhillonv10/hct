@@ -96,6 +96,19 @@ def build_gene_rows(row, tx_exons, scorer):
         cum += en - st + 1
         bounds.append(cum)
     bounds = np.array(bounds[:-1]) if len(bounds) > 1 else np.array([])
+    run = np.ones(L)                                              # homopolymer-run length containing each position
+    i = 0
+    while i < L:
+        j = i
+        while j + 1 < L and seq[j + 1] == seq[i]:
+            j += 1
+        run[i:j + 1] = j - i + 1
+        i = j + 1
+    ent = np.zeros(L)                                             # Shannon entropy of the +-10 nt window (low = repeat / low complexity)
+    for k in range(L):
+        w = seq[max(0, k - 10):k + 11]
+        f = np.array([w.count(b) for b in "ACGU"], float) / max(len(w), 1)
+        ent[k] = -(f[f > 0] * np.log2(f[f > 0])).sum()
     isgc = np.array([c in "GC" for c in seq], float)
     gc25 = np.convolve(isgc, np.ones(51), "same") / np.convolve(np.ones(L), np.ones(51), "same")
     for off in range(1, L - 1):
@@ -114,7 +127,7 @@ def build_gene_rows(row, tx_exons, scorer):
             dj = float(np.abs(bounds - off).min()) if len(bounds) else 999.0
             rows.append((row.gene_id, off, ctx_class(seq[off - 1], ref, seq[off + 1], alt), float(lo[off, ba[ref]] - lo[off, ba[alt]]),
                          int(hit is not None), hit[0] if hit else 0.0, float(gc25[off]), np.log1p(min(dj, 50.0)), off / L,
-                         float(min(off, L - 1 - off) < 25)))
+                         float(min(off, L - 1 - off) < 25), min(run[off], 8.0), ent[off]))
     return rows, refmis
 
 
@@ -202,7 +215,7 @@ def main(argv=None):
             rr, mm = build_gene_rows(r, tx_exons, sc)
             rows += rr
             mis += mm
-        D = pd.DataFrame(rows, columns=["gene", "off", "ctx", "dmg", "y", "af", "gc25", "djunc", "relpos", "tx_end"])
+        D = pd.DataFrame(rows, columns=["gene", "off", "ctx", "dmg", "y", "af", "gc25", "djunc", "relpos", "tx_end", "runlen", "ent21"])
         P(f"[{V.model_tag(m)}] {len(D)} possible SNVs; {int(D.y.sum())} observed in gnomAD ({100*D.y.mean():.1f}%); "
           f"reference-base disagreements with gnomAD: {mis}")
         beta, se, oe, p, ng = score_test(D)
@@ -213,6 +226,13 @@ def main(argv=None):
         b3, s3, oe3, _, _ = score_test(D, adjust=adj)
         P(f"    ADJUSTED for local GC, distance to exon junction, relative position and transcript ends: beta = {b3:+.3f} (se {s3:.3f}, z = {b3/s3:+.2f}); "
           f"O/E deciles " + " ".join(f"{x:.2f}" for x in oe3))
+        adj2 = adj + ("runlen", "ent21")
+        b4, s4, oe4, _, _ = score_test(D, adjust=adj2)
+        P(f"    ADJUSTED ALSO for homopolymer run length and local sequence entropy (repeat / low-complexity proxies): beta = {b4:+.3f} (se {s4:.3f}, z = {b4/s4:+.2f})")
+        pct = D.groupby("gene").dmg.rank(pct=True).values
+        D5 = D[pct > 0.10].reset_index(drop=True)
+        b5, s5, _, _, _ = score_test(D5, adjust=adj2)
+        P(f"    same, dropping each gene's 10% least-damaging positions: beta = {b5:+.3f} (se {s5:.3f}, z = {b5/s5:+.2f})")
         P("    each covariate used alone as the 'damage score' (to see what the language model could be mimicking): " +
           "; ".join(f"{c}: beta {score_test(D, score_col=c)[0]:+.3f} (z {score_test(D, score_col=c)[0]/score_test(D, score_col=c)[1]:+.1f})"
                     for c in ("gc25", "djunc", "relpos")))

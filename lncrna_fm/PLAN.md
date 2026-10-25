@@ -23,7 +23,7 @@ Everything below was measured on a 4-core CPU sandbox, so these are *pilot-scale
    localization (Δρ +0.10), testis-vs-rest and coding-vs-lncRNA at matched input (first 400 nt, n=800). Continual pretraining is implemented and smoke-tested but **not run at scale**.
    Evo-1 never saw a eukaryote; Evo 2 needs an NVIDIA GPU (1B also Hopper/FP8); Caduceus needs a port off `mamba_ssm`.
 4. **Negatives that matter.** (a) Ortholog retrieval: nothing learned beats the alignment-free shared-10-mer baseline (300 queries vs a 3,000-gene mouse pool: hit@10 0.375 on the 56 named pairs vs 0.21 for the best learned model; at full scale, 36,103 genes, shared 10-mers still give 0.41).
-   (b) Zero-shot ClinVar variant scoring *with my 0.89M pilot* is at chance (within-gene AUROC 0.55, CI includes 0.5), and ClinVar cannot support a lncRNA-wide variant benchmark at all (§6). **Update, §12:** with frozen RiNALMo-micro the same kind of score reaches 0.72 [0.61,0.83] within-gene on 13 small-ncRNA genes (mito tRNAs 0.84), and 0.84 [0.79,0.89] on the 7 nuclear genes when combined with CADD; still no usable ground truth for lncRNAs (only TERC).
+   (b) Zero-shot ClinVar variant scoring *with my 0.89M pilot* is at chance (within-gene AUROC 0.55, CI includes 0.5), and ClinVar cannot support a lncRNA-wide variant benchmark at all (§6). **Update, §12 and §14:** with frozen RiNALMo-micro the same kind of score reaches 0.72 [0.61,0.83] within-gene on 13 small-ncRNA genes against common/benign variants (mito tRNAs 0.84) but only 0.58 against rare variants, where CADD reaches 0.71 and the language models add nothing to it; still no usable ground truth for lncRNAs (only TERC).
    (c) Tying a patient model to lncRNA *sequence embeddings* gives no survival benefit, even with 60 training patients or RiNALMo embeddings.
 5. **The clinical hook that works today is expression, not sequence.** lncRNA expression alone predicts TCGA survival about as well as mRNA
    (C-index: LGG 0.84 / KIRC 0.69-0.71 / LUAD 0.60-0.62) and adds +0.02 (LUAD) to +0.03 (KIRC) over age + stage; those gains are the size of the fold-to-fold standard error (~0.015) and were not tested for significance (§6).
@@ -535,6 +535,8 @@ Release hygiene (must be decided before training, not after):
 
 ## 12. Variant-effect scoring in ncRNA genes
 
+> **CORRECTION (audit, section 14).** Every number in this section compares pathogenic variants with *common* or *clearly benign* variants. Against *rare* gnomAD-observed variants, which is the situation a clinician actually faces, the zero-shot language-model score falls to 0.58 (nuclear genes; 0.52-0.54 against ultra-rare variants), CADD holds at 0.71, and adding the language models to CADD gains nothing measurable (0.720 vs 0.705). Read the results below as "separates pathogenic from tolerated variants", not "classifies variants".
+
 Question: can a sequence model rank which single-nucleotide variants in a non-coding RNA gene are pathogenic? This replaces the v1 attempt (§6, pilot model, AUROC 0.55 on 8 genes). Code: `lncfm/ncvar.py` (data), `gnomad.py` (extra benign set), `varscore.py` (scorers, evaluation, VCF scorer, saturation map). Results: `results/v4/`.
 
 ### 12.1 The data, and what is wrong with "ClinVar lncRNA variants"
@@ -601,7 +603,7 @@ Reading: RNA-FM is the best single score on the nuclear genes, but the one nomin
 - **Not covered: insertions and deletions.** The best-known recurrent pathogenic RNU4-2 variant is a one-base insertion (n.64_65insT, to my knowledge of the literature), which this SNV-only pipeline cannot score. Splicing, regulatory and non-exonic variants are also out of scope. Research use only; this is not a clinical classifier.
 
 ### 12.5 What is usable now
-1. **`varscore score`**: give it a GRCh38 VCF or a four-column table; it maps SNVs onto the exons of every annotated non-coding gene (strand-aware), and returns each score plus the combined score and its percentile among your variants in that gene. Best configuration by evidence: nuclear genes -> `combined + CADD` (0.84; `--cadd`, `combiner_micro_cadd.json`, or `combiner_all_cadd.json` for three models) or, offline, the RNA-FM masked score alone (0.77); mitochondrial tRNA genes -> the raw masked-LM score of RiNALMo (0.84-0.86); lncRNAs -> no validated use.
+1. **`varscore score`**: give it a GRCh38 VCF or a four-column table; it maps SNVs onto the exons of every annotated non-coding gene (strand-aware), and returns each score plus the combined score and its percentile among your variants in that gene. Best configuration by evidence, **after the audit (section 14)**: to rank a variant against *tolerated* (common) variants, the masked-LM score works (nuclear 0.69-0.77, mitochondrial tRNA 0.84-0.86); to rank it against *other rare variants*, which is the clinical question, use CADD (nuclear genes, 0.71) and treat the language-model score as uninformative (0.52-0.58). The earlier recommendation of 'combined + CADD, 0.84' referred to the common-benign background and does not hold on the rare background. lncRNAs: no validated use.
 2. **`varscore saturate --gene X`**: scores all 3 x length possible substitutions of one ncRNA and writes a per-position intolerance map (genomic coordinates included), e.g. for RMRP, RNU4-2, TERC or an MT-tRNA.
 3. **`varscore check`**: regression tests (batch/padding invariance 3e-6, score orientation, window bookkeeping, reference-base agreement).
 
@@ -649,3 +651,45 @@ Reading it:
 1. `rbp_peak` becomes the headline RBP task; the gene-level `rbp_*` tasks are supporting only (BENCHMARK_CATALOG.md section 3).
 2. `check` now runs the controls first; if they print `CONTROLS FAILED`, nothing downstream is to be trusted.
 3. §0 item 3 and §10.9 should be read with the peak-level result above: the case for RiNALMo over k-mers now rests on localization classification and testis (gene-level), which have not been re-tested at a stricter formulation.
+
+---
+
+## 14. Audit of the ncRNA variant panel (`python -m lncfm.varaudit`, `results/v4/audit_*.txt`)
+
+Asked to check whether section 12 is nonsense. Each check targets one way the headline could be wrong. Most passed. **One did not, and it changes what the panel can be used for.**
+
+### 14.1 Checks that passed (benign background = ClinVar B/LB + gnomAD common, 13 genes, 585 variants)
+| check | result |
+|---|---|
+| Integrity | 0 variants labelled both ways, 0 duplicated (transcript, offset, alt), 0 reference-base disagreements; the m.3243A>G (MELAS) variant is labelled pathogenic and scored at the 94th-96th percentile within MT-TL1 |
+| Permutation test (1,000 within-gene label shuffles) | micro 0.721 vs null 0.499 +- 0.030; RNA-FM 0.780; both p = 0.001 (the smallest value 1,000 shuffles can give) |
+| Influence of single genes | dropping the strongest gene (RNU4-2) moves micro from 0.721 to 0.693; 12/13 genes (micro) and 13/13 genes (RNA-FM) above 0.5; but the *median* gene is 0.66 (micro) / 0.75 (RNA-FM), below the weighted headline |
+| Mutation-type confound (transitions are 63% of pathogenic but 83% of benign variants; a 12-class substitution model alone gives 0.596) | the language-model signal survives inside substitution classes: micro 0.667, RNA-FM 0.742 (down from 0.721 / 0.780) |
+| Position vs allele | log p(ref) alone (how constrained the *position* looks) gives 0.713; -log p(alt) alone 0.673; the full score 0.721. The signal is mostly "this position is conserved", not "this allele is bad" |
+| CADD plumbing | 8 random variants re-queried: 0 mismatches; 100% coverage of nuclear variants |
+
+### 14.2 The check that failed: the benign background decides the result
+Benign = every variant seen in gnomAD, split by allele frequency (14 genes, TERC added; 188 pathogenic, 2,696 variants); within-gene AUROC, [95% CI]:
+
+| P/LP compared with | n | RiNALMo-micro | RNA-FM | transversion indicator |
+|---|---|---|---|---|
+| gnomAD **common** (AF >= 1e-4) | 279 | 0.691 | 0.741 | 0.609 |
+| gnomAD **rare** (1e-5 to 1e-4) | 987 | 0.572 | 0.577 | 0.494 |
+| gnomAD **ultra-rare** (< 1e-5) | 1,092 | 0.539 | 0.516 | 0.382 |
+| every gnomAD-observed variant, nuclear genes (8) | 2,493 | 0.578 [0.504,0.652] | 0.580 [0.521,0.633] | 0.474 |
+| same, CADD | | **0.705** [0.576,0.793] | | |
+| same, CADD + language models (leave-one-gene-out) | | 0.720 [0.624,0.788] | | |
+
+The gradient is not a gene-set artefact: on the six nuclear genes present in every comparison (RMRP, RNU2-2, RNU4-2, RNU4ATAC, RNU7-1, SNORD118) micro goes 0.675 (ClinVar benign) -> 0.692 (common) -> 0.563 (rare) -> 0.529 [0.449,0.591] (ultra-rare), and RNA-FM 0.823 -> 0.757 -> 0.577 -> 0.506. Within genes, rarer variants also receive higher damage scores (weighted Spearman of log10 allele frequency with the score -0.12 for micro, -0.22 for RNA-FM; a pooled correlation looks positive, which is a gene-composition artefact).
+
+What this means:
+- **The language-model score separates pathogenic variants from *tolerated* variants, not from other rare variants.** It behaves like a measure of how constrained a position or allele is, which is why it also passes the population-constraint test in section 15. It is therefore **not a variant-pathogenicity classifier**. Most clinical variants of uncertain significance are rare, so the 0.52-0.58 numbers are the ones that matter for that use.
+- Ultra-rare gnomAD variants are not all benign (many singletons are neutral, some are damaging), so an AUROC of 0.5 against them is a lower bound for a perfect pathogenicity score, not proof of no signal; but a score that could rank pathogenic variants above typical rare variants would not sit at 0.52.
+- **CADD retains 0.705 on the hard background** (conservation plus context features), and adding the language models gains +0.015 [-0.019,+0.068]: nothing measurable. The earlier "language models + CADD = 0.84" (section 12.3) applied only to the common-benign background.
+- Mitochondrial tRNAs (6 genes) keep a signal against all gnomAD-observed variants (0.715, 0.708) but with intervals as wide as [0.58,0.82].
+
+### 14.3 What is now claimed about T5
+1. Supported: zero-shot RNA language models rank pathogenic variants in small structured ncRNAs above common/benign ones (0.69-0.82 nuclear, 0.84 mito), the signal is not explained by mutation type, and it is mostly position-level constraint.
+2. Not supported: any use as a classifier for rare variants; any added value over CADD on the rare background.
+3. The primary metric for this task is now the rare/any-frequency background (clinically relevant); the common-benign background is secondary. `varscore` reports both; the M4 `audit` stage reproduces this section.
+4. Still true: no lncRNA ground truth exists (TERC aside); TERC contributes 30 pathogenic variants to the any-frequency analysis only.

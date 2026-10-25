@@ -155,9 +155,15 @@ def run(models, bg="common", af_min=1e-4, min_each=3, nperm=2000, cadd=True, out
         gn = d.source.values == "gnomad"
         af = d.af.values
         for c in cols + (["cadd"] if cadd else []):
-            ok = gn & ~np.isnan(S[c].values)
-            r, p = spearmanr(np.log10(af[ok]), S[c].values[ok])
-            P(f"    {c:<26s} Spearman(log10 AF, score) among gnomAD variants: {r:+.3f} (p={p:.1e}, n={ok.sum()})  [negative = rarer variants look more damaging]")
+            rs, ws = [], []
+            for g, ix in d.groupby("gene").indices.items():              # WITHIN gene: a pooled correlation is a gene-composition artefact
+                j = ix[gn[ix] & ~np.isnan(S[c].values[ix])]
+                if len(j) >= 30:
+                    rs.append(spearmanr(np.log10(af[j]), S[c].values[j])[0])
+                    ws.append(len(j))
+            if rs:
+                P(f"    {c:<26s} within-gene Spearman(log10 AF, score) over gnomAD variants: weighted mean {np.average(rs, weights=ws):+.3f} "
+                  f"(per-gene range {min(rs):+.2f}..{max(rs):+.2f}, {len(rs)} genes)  [negative = rarer variants look more damaging]")
         bins = {"common AF>=1e-4": gn & (af >= 1e-4), "rare 1e-5<=AF<1e-4": gn & (af >= 1e-5) & (af < 1e-4), "ultra-rare AF<1e-5": gn & (af < 1e-5)}
         P("    P/LP versus each benign background (within-gene AUROC, genes with >=3 of each class):")
         for nm, m in bins.items():

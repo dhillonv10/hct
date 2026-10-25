@@ -61,13 +61,16 @@ Each card: question, mechanism, label, formulation, split and controls, baseline
 - **Objections.** *"Weak constraint in lncRNAs means no power."* Right; that is why the positive-control set is run first, and a null on lncRNAs with a positive on the control set is itself a finding. *"gnomAD coverage differs by site."* Per-gene calibration absorbs gene-level coverage; within-gene coverage remains a limitation.
 - **Clinical bridge.** Prioritising variants in lncRNA exons without any disease labels.
 
-### T5. Is a variant in a disease ncRNA pathogenic?  (built: `lncfm.varscore`, audited: `lncfm.varaudit`)
+### T5. Is a variant in a disease ncRNA pathogenic?  (built: `lncfm.varscore`; audited: `lncfm.varaudit`, PLAN section 14)
 - **Mechanism.** Mutations in snRNAs, RMRP, tRNAs and TERC disrupt structure and protein binding and cause named diseases (e.g. RNU4ATAC, RMRP, mitochondrial tRNA disease, telomere disorders).
-- **Label.** ClinVar P/LP vs B/LB, with gnomAD common variants as extra benign examples; strict mapping to the right transcript, strand and gene.
+- **Label.** ClinVar P/LP versus (a) ClinVar B/LB plus gnomAD common variants, and (b) every gnomAD-observed variant (mostly rare). Strict mapping to the right transcript, strand and gene.
 - **Formulation.** Within-gene ranking (gene identity alone separates the classes), weighted over genes; hierarchical bootstrap.
-- **Controls.** Permutation test within gene; substitution-class stratification; position-vs-allele decomposition; frequency analysis; CADD as the external comparator.
-- **Honest scope.** Small structured ncRNAs only; **no lncRNA ground truth exists** (TERC aside). See PLAN section 12 and the audit in section 14.
-- **Clinical bridge.** This is the first clinical-grade task: ncRNA variant interpretation.
+- **Primary metric: background (b).** A clinician's variant of uncertain significance is rare, so the pathogenic-vs-rare comparison is the one that matters; (a) is reported but secondary. This changed after the audit: the common-benign background flattered the language-model scores.
+- **Controls.** Permutation test within gene; substitution-class stratification; position-vs-allele decomposition; frequency-bin analysis; CADD as the external comparator.
+- **Result.** Zero-shot language models: 0.69-0.82 against common/benign (nuclear), 0.84 for mitochondrial tRNAs, but 0.52-0.58 against rare variants, where CADD reaches 0.71 and the language models add nothing to it.
+- **Pass.** A model counts only if it beats CADD (or adds to it with an interval excluding 0) on background (b).
+- **Honest scope.** Small structured ncRNAs only (13 genes); **no lncRNA ground truth exists** (TERC aside, 30 variants).
+- **Clinical bridge.** First clinical-grade task (ncRNA variant interpretation). It is not yet one any model here can serve.
 
 ### T6-T9. Designed, not yet implemented
 | ID | Question | Mechanism | Label (public) | Formulation / split | Main risk |
