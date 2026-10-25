@@ -12,6 +12,8 @@
 #   scripts/m4_run_all.sh fms          # more foundation models: RNA-FM, RiNALMo-mega (best feature recipe from `sweep`)
 #   scripts/m4_run_all.sh retrieval    # human->mouse positional-ortholog retrieval
 #   scripts/m4_run_all.sh varscore     # ncRNA variant-effect scoring: ClinVar + gnomAD, RiNALMo/RNA-FM/structure/CADD, within-gene AUROC
+#   scripts/m4_run_all.sh peak         # peak-level RBP binding in lncRNAs (the literature's formulation), K562 + HepG2, two negative types
+#   scripts/m4_run_all.sh controls     # harness controls with RiNALMo as well (does mean-pooling keep a planted motif? does it leak length?)
 #   scripts/m4_run_all.sh cpt          # LONG, resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs (CPT_STEPS=20000)
 #   scripts/m4_run_all.sh cpt_eval     # does the CPT model beat the frozen one?  variant scoring + RBP/localization probes
 set -euo pipefail
@@ -20,6 +22,7 @@ OUT=${LNCFM_RUNS:-runs}/v2; mkdir -p "$OUT"
 stage=${1:-check}
 case "$stage" in
   check)
+    python -m lncfm.controls --providers kmer expr_len                    # planted-signal / shuffled-label controls: must print CONTROLS OK
     python -m lncfm.selfcheck
     python -m lncfm.speedtest --preset small --batch 16 --max-len 512 --steps 8 --target-nt 1e9 ;;
   data)
@@ -65,6 +68,13 @@ case "$stage" in
   retrieval)
     python -m lncfm.bench --retrieval --providers kmer shared10mer rinalmo-micro --max-queries 2000 --pool-size 10000 --trunc 400 \
         --out "$OUT/retrieval.json" ;;
+  peak)
+    for cell in K562 HepG2; do for neg in unbound other; do
+      python -m lncfm.rbppeak --cell $cell --neg $neg --min-peaks 40 --providers lengc kmer cnn rinalmo-micro rnafm --final \
+          --out "$OUT/rbp_peak_${cell}_${neg}.json"
+    done; done ;;
+  controls)
+    python -m lncfm.controls --providers kmer expr_len rinalmo-micro --n 600 --trunc 400 ;;
   varscore)
     python -m lncfm.gnomad                                 # builds + prints the evaluation table (needs internet: gnomAD API)
     python -m lncfm.varscore eval --models rinalmo-micro --combine \

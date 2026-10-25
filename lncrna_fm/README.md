@@ -1,6 +1,8 @@
 # lncfm: a local-first lncRNA foundation-model toolkit
 
-**Start here for the benchmark: LncBench v2** (two layers, leakage-controlled, built to run on a Mac).
+**Read `BENCHMARK_CATALOG.md` first: which RNA benchmark tasks exist, how each translates to lncRNA, which of ours to trust.**
+
+**The benchmark: LncBench v2** (two layers, leakage-controlled, built to run on a Mac).
 
 ```bash
 python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
@@ -15,6 +17,8 @@ scripts/m4_run_all.sh genotype   # which AML driver genotypes can be read from l
 scripts/m4_run_all.sh sweep      # frozen-feature sweep: layers x pooling x tiling x k-mer stacking
 scripts/m4_run_all.sh fms        # more foundation models: RNA-FM, RiNALMo-mega
 scripts/m4_run_all.sh retrieval  # human->mouse positional-ortholog retrieval
+scripts/m4_run_all.sh peak       # peak-level RBP binding in lncRNAs (101-nt windows, two negative types, CNN + language models)
+scripts/m4_run_all.sh controls   # planted-signal / shuffled-label controls through the real pipeline
 scripts/m4_run_all.sh varscore   # ncRNA variant-effect scoring (ClinVar + gnomAD): RiNALMo / RNA-FM / RNA structure / CADD
 scripts/m4_run_all.sh cpt        # LONG + resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs
 scripts/m4_run_all.sh cpt_eval   # does CPT help?  variant scoring + RBP / localization probes vs the frozen model
@@ -59,6 +63,8 @@ lncfm/
   cpt.py          "Option B": continual pretraining of an existing masked-LM on lncRNA
   speedtest.py    measure YOUR machine's throughput and project wall-clock; counts real FLOPs/nt
   variants.py, variant_eval.py   v1 within-gene ClinVar scoring of LncFM checkpoints (superseded by the three files below)
+  controls.py     harness controls: planted motif must be found, shuffled labels must give 0.5, length-only label caught by covariates
+  rbppeak.py      peak-level RBP binding in lncRNAs with within-transcript and other-RBP negatives (see BENCHMARK_CATALOG.md)
   ncvar.py        ClinVar SNVs -> ncRNA transcript coordinates (strand-aware, coding-gene and antisense filters), labelled sets
   gnomad.py       common gnomAD variants as an extra benign set (public GraphQL API; nuclear v4, mitochondrial v3.1)
   varscore.py     variant-effect scorers (masked-LM log-odds, embedding distance, ViennaRNA structure change, baselines,

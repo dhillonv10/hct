@@ -22,6 +22,8 @@ export LNCFM_DATA=$HOME/lncfm_data LNCFM_RUNS=$HOME/lncfm_runs      # put these 
 | `scripts/m4_run_all.sh ladder` | frozen vs LoRA vs top-2 vs full fine-tune of RiNALMo | hours |
 | `scripts/m4_run_all.sh aml` | patient-level AML tasks, external validation | < 1 h |
 | `scripts/m4_run_all.sh genotype` | 14-gene AML genotype panel | minutes |
+| `scripts/m4_run_all.sh peak` | **peak-level RBP binding in lncRNAs** (the formulation the RNA literature uses; see `BENCHMARK_CATALOG.md`): K562 + HepG2, two negative types, k-mer / CNN / RiNALMo / RNA-FM, locked test | 1-2 h |
+| `scripts/m4_run_all.sh controls` | harness controls with RiNALMo (planted motif, shuffled labels, length leak) | minutes |
 | `scripts/m4_run_all.sh varscore` | **ncRNA variant-effect scoring** (ClinVar + gnomAD): RiNALMo-micro / mega / RNA-FM, RNA-structure change, CADD, within-gene AUROC, saves `combiner_micro.json` | 30-90 min |
 | `scripts/m4_run_all.sh cpt` | **the long job**: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs. Resumable: if it stops, run the same command again. `CPT_STEPS=40000 scripts/m4_run_all.sh cpt` for longer | hours to days |
 | `scripts/m4_run_all.sh cpt_eval` | after `cpt`: variant scoring and RBP / localization probes, CPT model vs frozen | 1-2 h |

@@ -11,7 +11,8 @@ Why this replaces the gene-level RBP task as the headline
     --neg other     windows centred on peaks of OTHER RBPs in the same cell line (>= 100 nt from any peak of this RBP), from the same
                     transcript when possible.  Controls "is this a generally accessible, protein-bound site"; asks only for RBP specificity.
 
-  Windows come from the spliced representative transcript of expressed lncRNAs (ENCODE IDR peaks, K562 and HepG2).
+  Windows come from the spliced representative transcript of expressed lncRNAs (ENCODE IDR peaks, K562 and HepG2); at most 12
+  positive windows per gene and RBP, because a handful of giant lncRNAs (NEAT1, MALAT1) otherwise carry most of the peaks.
   Folds are the chromosome groups of the benchmark (a gene never straddles folds); chr8/13/18/21 are the locked test.
 
 Models: k-mer spectrum, length+GC, a small one-hot CNN trained from scratch (the BEACON lesson: always include a trained non-language
@@ -73,9 +74,9 @@ def _windows_for_cell(cell, rbps=None, min_peaks=60):
     return W[W.rbp.isin(keep[keep >= min_peaks].index)].reset_index(drop=True), rep
 
 
-def build(cell, neg="unbound", rbps=None, min_peaks=60, max_pos=800, ratio=2, seed=0):
+def build(cell, neg="unbound", rbps=None, min_peaks=60, max_pos=800, ratio=2, seed=0, per_gene=12):
     """Windows table: [rbp, gene_id_nov, chrom, seq, y, fold, leak, g, off]."""
-    cache = paths.ensure(paths.DATA / "processed") / f"rbppeak_{cell}_{neg}_m{min_peaks}_p{max_pos}_r{ratio}.pkl"
+    cache = paths.ensure(paths.DATA / "processed") / f"rbppeak_{cell}_{neg}_m{min_peaks}_p{max_pos}_r{ratio}_g{per_gene}.pkl"
     if cache.exists() and not rbps:
         return pd.read_pickle(cache)
     rng = np.random.default_rng(seed)
@@ -83,7 +84,9 @@ def build(cell, neg="unbound", rbps=None, min_peaks=60, max_pos=800, ratio=2, se
     allpk = {r: g for r, g in W.groupby("rbp")}
     out = []
     for rbp, g in allpk.items():
-        pos = g.sample(min(max_pos, len(g)), random_state=seed)
+        # a few giant lncRNAs (NEAT1, MALAT1, ...) carry thousands of peaks: cap windows per gene so they cannot dominate
+        gc = g.sample(frac=1, random_state=seed).groupby("g").head(per_gene)
+        pos = gc.sample(min(max_pos, len(gc)), random_state=seed)
         near = {}                                                     # gene -> sorted offsets of ALL this RBP's peaks
         for gi, o in zip(g.g.values, g.off.values):
             near.setdefault(gi, []).append(o)
@@ -200,7 +203,7 @@ def eval_rbp(d, X, provider, final):
     Xc = onehot(list(d.seq)) if use_cnn else None
     for f in range(5):
         tr, te = (fold >= 0) & (fold != f), fold == f
-        if te.sum() < 5 or len(np.unique(y[tr])) < 2:
+        if te.sum() < 5 or min(y[tr].sum(), (1 - y[tr]).sum()) < 15:      # too little training data in this fold
             continue
         pred[te] = (cnn_fit_predict(Xc[tr], y[tr], Xc[te]) if use_cnn else
                     evalkit._fit_predict(X[tr], y[tr], X[te], "clf", np.random.default_rng(0)))
@@ -208,7 +211,7 @@ def eval_rbp(d, X, provider, final):
     if final:
         tr, te = fold >= 0, fold == -1
         p = np.full(len(d), np.nan)
-        if te.sum() >= 5 and len(np.unique(y[tr])) == 2:
+        if te.sum() >= 5 and min(y[tr].sum(), (1 - y[tr]).sum()) >= 15:
             p[te] = (cnn_fit_predict(Xc[tr], y[tr], Xc[te]) if use_cnn else
                      evalkit._fit_predict(X[tr], y[tr], X[te], "clf", np.random.default_rng(0)))
         out["test"] = p
@@ -274,7 +277,7 @@ def main(argv=None):
     ap.add_argument("--providers", nargs="+", default=["lengc", "kmer", "cnn"])
     ap.add_argument("--trunc", type=int, default=None)
     ap.add_argument("--max-rbps", type=int, default=None)
-    ap.add_argument("--min-peaks", type=int, default=60)
+    ap.add_argument("--min-peaks", type=int, default=40)
     ap.add_argument("--max-pos", type=int, default=800)
     ap.add_argument("--final", action="store_true", help="also score the locked test chromosomes (once)")
     ap.add_argument("--out", default=None)
