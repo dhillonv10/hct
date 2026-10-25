@@ -35,7 +35,7 @@ The model decision (section 11.5 of PLAN.md) hinges on the `ladder` stage: does 
 1. `check`, then `data` (the ClinVar and GENCODE transcript files the variant code needs are in it). ClinVar is downloaded as the
    *current* release, so your counts will differ slightly from the ones in PLAN section 12.
 2. `varscore` (30-90 min, needs internet for gnomAD and CADD). Compare with `results/v4/final_main.txt` in this folder.
-3. **Start `cpt` before you leave the machine** (`CPT_STEPS=20000` by default; it logs to `$LNCFM_RUNS/cpt_micro_nc/log.jsonl`,
+3. **Start `cpt` before you leave the machine** (`CPT_STEPS=20000` by default; it logs to `$LNCFM_RUNS/cpt_rinalmo-micro_nc/log.jsonl`,
    and `val_mlm` there must go down). Look at the elapsed time of the first logged steps and scale `CPT_STEPS` to the time you have.
    It checkpoints every 500 steps; if it stops, run the same command again. Do not run other heavy jobs on the same Mac meanwhile.
 4. When `cpt` finishes: `cpt_eval`. Decision rule: PLAN section 12.6.
@@ -46,7 +46,7 @@ The model decision (section 11.5 of PLAN.md) hinges on the `ladder` stage: does 
 python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner_micro.json --out scored.tsv
 # with CADD (nuclear genes; needs internet; better): add  --cadd  and use  combiner_micro_cadd.json
 ```
-Input is a GRCh38 VCF, or a 4-column tab file `chrom pos ref alt`. Only SNVs that fall inside exons of annotated non-coding
+Input is a GRCh38 VCF, or a 4-column tab file `chrom pos ref alt`. Try it first on `examples/example_variants.vcf` (13 SNVs, some are in ClinVar, one intergenic and one indel that are skipped on purpose); the output I got is in `results/v4/example_scored.tsv`. Only SNVs that fall inside exons of annotated non-coding
 genes are scored. Output: one row per variant x gene with every score (higher = more damaging), `combined` (a ranking score,
 not a probability) and `pct_in_gene` (its percentile among your variants in the same gene). Research use only.
 The `--models/--no-struct/--no-emb` flags must match the ones used to train the combiner.

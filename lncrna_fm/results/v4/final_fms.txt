@@ -1,0 +1,98 @@
+background = common (af_min=0.0001), min_stars=0
+          gene_id     gene gene_type  n_path   n  n_ben
+ENSG00000222328.1   RNU2-2     snRNA      19 105     86
+ENSG00000200463.2 SNORD118    snoRNA      15  92     77
+ENSG00000264229.2 RNU4ATAC     snRNA      28  71     43
+ENSG00000276027.1    RNU12     snRNA       7  63     56
+ENSG00000202538.2   RNU4-2     snRNA      21  50     29
+ENSG00000277027.2     RMRP  ribozyme      29  47     18
+ENSG00000238923.1   RNU7-1     snRNA       5  35     30
+ENSG00000210156.1    MT-TK   Mt_tRNA       5  26     21
+ENSG00000209082.1   MT-TL1   Mt_tRNA      13  24     11
+ENSG00000210117.1    MT-TW   Mt_tRNA       4  24     20
+ENSG00000210151.2   MT-TS1   Mt_tRNA       5  19     14
+ENSG00000210077.1    MT-TV   Mt_tRNA       3  16     13
+ENSG00000210135.1    MT-TN   Mt_tRNA       4  13      9
+585 variants to score ({'clinvar': 306, 'gnomad': 279})
+combiner saved -> /tmp/claude-0/-home-user-hct/4c5637ac-6023-59b5-a907-35ccb9f71d81/scratchpad/results/v4/combiner_all_cadd.json
+== ALL (ClinVar + gnomAD common)  (585 variants, 158 pathogenic, 13 genes)
+score                             within-gene AUROC [95% CI]     genes  coverage    delta vs lm:rinalmo-micro:mask
+lm:rinalmo-micro:mask               0.721 [0.611,0.833]             13      1.00
+lm:rinalmo-micro:wt                   nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rinalmo-mega:mask                0.763 [0.664,0.849]             13      1.00   +0.042 [-0.064,+0.164]
+lm:rinalmo-mega:wt                    nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rnafm:mask                       0.780 [0.707,0.853]             13      1.00   +0.059 [-0.027,+0.139]
+lm:rnafm:wt                           nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+st:dmfe                             0.523 [0.430,0.625]             13      1.00   -0.198 [-0.364,-0.041]
+st:dg                               0.523 [0.428,0.633]             13      1.00   -0.198 [-0.365,-0.042]
+st:absdg                            0.538 [0.467,0.614]             13      1.00   -0.183 [-0.337,-0.034]
+st:pair_ref                         0.512 [0.422,0.613]             13      1.00   -0.209 [-0.371,-0.057]
+st:dpair                            0.529 [0.458,0.615]             13      1.00   -0.192 [-0.344,-0.061]
+st:bpdist                           0.556 [0.465,0.646]             13      1.00   -0.165 [-0.345,-0.008]
+b:transversion                      0.587 [0.505,0.669]             13      1.00   -0.134 [-0.291,-0.012]
+b:cpg                               0.469 [0.437,0.505]             13      1.00   -0.252 [-0.385,-0.130]
+b:end_dist                          0.500 [0.383,0.626]             13      1.00   -0.221 [-0.392,-0.077]
+b:gc                                0.381 [0.298,0.457]             13      1.00   -0.340 [-0.471,-0.201]
+cadd                                0.684 [0.545,0.832]              7      0.79   -0.037 [-0.262,+0.172]
+combined(lm+struct+base+cadd)       0.830 [0.767,0.887]             13      1.00   +0.109 [-0.052,+0.251]
+== NUCLEAR genes only  (463 variants, 124 pathogenic, 7 genes)
+score                             within-gene AUROC [95% CI]     genes  coverage    delta vs lm:rinalmo-micro:mask
+lm:rinalmo-micro:mask               0.687 [0.565,0.805]              7      1.00
+lm:rinalmo-micro:wt                   nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rinalmo-mega:mask                0.735 [0.589,0.840]              7      1.00   +0.048 [-0.084,+0.184]
+lm:rinalmo-mega:wt                    nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rnafm:mask                       0.772 [0.689,0.841]              7      1.00   +0.085 [+0.007,+0.178]
+lm:rnafm:wt                           nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+st:dmfe                             0.473 [0.376,0.560]              7      1.00   -0.214 [-0.393,-0.030]
+st:dg                               0.470 [0.365,0.562]              7      1.00   -0.217 [-0.389,-0.033]
+st:absdg                            0.537 [0.459,0.609]              7      1.00   -0.151 [-0.309,+0.011]
+st:pair_ref                         0.490 [0.386,0.591]              7      1.00   -0.197 [-0.376,-0.020]
+st:dpair                            0.502 [0.421,0.577]              7      1.00   -0.185 [-0.334,-0.037]
+st:bpdist                           0.592 [0.527,0.661]              7      1.00   -0.095 [-0.235,+0.063]
+b:transversion                      0.629 [0.540,0.715]              7      1.00   -0.058 [-0.179,+0.060]
+b:cpg                               0.467 [0.423,0.522]              7      1.00   -0.220 [-0.364,-0.080]
+b:end_dist                          0.527 [0.385,0.706]              7      1.00   -0.160 [-0.321,+0.045]
+b:gc                                0.371 [0.272,0.451]              7      1.00   -0.316 [-0.482,-0.167]
+cadd                                0.684 [0.554,0.810]              7      1.00   -0.003 [-0.231,+0.221]
+combined(lm+struct+base+cadd)       0.839 [0.769,0.898]              7      1.00   +0.152 [-0.010,+0.301]
+== MITOCHONDRIAL tRNA/rRNA genes only  (122 variants, 34 pathogenic, 6 genes)
+score                             within-gene AUROC [95% CI]     genes  coverage    delta vs lm:rinalmo-micro:mask
+lm:rinalmo-micro:mask               0.841 [0.668,0.946]              6      1.00
+lm:rinalmo-micro:wt                   nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rinalmo-mega:mask                0.862 [0.743,0.945]              6      1.00   +0.021 [-0.080,+0.182]
+lm:rinalmo-mega:wt                    nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rnafm:mask                       0.806 [0.600,0.923]              6      1.00   -0.034 [-0.201,+0.138]
+lm:rnafm:wt                           nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+st:dmfe                             0.701 [0.548,0.868]              6      1.00   -0.140 [-0.312,+0.089]
+st:dg                               0.711 [0.558,0.871]              6      1.00   -0.130 [-0.303,+0.097]
+st:absdg                            0.542 [0.373,0.763]              6      1.00   -0.299 [-0.549,+0.080]
+st:pair_ref                         0.591 [0.418,0.795]              6      1.00   -0.250 [-0.510,+0.064]
+st:dpair                            0.623 [0.460,0.797]              6      1.00   -0.218 [-0.432,+0.057]
+st:bpdist                           0.432 [0.253,0.712]              6      1.00   -0.409 [-0.663,+0.009]
+b:transversion                      0.438 [0.360,0.542]              6      1.00   -0.402 [-0.545,-0.184]
+b:cpg                               0.478 [0.427,0.513]              6      1.00   -0.362 [-0.489,-0.176]
+b:end_dist                          0.403 [0.229,0.660]              6      1.00   -0.438 [-0.653,-0.091]
+b:gc                                0.418 [0.176,0.614]              6      1.00   -0.423 [-0.683,-0.168]
+cadd                                  nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+combined(lm+struct+base+cadd)       0.795 [0.660,0.905]              6      1.00   -0.046 [-0.178,+0.121]
+== ClinVar benign only (no gnomAD)  (306 variants, 158 pathogenic, 13 genes)
+score                             within-gene AUROC [95% CI]     genes  coverage    delta vs lm:rinalmo-micro:mask
+lm:rinalmo-micro:mask               0.738 [0.621,0.858]             12      1.00
+lm:rinalmo-micro:wt                   nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rinalmo-mega:mask                0.791 [0.675,0.890]             12      1.00   +0.053 [-0.058,+0.166]
+lm:rinalmo-mega:wt                    nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+lm:rnafm:mask                       0.821 [0.733,0.907]             12      1.00   +0.083 [-0.039,+0.213]
+lm:rnafm:wt                           nan [nan,nan]                  0      0.00     +nan [+nan,+nan]
+st:dmfe                             0.559 [0.449,0.676]             12      1.00   -0.179 [-0.354,-0.011]
+st:dg                               0.552 [0.428,0.669]             12      1.00   -0.186 [-0.374,-0.019]
+st:absdg                            0.572 [0.456,0.681]             12      1.00   -0.166 [-0.379,+0.017]
+st:pair_ref                         0.548 [0.420,0.677]             12      1.00   -0.190 [-0.407,-0.003]
+st:dpair                            0.551 [0.457,0.664]             12      1.00   -0.187 [-0.361,-0.001]
+st:bpdist                           0.563 [0.424,0.703]             12      1.00   -0.176 [-0.412,+0.060]
+b:transversion                      0.578 [0.467,0.673]             12      1.00   -0.161 [-0.383,+0.007]
+b:cpg                               0.476 [0.431,0.522]             12      1.00   -0.262 [-0.394,-0.129]
+b:end_dist                          0.541 [0.387,0.690]             12      1.00   -0.198 [-0.403,-0.009]
+b:gc                                0.366 [0.249,0.503]             12      1.00   -0.372 [-0.518,-0.215]
+cadd                                0.825 [0.702,0.939]              6      0.66   +0.087 [-0.124,+0.281]
+combined(lm+struct+base+cadd)       0.855 [0.764,0.929]             12      1.00   +0.116 [-0.063,+0.279]
+wrote /tmp/claude-0/-home-user-hct/4c5637ac-6023-59b5-a907-35ccb9f71d81/scratchpad/results/v4/final_fms.json

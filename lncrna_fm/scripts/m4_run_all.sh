@@ -71,22 +71,24 @@ case "$stage" in
         --save-combiner "$OUT/combiner_micro.json" --out "$OUT/varscore_micro_nocadd.json"      # offline combiner for `varscore score`
     python -m lncfm.varscore eval --models rinalmo-micro --cadd --combine \
         --save-combiner "$OUT/combiner_micro_cadd.json" --out "$OUT/varscore_micro.json"        # + CADD (internet); best nuclear-gene scorer
-    python -m lncfm.varscore eval --models rinalmo-micro rinalmo-mega rnafm --cadd --combine \
-        --save-combiner "$OUT/combiner_all.json" --out "$OUT/varscore_main.json"
+    python -m lncfm.varscore eval --models rinalmo-micro rinalmo-mega rnafm --no-emb --cadd --combine \
+        --save-combiner "$OUT/combiner_all_cadd.json" --out "$OUT/varscore_main.json"          # --no-emb: embedding-distance scores were null
     # sensitivity: do the conclusions depend on how the benign set is built?
     python -m lncfm.varscore eval --models rinalmo-micro --bg clinvar --out "$OUT/varscore_clinvar_only.json"
     python -m lncfm.varscore eval --models rinalmo-micro --af-min 0.001 --out "$OUT/varscore_af1e-3.json"
     python -m lncfm.varscore eval --models rinalmo-micro --min-stars 1 --out "$OUT/varscore_stars1.json"
     python -m lncfm.varscore eval --models rinalmo-micro --bg any --out "$OUT/varscore_any.json" ;;   # adds TERC (background = any observed variant)
   cpt)
-    # Resumable: if interrupted, run the same command again. Watch $LNCFM_RUNS/cpt_micro_nc/log.jsonl (val_mlm must go DOWN).
-    python -m lncfm.cpt --model rinalmo-micro --steps "${CPT_STEPS:-20000}" --batch 16 --max-nt 512 --lr 3e-5 --replay 0.2 \
-        --ncrna 0.15 --save-every 500 --out "${LNCFM_RUNS:-runs}/cpt_micro_nc" ;;
+    # Resumable: if interrupted, run the same command again. Watch $LNCFM_RUNS/cpt_<model>_nc/log.jsonl (val_mlm must go DOWN).
+    M=${CPT_MODEL:-rinalmo-micro}
+    python -m lncfm.cpt --model "$M" --steps "${CPT_STEPS:-20000}" --batch 16 --max-nt 512 --lr 3e-5 --replay 0.2 \
+        --ncrna 0.15 --save-every 500 --out "${LNCFM_RUNS:-runs}/cpt_${M}_nc" ;;
   cpt_eval)
-    C="local:${LNCFM_RUNS:-runs}/cpt_micro_nc/hf"
-    python -m lncfm.varscore eval --models rinalmo-micro "$C" --out "$OUT/varscore_cpt.json"
-    python -m lncfm.lncbench run --providers rinalmo-micro "$C" --tasks loc_clf loc_reg tau_reg testis_clf rbp_K562 rbp_HepG2 rbp_union \
-        --trunc 1000 --final --save-oof --out "$OUT/cpt_probe.json"
-    python -m lncfm.lncbench report "$OUT/cpt_probe.json" --scope dev_pruned ;;
+    M=${CPT_MODEL:-rinalmo-micro}
+    C="local:${LNCFM_RUNS:-runs}/cpt_${M}_nc/hf"
+    python -m lncfm.varscore eval --models "$M" "$C" --out "$OUT/varscore_cpt_$M.json"
+    python -m lncfm.lncbench run --providers "$M" "$C" --tasks loc_clf loc_reg tau_reg testis_clf rbp_K562 rbp_HepG2 rbp_union \
+        --trunc 1000 --final --save-oof --out "$OUT/cpt_probe_$M.json"
+    python -m lncfm.lncbench report "$OUT/cpt_probe_$M.json" --scope dev_pruned ;;
   *) echo "unknown stage $stage"; exit 1 ;;
 esac
