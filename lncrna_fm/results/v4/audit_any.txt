@@ -1,0 +1,63 @@
+=== AUDIT  background=any  2696 variants, 188 pathogenic, 14 genes
+[1] integrity: variants labelled both ways: 0; duplicated (transcript,offset,alt): 0; reference-base disagreements: 0
+    substitution classes (rows) by label (0 benign, 1 P/LP):
+    label    0   1  P/LP share %
+    row_0                       
+    A>C    160  10           6.0
+    A>G    275  26           9.0
+    A>U    140   4           3.0
+    C>A    167   7           4.0
+    C>G    218  15           6.0
+    C>U    347  27           7.0
+    G>A    284  42          13.0
+    G>C    179  12           6.0
+    G>U    168  12           7.0
+    U>A    134   3           2.0
+    U>C    277  17           6.0
+    U>G    159  13           8.0
+    transitions: 60% of P/LP vs 47% of benign
+[2] permutation test (1000 within-gene label shuffles), weighted within-gene AUROC:
+    lm:rinalmo-micro:mask      observed 0.603   null mean 0.499 (sd 0.023)   one-sided p = 0.0010
+    lm:rnafm:mask              observed 0.604   null mean 0.499 (sd 0.023)   one-sided p = 0.0010
+    cadd                       observed 0.705   null mean 0.501 (sd 0.024)   one-sided p = 0.0010
+    b:transversion             observed 0.467   null mean 0.500 (sd 0.018)   one-sided p = 0.9630
+[3] influence of single genes on the primary score(s):
+    lm:rinalmo-micro:mask: weighted 0.603 | unweighted mean 0.618 | median 0.612 | genes with AUROC>0.5: 13/14
+      leave-one-gene-out aggregate: -RNU4-2 0.588, -MT-TL1 0.593, -MT-TN 0.598, -MT-TS1 0.599 ... -RNU7-1 0.613, -RNU4ATAC 0.616
+    lm:rnafm:mask: weighted 0.604 | unweighted mean 0.608 | median 0.605 | genes with AUROC>0.5: 11/14
+      leave-one-gene-out aggregate: -MT-TL1 0.588, -RNU4ATAC 0.598, -RNU4-2 0.599, -MT-TW 0.600 ... -RNU2-2 0.610, -RMRP 0.611
+[4] substitution class (does the LM add beyond mutation type?)
+    substitution-class model (leave-one-gene-out logistic on the 12 classes): 0.557
+    lm:rinalmo-micro:mask      overall 0.603 | inside transition/transversion strata 0.610 | inside the 12 substitution classes 0.616 | class + score (LOGO) 0.612
+    lm:rnafm:mask              overall 0.604 | inside transition/transversion strata 0.631 | inside the 12 substitution classes 0.626 | class + score (LOGO) 0.609
+    cadd                       overall 0.705 | inside transition/transversion strata nan | inside the 12 substitution classes nan | class + score (LOGO) 0.665
+[5] position constraint p(ref) vs allele plausibility p(alt)  (masked LM, first model)
+    position constraint  log p(ref)      within-gene AUROC 0.611
+    allele implausibility -log p(alt)    within-gene AUROC 0.576
+    difference (the mask score)          within-gene AUROC 0.603
+[6] population frequency: is the score just tracking how common a variant is?
+    lm:rinalmo-micro:mask      within-gene Spearman(log10 AF, score) over gnomAD variants: weighted mean -0.118 (per-gene range -0.41..+0.01, 8 genes)  [negative = rarer variants look more damaging]
+    lm:rnafm:mask              within-gene Spearman(log10 AF, score) over gnomAD variants: weighted mean -0.216 (per-gene range -0.49..-0.06, 8 genes)  [negative = rarer variants look more damaging]
+    cadd                       within-gene Spearman(log10 AF, score) over gnomAD variants: weighted mean -0.041 (per-gene range -0.18..+0.14, 8 genes)  [negative = rarer variants look more damaging]
+    P/LP versus each benign background (within-gene AUROC, genes with >=3 of each class):
+      common AF>=1e-4        n_benign=  279 | rinalmo-micro 0.691 | rnafm 0.741 | cadd 0.634 | b:transversion 0.609
+      rare 1e-5<=AF<1e-4     n_benign=  987 | rinalmo-micro 0.572 | rnafm 0.577 | cadd 0.707 | b:transversion 0.494
+      ultra-rare AF<1e-5     n_benign= 1092 | rinalmo-micro 0.539 | rnafm 0.516 | cadd 0.703 | b:transversion 0.382
+[7] spot checks (primary score; higher = more damaging)
+    MT-TK: P/LP lowest-scored [(8344, 'A>G', 0.82), (8340, 'G>A', 2.68)]  highest [(8356, 'T>C', 2.94), (8313, 'G>A', 4.59)] | benign highest [(8357, 'T>C', 4.0, 'gn'), (8298, 'T>C', 4.06, 'cl')]
+    MT-TL1: P/LP lowest-scored [(3242, 'G>A', 1.54), (3271, 'T>C', 1.55)]  highest [(3243, 'A>G', 5.63), (3243, 'A>T', 6.4)] | benign highest [(3284, 'G>A', 5.56, 'gn'), (3244, 'G>C', 6.67, 'gn')]
+    MT-TN: P/LP lowest-scored [(5698, 'G>A', 1.25), (5728, 'T>C', 1.57)]  highest [(5703, 'G>A', 1.58), (5690, 'A>G', 1.92)] | benign highest [(5670, 'A>G', 2.04, 'gn'), (5697, 'A>G', 3.21, 'gn')]
+    MT-TS1: P/LP lowest-scored [(7497, 'G>A', -0.97), (7453, 'G>A', 1.27)]  highest [(7511, 'T>C', 1.9), (7512, 'T>C', 2.15)] | benign highest [(7479, 'G>A', 2.05, 'gn'), (7457, 'G>A', 4.01, 'gn')]
+    MT-TV: P/LP lowest-scored [(1644, 'G>A', 0.32), (1624, 'C>T', 1.98)]  highest [(1624, 'C>T', 1.98), (1621, 'A>C', 6.68)] | benign highest [(1629, 'A>T', 4.48, 'gn'), (1623, 'G>A', 4.89, 'gn')]
+    MT-TW: P/LP lowest-scored [(5556, 'G>A', 0.23), (5535, 'C>T', 2.21)]  highest [(5521, 'G>A', 4.03), (5513, 'G>A', 4.52)] | benign highest [(5553, 'T>G', 5.16, 'cl'), (5559, 'A>T', 5.39, 'gn')]
+    RMRP: P/LP lowest-scored [(35657798, 'A>G', -0.79), (35657776, 'T>C', -0.62)]  highest [(35657983, 'G>A', 0.99), (35657823, 'G>A', 1.08)] | benign highest [(35657974, 'G>T', 1.14, 'gn'), (35657878, 'T>A', 1.17, 'gn')]
+    RNU12: P/LP lowest-scored [(42615382, 'G>T', -0.36), (42615327, 'C>T', -0.02)]  highest [(42615323, 'T>C', 0.35), (42615328, 'G>A', 0.56)] | benign highest [(42615328, 'G>T', 0.81, 'gn'), (42615348, 'G>T', 0.83, 'gn')]
+    RNU2-2: P/LP lowest-scored [(62841806, 'C>T', 3.9), (62841627, 'C>T', 4.92)]  highest [(62841681, 'A>C', 8.23), (62841662, 'G>T', 8.4)] | benign highest [(62841730, 'T>G', 8.72, 'gn'), (62841738, 'A>T', 8.87, 'gn')]
+    RNU4-2: P/LP lowest-scored [(120291785, 'T>C', 0.56), (120291782, 'A>C', 1.37)]  highest [(120291859, 'C>G', 7.24), (120291829, 'G>C', 8.42)] | benign highest [(120291847, 'C>G', 7.85, 'gn'), (120291897, 'C>G', 7.93, 'gn')]
+    RNU4ATAC: P/LP lowest-scored [(121531003, 'G>A', -1.08), (121530892, 'C>T', -0.97)]  highest [(121530995, 'A>G', 1.13), (121530999, 'T>A', 1.19)] | benign highest [(121530988, 'T>A', 1.58, 'cl'), (121530989, 'T>C', 1.72, 'gn')]
+    RNU7-1: P/LP lowest-scored [(6943843, 'C>T', -0.81), (6943850, 'G>A', -0.34)]  highest [(6943842, 'T>C', -0.14), (6943843, 'C>G', 0.14)] | benign highest [(6943855, 'C>A', 2.42, 'gn'), (6943828, 'T>G', 2.42, 'gn')]
+    SNORD118: P/LP lowest-scored [(8173516, 'A>C', -0.6), (8173586, 'G>T', -0.3)]  highest [(8173458, 'G>T', 0.97), (8173530, 'A>G', 1.08)] | benign highest [(8173549, 'T>G', 1.36, 'gn'), (8173471, 'A>G', 1.69, 'gn')]
+    TERC: P/LP lowest-scored [(169764755, 'A>C', -1.12), (169764944, 'T>G', -1.0)]  highest [(169764742, 'C>T', 1.68), (169764961, 'A>T', 1.78)] | benign highest [(169764784, 'G>T', 2.46, 'gn'), (169764692, 'C>A', 2.81, 'gn')]
+    known MELAS variant m.3243A>G: label=1, score 5.63, percentile within MT-TL1 94
+[8] CADD: re-queried 8 random nuclear variants; mismatches with cached values: 0
+    CADD coverage of nuclear variants: 100%

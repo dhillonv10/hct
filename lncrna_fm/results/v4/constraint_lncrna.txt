@@ -1,0 +1,19 @@
+=== population-constraint test, set=lncrna: 150 genes, 132055 nt of spliced transcript
+[rinalmo-micro] 395265 possible SNVs; 34492 observed in gnomAD (8.7%); reference-base disagreements with gnomAD: 0
+    damage score (per +1 SD within gene): beta = -0.093 (se 0.013, z = -7.01, 150 genes)  odds ratio of being observed = 0.912 [0.888,0.936]
+    observed / expected by within-gene damage decile (1 = least damaging ... 10 = most): 1.18 1.03 1.00 1.00 0.97 0.93 0.96 0.92 0.99 0.90
+    ADJUSTED for local GC, distance to exon junction, relative position and transcript ends: beta = -0.105 (se 0.014, z = -7.65); O/E deciles 1.20 1.04 1.01 1.01 0.97 0.93 0.95 0.91 0.97 0.90
+    ADJUSTED ALSO for homopolymer run length and local sequence entropy (repeat / low-complexity proxies): beta = -0.113 (se 0.014, z = -7.80)
+    same, dropping each gene's 10% least-damaging positions: beta = -0.069 (se 0.014, z = -5.09)
+    each covariate used alone as the 'damage score' (to see what the language model could be mimicking): gc25: beta +0.068 (z +2.3); djunc: beta -0.000 (z -0.0); relpos: beta -0.076 (z -2.5)
+    control, damage shuffled within gene (z-statistics of 3 shuffles): +0.17 +0.15 +1.11
+    common (AF >= 1e-4) only: beta = -0.146 (se 0.027, z = -5.31); O/E deciles 1.38 1.03 1.00 0.86 0.74 0.91 0.93 0.84 0.94 0.95
+[rnafm] 395265 possible SNVs; 34492 observed in gnomAD (8.7%); reference-base disagreements with gnomAD: 0
+    damage score (per +1 SD within gene): beta = -0.100 (se 0.014, z = -7.20, 150 genes)  odds ratio of being observed = 0.905 [0.880,0.930]
+    observed / expected by within-gene damage decile (1 = least damaging ... 10 = most): 1.19 1.03 1.02 0.99 0.97 0.95 0.94 0.97 0.96 0.88
+    ADJUSTED for local GC, distance to exon junction, relative position and transcript ends: beta = -0.112 (se 0.014, z = -7.76); O/E deciles 1.21 1.04 1.03 1.00 0.97 0.95 0.93 0.95 0.94 0.87
+    ADJUSTED ALSO for homopolymer run length and local sequence entropy (repeat / low-complexity proxies): beta = -0.120 (se 0.015, z = -7.82)
+    same, dropping each gene's 10% least-damaging positions: beta = -0.079 (se 0.014, z = -5.72)
+    each covariate used alone as the 'damage score' (to see what the language model could be mimicking): gc25: beta +0.068 (z +2.3); djunc: beta -0.000 (z -0.0); relpos: beta -0.076 (z -2.5)
+    control, damage shuffled within gene (z-statistics of 3 shuffles): +0.42 +0.31 +1.41
+    common (AF >= 1e-4) only: beta = -0.150 (se 0.031, z = -4.88); O/E deciles 1.40 1.01 0.96 0.89 0.81 0.91 0.89 0.86 0.91 0.94

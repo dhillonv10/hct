@@ -671,16 +671,16 @@ Asked to check whether section 12 is nonsense. Each check targets one way the he
 ### 14.2 The check that failed: the benign background decides the result
 Benign = every variant seen in gnomAD, split by allele frequency (14 genes, TERC added; 188 pathogenic, 2,696 variants); within-gene AUROC, [95% CI]:
 
-| P/LP compared with | n | RiNALMo-micro | RNA-FM | transversion indicator |
-|---|---|---|---|---|
-| gnomAD **common** (AF >= 1e-4) | 279 | 0.691 | 0.741 | 0.609 |
-| gnomAD **rare** (1e-5 to 1e-4) | 987 | 0.572 | 0.577 | 0.494 |
-| gnomAD **ultra-rare** (< 1e-5) | 1,092 | 0.539 | 0.516 | 0.382 |
+| P/LP compared with | n | RiNALMo-micro | RNA-FM | CADD (8 nuclear genes) | transversion indicator |
+|---|---|---|---|---|---|
+| gnomAD **common** (AF >= 1e-4) | 279 | 0.691 | 0.741 | 0.634 | 0.609 |
+| gnomAD **rare** (1e-5 to 1e-4) | 987 | 0.572 | 0.577 | **0.707** | 0.494 |
+| gnomAD **ultra-rare** (< 1e-5) | 1,092 | 0.539 | 0.516 | **0.703** | 0.382 |
 | every gnomAD-observed variant, nuclear genes (8) | 2,493 | 0.578 [0.504,0.652] | 0.580 [0.521,0.633] | 0.474 |
 | same, CADD | | **0.705** [0.576,0.793] | | |
 | same, CADD + language models (leave-one-gene-out) | | 0.720 [0.624,0.788] | | |
 
-The gradient is not a gene-set artefact: on the six nuclear genes present in every comparison (RMRP, RNU2-2, RNU4-2, RNU4ATAC, RNU7-1, SNORD118) micro goes 0.675 (ClinVar benign) -> 0.692 (common) -> 0.563 (rare) -> 0.529 [0.449,0.591] (ultra-rare), and RNA-FM 0.823 -> 0.757 -> 0.577 -> 0.506. Within genes, rarer variants also receive higher damage scores (weighted Spearman of log10 allele frequency with the score -0.12 for micro, -0.22 for RNA-FM; a pooled correlation looks positive, which is a gene-composition artefact).
+The gradient is not a gene-set artefact: on the six nuclear genes present in every comparison (RMRP, RNU2-2, RNU4-2, RNU4ATAC, RNU7-1, SNORD118) micro goes 0.675 (ClinVar benign) -> 0.692 (common) -> 0.563 (rare) -> 0.529 [0.449,0.591] (ultra-rare), and RNA-FM 0.823 -> 0.757 -> 0.577 -> 0.506. Within genes, rarer variants also receive higher damage scores (weighted Spearman of log10 allele frequency with the score -0.12 for micro, -0.22 for RNA-FM, but only -0.04 for CADD; a pooled correlation looks positive, which is a gene-composition artefact). CADD moves the *opposite* way across backgrounds (0.63 against common, 0.70 against rare and ultra-rare variants), which is what a score with some pathogenicity-specific content, rather than a tolerance score, would do.
 
 What this means:
 - **The language-model score separates pathogenic variants from *tolerated* variants, not from other rare variants.** It behaves like a measure of how constrained a position or allele is, which is why it also passes the population-constraint test in section 15. It is therefore **not a variant-pathogenicity classifier**. Most clinical variants of uncertain significance are rare, so the 0.52-0.58 numbers are the ones that matter for that use.
