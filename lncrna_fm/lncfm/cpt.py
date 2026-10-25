@@ -10,7 +10,9 @@ What it does
     windows to limit catastrophic forgetting
   * reports held-out-chromosome MLM loss BEFORE and DURING training (the loss must go down, and
     benchmark probes must improve vs the frozen model -- otherwise CPT bought nothing)
-  * saves a HuggingFace directory usable as the provider  `local:<dir>`  in lncfm.bench
+  * `--ncrna 0.15` mixes in small structured ncRNAs (snRNA, snoRNA, tRNA, ...) with the variant-panel genes held out, so
+    `lncfm.varscore eval --models local:<dir>/hf` is a clean held-out-gene test of whether CPT helps variant-effect scoring
+  * saves a HuggingFace directory usable as the provider  `local:<dir>`  in lncfm.bench and lncfm.varscore
 
 Only models that load without custom remote code are supported here (multimolecule/* ).
 """
@@ -43,7 +45,7 @@ def _windows(df, rng, n, max_nt):
 
 
 class Sampler:
-    def __init__(self, replay: float, max_nt: int):
+    def __init__(self, replay: float, max_nt: int, ncrna: float = 0.0, hold_out_variant_genes: bool = True):
         frames = []
         for sp in ("human", "mouse"):
             df = gencode.representative_per_gene(gencode.build_table(sp, "lnc"))
@@ -56,11 +58,23 @@ class Sampler:
         self.pc = pc[~pc.chrom.isin(gencode.TEST_CHROMS | gencode.VAL_CHROMS)][["seq"]].reset_index(drop=True)
         val = gencode.representative_per_gene(gencode.build_table("human", "lnc"))
         self.val = list(val[val.chrom.isin(gencode.VAL_CHROMS)].sample(256, random_state=0).seq.str.slice(0, max_nt))
-        self.replay, self.max_nt = replay, max_nt
+        self.replay, self.max_nt, self.ncrna = replay, max_nt, ncrna
+        self.nc = None
+        if ncrna > 0:                                   # small structured ncRNAs (snRNA, snoRNA, tRNA, ...): variant-effect work
+            nc = gencode.representative_per_gene(gencode.build_ncrna_table())
+            nc = nc[~nc.chrom.isin(gencode.TEST_CHROMS | gencode.VAL_CHROMS)]
+            if hold_out_variant_genes:                  # the ClinVar variant-panel genes stay unseen: a held-out-GENE test
+                from . import gnomad, ncvar
+                panel = set(ncvar.eligible_genes(gnomad.build_eval_table(), 3).gene_id)
+                nc = nc[~nc.gene_id.isin(panel)]
+            self.nc = nc[["seq"]].reset_index(drop=True)
+            print(f"ncRNA corpus: {len(self.nc)} genes ({'variant-panel genes held out' if hold_out_variant_genes else 'ALL genes'})")
 
     def batch(self, rng, B):
         n_pc = int(round(B * self.replay))
-        return _windows(self.lnc, rng, B - n_pc, self.max_nt) + _windows(self.pc, rng, n_pc, self.max_nt)
+        n_nc = int(round(B * self.ncrna)) if self.nc is not None else 0
+        return (_windows(self.lnc, rng, B - n_pc - n_nc, self.max_nt) + _windows(self.pc, rng, n_pc, self.max_nt)
+                + (_windows(self.nc, rng, n_nc, self.max_nt) if n_nc else []))
 
 
 def mask_batch(tok, texts, rng, device, frac=0.15):
@@ -104,8 +118,13 @@ def main(argv=None):
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--warmup", type=int, default=100)
     ap.add_argument("--replay", type=float, default=0.2)
+    ap.add_argument("--ncrna", type=float, default=0.0,
+                    help="fraction of each batch drawn from small ncRNAs (snRNA/snoRNA/tRNA/...); 0.15 is a sensible value")
+    ap.add_argument("--no-holdout-variant-genes", action="store_true",
+                    help="also train on the ClinVar variant-panel genes (then the variant test is no longer a held-out-gene test)")
     ap.add_argument("--freeze-bottom", type=int, default=0, help="freeze embeddings + this many lowest layers")
     ap.add_argument("--eval-every", type=int, default=250)
+    ap.add_argument("--save-every", type=int, default=500, help="checkpoint (and resume point) every N steps")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
@@ -115,8 +134,11 @@ def main(argv=None):
     from transformers import AutoModelForMaskedLM, AutoTokenizer
     hub = HF_MODELS[a.model][0]
     device = pick_device(a.device)
+    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    state_f = out / "state.pt"
+    resume = state_f.exists() and (out / "hf").exists()
     tok = AutoTokenizer.from_pretrained(hub)
-    model = AutoModelForMaskedLM.from_pretrained(hub).to(device).train()
+    model = AutoModelForMaskedLM.from_pretrained(out / "hf" if resume else hub).to(device).train()
     if a.freeze_bottom:
         enc = getattr(model, [n for n, _ in model.named_children()][0])
         for p in enc.embeddings.parameters():
@@ -127,15 +149,21 @@ def main(argv=None):
     params = [p for p in model.parameters() if p.requires_grad]
     print(f"device={device} trainable={sum(p.numel() for p in params)/1e6:.1f}M / {sum(p.numel() for p in model.parameters())/1e6:.1f}M")
     opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.01)
-    S = Sampler(a.replay, a.max_nt)
-    rng = np.random.default_rng(a.seed)
-    out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    start = 0
+    if resume:                                          # a long run can be interrupted and re-launched with the same command
+        st = torch.load(state_f, map_location="cpu")
+        opt.load_state_dict(st["opt"])
+        start = int(st["step"])
+        print(f"resuming from step {start}")
+    S = Sampler(a.replay, a.max_nt, a.ncrna, not a.no_holdout_variant_genes)
+    rng = np.random.default_rng(a.seed + start)
     log = open(out / "log.jsonl", "a")
-    v0 = eval_loss(model, tok, S.val, device)
-    print(f"held-out lncRNA MLM loss BEFORE cpt: {v0:.4f}")
-    log.write(json.dumps({"step": 0, "val_mlm": v0}) + "\n")
+    if start == 0:
+        v0 = eval_loss(model, tok, S.val, device)
+        print(f"held-out lncRNA MLM loss BEFORE cpt: {v0:.4f}")
+        log.write(json.dumps({"step": 0, "val_mlm": v0}) + "\n")
     t0 = time.time()
-    for step in range(a.steps):
+    for step in range(start, a.steps):
         lr = a.lr * min(1.0, (step + 1) / a.warmup) * (0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * step / a.steps)))
         for g in opt.param_groups:
             g["lr"] = lr
@@ -153,6 +181,9 @@ def main(argv=None):
                 rec["val_mlm"] = eval_loss(model, tok, S.val, device)
                 print(rec, flush=True)
             log.write(json.dumps(rec) + "\n"); log.flush()
+        if (step + 1) % a.save_every == 0 and step + 1 < a.steps:
+            model.save_pretrained(out / "hf"); tok.save_pretrained(out / "hf")
+            torch.save({"opt": opt.state_dict(), "step": step + 1}, state_f)
     model.save_pretrained(out / "hf"); tok.save_pretrained(out / "hf")
     print("saved", out / "hf", " -> evaluate with provider  local:" + str(out / "hf"))
 

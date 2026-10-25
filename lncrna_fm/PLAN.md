@@ -463,7 +463,7 @@ Everything in this section was run in the same CPU sandbox as section 10 (600-1,
 |---|---|---|
 | `rbp_union`: K562 + HepG2 eCLIP pooled (RBPs assayed in both; label = peak in any line where the gene is expressed) | `lncbench.py`, `eclip.build_union_table` | 2,196 genes, 38 RBPs, median 32 positives per RBP (K562 alone: 1,738 genes, 43 RBPs) |
 | AML **genotype panel**: 14 driver genes, lncRNA vs mRNA vs age, BeatAML CV + external TCGA-LAML | `aml/genotype.py`, stage `genotype` | scored, section 11.3 |
-| frozen-feature sweep: layer subset x pooling x multi-window tiling x k-mer stacking | `embed.py`, `lncbench.parse_variant`, stage `variants` | scored, section 11.2 |
+| frozen-feature sweep: layer subset x pooling x multi-window tiling x k-mer stacking | `embed.py`, `lncbench.parse_variant`, stage `sweep` | scored, section 11.2 |
 | more foundation models: RNA-FM (99.5M), RiNALMo-mega (148M) | stage `fms` | **load and embed only** (0.30 and 0.66 s/sequence on CPU; all-layer pass equals the plain pass, cosine 1.0000). Not benchmarked. |
 | Benjamini-Hochberg column in `compare` | `lncbench.compare` | run on existing paired tables |
 | ortholog retrieval stage | stage `retrieval` | v1 code, unchanged |
@@ -483,7 +483,7 @@ RiNALMo-micro, 600 genes per gene-level task and the full K562 RBP task, 400 nt,
 
 - No configuration wins across tasks. The middle layer helps tau_reg (+0.04) and hurts testis and RBP; the last layer is best on testis and loc_clf; the three-layer mean+max is best on RBP (+0.015 over last layer, inside the noise).
 - Stacking k-mer features on top of RiNALMo never beat RiNALMo alone: whatever the k-mers know, the language model already has.
-- **Recommendation: keep last-layer mean pooling as the default.** If you want layer choice, treat it as a hyperparameter selected inside the training folds on the full run, never from the table above (that would be choosing on the evaluation data). The `variants` stage exists to measure this properly on the full data; I would not expect it to change the conclusions.
+- **Recommendation: keep last-layer mean pooling as the default.** If you want layer choice, treat it as a hyperparameter selected inside the training folds on the full run, never from the table above (that would be choosing on the evaluation data). The `sweep` stage exists to measure this properly on the full data; I would not expect it to change the conclusions.
 
 ### 11.3 AML genotype panel (`results/v2/aml_genotype.txt`)
 Per-gene 5-fold CV AUROC for "is gene X mutated" from expression of the 1,000 most variable lncRNAs, the 1,000 most variable mRNAs, or age, BeatAML (n=346) with external TCGA-LAML (n=151, PanCancer Atlas mutation calls) where there are >= 8 mutated patients.

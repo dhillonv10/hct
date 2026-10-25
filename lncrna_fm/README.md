@@ -12,9 +12,12 @@ scripts/m4_run_all.sh full       # everything, whole benchmark + locked test
 scripts/m4_run_all.sh ladder     # frozen / LoRA / top-k / full fine-tuning of RiNALMo
 scripts/m4_run_all.sh aml        # patient-level AML tasks with external validation
 scripts/m4_run_all.sh genotype   # which AML driver genotypes can be read from lncRNA expression (14 genes)
-scripts/m4_run_all.sh variants   # frozen-feature sweep: layers x pooling x tiling x k-mer stacking
+scripts/m4_run_all.sh sweep      # frozen-feature sweep: layers x pooling x tiling x k-mer stacking
 scripts/m4_run_all.sh fms        # more foundation models: RNA-FM, RiNALMo-mega
 scripts/m4_run_all.sh retrieval  # human->mouse positional-ortholog retrieval
+scripts/m4_run_all.sh varscore   # ncRNA variant-effect scoring (ClinVar + gnomAD): RiNALMo / RNA-FM / RNA structure / CADD
+scripts/m4_run_all.sh cpt        # LONG + resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs
+scripts/m4_run_all.sh cpt_eval   # does CPT help?  variant scoring + RBP / localization probes vs the frozen model
 ```
 
 | layer | tasks | label source | what it asks |
@@ -55,7 +58,11 @@ lncfm/
   embed.py        embedding providers (our model, random-init control, external HF models)
   cpt.py          "Option B": continual pretraining of an existing masked-LM on lncRNA
   speedtest.py    measure YOUR machine's throughput and project wall-clock; counts real FLOPs/nt
-  variants.py, variant_eval.py   within-gene ClinVar ncRNA variant scoring (zero-shot MLM log-likelihood ratio)
+  variants.py, variant_eval.py   v1 within-gene ClinVar scoring of LncFM checkpoints (superseded by the three files below)
+  ncvar.py        ClinVar SNVs -> ncRNA transcript coordinates (strand-aware, coding-gene and antisense filters), labelled sets
+  gnomad.py       common gnomAD variants as an extra benign set (public GraphQL API; nuclear v4, mitochondrial v3.1)
+  varscore.py     variant-effect scorers (masked-LM log-odds, embedding distance, ViennaRNA structure change, baselines,
+                  CADD), within-gene AUROC with hierarchical bootstrap, leave-one-gene-out combiner, VCF scorer
   clinical/tcga.py, clinical/survival.py   TCGA lncRNA expression + survival benchmark
 scripts/          run_option_b_frozen.sh, eval_ckpts.sh
 ```

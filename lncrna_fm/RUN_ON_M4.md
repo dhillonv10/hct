@@ -22,11 +22,23 @@ export LNCFM_DATA=$HOME/lncfm_data LNCFM_RUNS=$HOME/lncfm_runs      # put these 
 | `scripts/m4_run_all.sh ladder` | frozen vs LoRA vs top-2 vs full fine-tune of RiNALMo | hours |
 | `scripts/m4_run_all.sh aml` | patient-level AML tasks, external validation | < 1 h |
 | `scripts/m4_run_all.sh genotype` | 14-gene AML genotype panel | minutes |
-| `scripts/m4_run_all.sh variants` / `fms` / `retrieval` | optional: feature sweep, RNA-FM + RiNALMo-mega, ortholog retrieval | hours |
+| `scripts/m4_run_all.sh varscore` | **ncRNA variant-effect scoring** (ClinVar + gnomAD): RiNALMo-micro / mega / RNA-FM, RNA-structure change, CADD, within-gene AUROC, saves `combiner_micro.json` | 30-90 min |
+| `scripts/m4_run_all.sh cpt` | **the long job**: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs. Resumable: if it stops, run the same command again. `CPT_STEPS=40000 scripts/m4_run_all.sh cpt` for longer | hours to days |
+| `scripts/m4_run_all.sh cpt_eval` | after `cpt`: variant scoring and RBP / localization probes, CPT model vs frozen | 1-2 h |
+| `scripts/m4_run_all.sh sweep` / `fms` / `retrieval` | optional: feature sweep, RNA-FM + RiNALMo-mega, ortholog retrieval | hours |
 
 Do `check` first. If it reports an MPS/CPU mismatch or a very low speed, stop and send me the output.
 The model decision (section 11.5 of PLAN.md) hinges on the `ladder` stage: does adapting RiNALMo beat the frozen probe on
 `rbp_K562`, `rbp_HepG2`, `loc_clf`?
+
+## 2b. Scoring your own variants (after `varscore` has produced `combiner_micro.json`)
+```bash
+python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner_micro.json --out scored.tsv
+```
+Input is a GRCh38 VCF, or a 4-column tab file `chrom pos ref alt`. Only SNVs that fall inside exons of annotated non-coding
+genes are scored. Output: one row per variant x gene with every score (higher = more damaging), `combined` (a ranking score,
+not a probability) and `pct_in_gene` (its percentile among your variants in the same gene). Research use only.
+The `--models/--no-struct/--no-emb` flags must match the ones used to train the combiner.
 
 ## 3. Look at results
 ```bash

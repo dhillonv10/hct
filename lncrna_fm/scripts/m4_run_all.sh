@@ -8,9 +8,12 @@
 #   scripts/m4_run_all.sh ladder       # frozen / LoRA / top-k / full fine-tuning of RiNALMo-micro
 #   scripts/m4_run_all.sh aml          # patient-level AML layer with external validation
 #   scripts/m4_run_all.sh genotype     # which AML driver genotypes can be read from lncRNA expression
-#   scripts/m4_run_all.sh variants     # frozen-feature sweep: layers x pooling x tiling x stacking with k-mers (RiNALMo-micro)
-#   scripts/m4_run_all.sh fms          # more foundation models: RNA-FM, RiNALMo-mega (best feature recipe from `variants`)
+#   scripts/m4_run_all.sh sweep        # frozen-feature sweep: layers x pooling x tiling x stacking with k-mers (RiNALMo-micro)
+#   scripts/m4_run_all.sh fms          # more foundation models: RNA-FM, RiNALMo-mega (best feature recipe from `sweep`)
 #   scripts/m4_run_all.sh retrieval    # human->mouse positional-ortholog retrieval
+#   scripts/m4_run_all.sh varscore     # ncRNA variant-effect scoring: ClinVar + gnomAD, RiNALMo/RNA-FM/structure/CADD, within-gene AUROC
+#   scripts/m4_run_all.sh cpt          # LONG, resumable: continual pretraining of RiNALMo-micro on lncRNA + small ncRNAs (CPT_STEPS=20000)
+#   scripts/m4_run_all.sh cpt_eval     # does the CPT model beat the frozen one?  variant scoring + RBP/localization probes
 set -euo pipefail
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 OUT=${LNCFM_RUNS:-runs}/v2; mkdir -p "$OUT"
@@ -46,21 +49,42 @@ case "$stage" in
     python -m lncfm.aml.patient --reps 3 --emb random kmer rinalmo-micro --out "$OUT/aml_patient.json" ;;
   genotype)
     python -m lncfm.aml.genotype --reps 3 --out "$OUT/aml_genotype.json" ;;
-  variants)
+  sweep)
     R=rinalmo-micro
     python -m lncfm.lncbench run --providers kmer "$R?layers=last&pool=mean" "$R?layers=mid&pool=mean" "$R?layers=mid&pool=meanmax" \
         "$R?layers=4,8,last&pool=meanmax" "$R?layers=mid&pool=meanmax&win=3" "concat:kmer+$R?layers=mid&pool=meanmax" \
         --tasks loc_reg loc_clf tau_reg testis_clf brain_clf rbp_K562 rbp_HepG2 rbp_union aml_vs_normal_resid_reg aml_vs_normal_resid_clf \
-        --trunc 512 --final --save-oof --out "$OUT/variants.json"
-    python -m lncfm.lncbench report "$OUT/variants.json" --scope dev_pruned ;;
+        --trunc 512 --final --save-oof --out "$OUT/sweep.json"
+    python -m lncfm.lncbench report "$OUT/sweep.json" --scope dev_pruned ;;
   fms)
-    BEST=${BEST:-"?layers=mid&pool=meanmax"}          # set to the winner of `variants`
+    BEST=${BEST:-"?layers=mid&pool=meanmax"}          # set to the winner of `sweep`
     python -m lncfm.lncbench run --providers "rnafm$BEST" "rinalmo-mega$BEST" "concat:kmer+rinalmo-mega$BEST" \
         --tasks loc_reg loc_clf tau_reg testis_clf brain_clf rbp_K562 rbp_HepG2 rbp_union aml_vs_normal_resid_reg aml_vs_normal_resid_clf \
         --trunc 512 --final --save-oof --out "$OUT/fms.json"
-    python -m lncfm.lncbench report "$OUT/fms.json" "$OUT/variants.json" --scope dev_pruned ;;
+    python -m lncfm.lncbench report "$OUT/fms.json" "$OUT/sweep.json" --scope dev_pruned ;;
   retrieval)
     python -m lncfm.bench --retrieval --providers kmer shared10mer rinalmo-micro --max-queries 2000 --pool-size 10000 --trunc 400 \
         --out "$OUT/retrieval.json" ;;
+  varscore)
+    python -m lncfm.gnomad                                 # builds + prints the evaluation table (needs internet: gnomAD API)
+    python -m lncfm.varscore eval --models rinalmo-micro --cadd --combine \
+        --save-combiner "$OUT/combiner_micro.json" --out "$OUT/varscore_micro.json"            # the light model: used by `varscore score`
+    python -m lncfm.varscore eval --models rinalmo-micro rinalmo-mega rnafm --cadd --combine \
+        --save-combiner "$OUT/combiner_all.json" --out "$OUT/varscore_main.json"
+    # sensitivity: do the conclusions depend on how the benign set is built?
+    python -m lncfm.varscore eval --models rinalmo-micro --bg clinvar --out "$OUT/varscore_clinvar_only.json"
+    python -m lncfm.varscore eval --models rinalmo-micro --af-min 0.001 --out "$OUT/varscore_af1e-3.json"
+    python -m lncfm.varscore eval --models rinalmo-micro --min-stars 1 --out "$OUT/varscore_stars1.json"
+    python -m lncfm.varscore eval --models rinalmo-micro --bg any --out "$OUT/varscore_any.json" ;;   # adds TERC (background = any observed variant)
+  cpt)
+    # Resumable: if interrupted, run the same command again. Watch $LNCFM_RUNS/cpt_micro_nc/log.jsonl (val_mlm must go DOWN).
+    python -m lncfm.cpt --model rinalmo-micro --steps "${CPT_STEPS:-20000}" --batch 16 --max-nt 512 --lr 3e-5 --replay 0.2 \
+        --ncrna 0.15 --save-every 500 --out "${LNCFM_RUNS:-runs}/cpt_micro_nc" ;;
+  cpt_eval)
+    C="local:${LNCFM_RUNS:-runs}/cpt_micro_nc/hf"
+    python -m lncfm.varscore eval --models rinalmo-micro "$C" --out "$OUT/varscore_cpt.json"
+    python -m lncfm.lncbench run --providers rinalmo-micro "$C" --tasks loc_clf loc_reg tau_reg testis_clf rbp_K562 rbp_HepG2 rbp_union \
+        --trunc 1000 --final --save-oof --out "$OUT/cpt_probe.json"
+    python -m lncfm.lncbench report "$OUT/cpt_probe.json" --scope dev_pruned ;;
   *) echo "unknown stage $stage"; exit 1 ;;
 esac

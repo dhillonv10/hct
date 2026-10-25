@@ -13,6 +13,8 @@ import re
 from collections import defaultdict
 from pathlib import Path
 
+import pickle
+
 import pandas as pd
 
 from . import download, paths
@@ -133,6 +135,30 @@ def build_table(species: str = "human", kind: str = "lnc", force: bool = False) 
         })
     df = pd.DataFrame(rows)
     df["gene_id_nov"] = df.gene_id.str.replace(r"\.\d+(_PAR_Y)?$", "", regex=True)
+    df.to_pickle(out)
+    return df
+
+
+NCRNA_SMALL = {"snRNA", "snoRNA", "scaRNA", "misc_RNA", "rRNA", "Mt_tRNA", "Mt_rRNA", "ribozyme", "vault_RNA", "sRNA", "miRNA"}
+
+
+def build_ncrna_table(force: bool = False) -> pd.DataFrame:
+    """Human non-lncRNA ncRNA transcripts (snRNA, snoRNA, tRNA, ...) from the full GENCODE transcript FASTA."""
+    out = paths.ensure(paths.DATA / "processed") / "human_nc.pkl"
+    if out.exists() and not force:
+        return pd.read_pickle(out)
+    _, tx_meta = pickle.loads((paths.DATA / "processed" / "human_gtf_exons.pkl").read_bytes())
+    fa = paths.human(f"gencode.v{paths.GENCODE_HUMAN_RELEASE}.transcripts.fa.gz")
+    rows = []
+    for hdr, seq in read_fasta_gz(fa):
+        tid = hdr.split("|")[0]
+        m = tx_meta.get(tid)
+        if m is None or m["gene_type"] not in NCRNA_SMALL:
+            continue
+        rows.append({"tx_id": tid, "gene_id": m["gene_id"], "gene_name": m["gene_name"], "gene_type": m["gene_type"],
+                     "chrom": m["chrom"], "strand": m["strand"], "canonical": m["canonical"], "length": len(seq),
+                     "seq": seq.upper().replace("T", "U")})
+    df = pd.DataFrame(rows)
     df.to_pickle(out)
     return df
 
