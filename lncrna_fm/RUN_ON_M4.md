@@ -31,6 +31,16 @@ Do `check` first. If it reports an MPS/CPU mismatch or a very low speed, stop an
 The model decision (section 11.5 of PLAN.md) hinges on the `ladder` stage: does adapting RiNALMo beat the frozen probe on
 `rbp_K562`, `rbp_HepG2`, `loc_clf`?
 
+## 2a. Suggested order for tomorrow
+1. `check`, then `data` (the ClinVar and GENCODE transcript files the variant code needs are in it). ClinVar is downloaded as the
+   *current* release, so your counts will differ slightly from the ones in PLAN section 12.
+2. `varscore` (30-90 min, needs internet for gnomAD and CADD). Compare with `results/v4/final_main.txt` in this folder.
+3. **Start `cpt` before you leave the machine** (`CPT_STEPS=20000` by default; it logs to `$LNCFM_RUNS/cpt_micro_nc/log.jsonl`,
+   and `val_mlm` there must go down). Look at the elapsed time of the first logged steps and scale `CPT_STEPS` to the time you have.
+   It checkpoints every 500 steps; if it stops, run the same command again. Do not run other heavy jobs on the same Mac meanwhile.
+4. When `cpt` finishes: `cpt_eval`. Decision rule: PLAN section 12.6.
+5. Other stages (`quick`, `full`, `ladder`, `aml`, `genotype`) are independent of the variant work and can run before or after.
+
 ## 2b. Scoring your own variants (after `varscore` has produced `combiner_micro.json` and `combiner_micro_cadd.json`)
 ```bash
 python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner_micro.json --out scored.tsv
