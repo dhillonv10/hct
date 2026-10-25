@@ -7,6 +7,10 @@
 #   scripts/m4_run_all.sh full         # whole benchmark, longer inputs, locked test             (several hours)
 #   scripts/m4_run_all.sh ladder       # frozen / LoRA / top-k / full fine-tuning of RiNALMo-micro
 #   scripts/m4_run_all.sh aml          # patient-level AML layer with external validation
+#   scripts/m4_run_all.sh genotype     # which AML driver genotypes can be read from lncRNA expression
+#   scripts/m4_run_all.sh variants     # frozen-feature sweep: layers x pooling x tiling x stacking with k-mers (RiNALMo-micro)
+#   scripts/m4_run_all.sh fms          # more foundation models: RNA-FM, RiNALMo-mega (best feature recipe from `variants`)
+#   scripts/m4_run_all.sh retrieval    # human->mouse positional-ortholog retrieval
 set -euo pipefail
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 OUT=${LNCFM_RUNS:-runs}/v2; mkdir -p "$OUT"
@@ -40,5 +44,23 @@ case "$stage" in
     done ;;
   aml)
     python -m lncfm.aml.patient --reps 3 --emb random kmer rinalmo-micro --out "$OUT/aml_patient.json" ;;
+  genotype)
+    python -m lncfm.aml.genotype --reps 3 --out "$OUT/aml_genotype.json" ;;
+  variants)
+    R=rinalmo-micro
+    python -m lncfm.lncbench run --providers kmer "$R?layers=last&pool=mean" "$R?layers=mid&pool=mean" "$R?layers=mid&pool=meanmax" \
+        "$R?layers=4,8,last&pool=meanmax" "$R?layers=mid&pool=meanmax&win=3" "concat:kmer+$R?layers=mid&pool=meanmax" \
+        --tasks loc_reg loc_clf tau_reg testis_clf brain_clf rbp_K562 rbp_HepG2 rbp_union aml_vs_normal_resid_reg aml_vs_normal_resid_clf \
+        --trunc 512 --final --save-oof --out "$OUT/variants.json"
+    python -m lncfm.lncbench report "$OUT/variants.json" --scope dev_pruned ;;
+  fms)
+    BEST=${BEST:-"?layers=mid&pool=meanmax"}          # set to the winner of `variants`
+    python -m lncfm.lncbench run --providers "rnafm$BEST" "rinalmo-mega$BEST" "concat:kmer+rinalmo-mega$BEST" \
+        --tasks loc_reg loc_clf tau_reg testis_clf brain_clf rbp_K562 rbp_HepG2 rbp_union aml_vs_normal_resid_reg aml_vs_normal_resid_clf \
+        --trunc 512 --final --save-oof --out "$OUT/fms.json"
+    python -m lncfm.lncbench report "$OUT/fms.json" "$OUT/variants.json" --scope dev_pruned ;;
+  retrieval)
+    python -m lncfm.bench --retrieval --providers kmer shared10mer rinalmo-micro --max-queries 2000 --pool-size 10000 --trunc 400 \
+        --out "$OUT/retrieval.json" ;;
   *) echo "unknown stage $stage"; exit 1 ;;
 esac

@@ -1,0 +1,49 @@
+
+[loc_reg] layer 1 kind=reg items=600 (dev 520, locked test 80, homology-flagged 0.7%)
+
+
+  rinalmo-micro?layers=last&pool=meandev_all: rho 0.383 [0.30,0.45] n=520  dev_pruned: rho 0.386 [0.31,0.45] n=516
+  rinalmo-micro?layers=mid&pool=meandev_all: rho 0.391 [0.33,0.45] n=520  dev_pruned: rho 0.393 [0.33,0.46] n=516
+  rinalmo-micro?layers=mid&pool=meanmaxdev_all: rho 0.393 [0.33,0.46] n=520  dev_pruned: rho 0.395 [0.34,0.46] n=516
+  rinalmo-micro?layers=4,8,last&pool=meanmaxdev_all: rho 0.391 [0.32,0.45] n=520  dev_pruned: rho 0.394 [0.33,0.46] n=516
+  concat:kmer+rinalmo-micro?layers=mid&pool=meanmaxdev_all: rho 0.379 [0.31,0.45] n=520  dev_pruned: rho 0.381 [0.32,0.45] n=516
+  kmer@400                dev_all: rho 0.336 [0.26,0.41] n=520  dev_pruned: rho 0.337 [0.27,0.41] n=516
+
+[loc_clf] layer 1 kind=clf items=600 (dev 531, locked test 69, homology-flagged 1.3%)
+
+
+  rinalmo-micro?layers=last&pool=meandev_all: AUROC 0.761 [0.72,0.80] n=531  dev_pruned: AUROC 0.763 [0.72,0.80] n=523
+  rinalmo-micro?layers=mid&pool=meandev_all: AUROC 0.748 [0.71,0.79] n=531  dev_pruned: AUROC 0.749 [0.70,0.79] n=523
+  rinalmo-micro?layers=mid&pool=meanmaxdev_all: AUROC 0.747 [0.71,0.79] n=531  dev_pruned: AUROC 0.748 [0.70,0.79] n=523
+  rinalmo-micro?layers=4,8,last&pool=meanmaxdev_all: AUROC 0.752 [0.72,0.79] n=531  dev_pruned: AUROC 0.754 [0.71,0.79] n=523
+  concat:kmer+rinalmo-micro?layers=mid&pool=meanmaxdev_all: AUROC 0.745 [0.71,0.79] n=531  dev_pruned: AUROC 0.746 [0.71,0.79] n=523
+  kmer@400                dev_all: AUROC 0.709 [0.66,0.75] n=531  dev_pruned: AUROC 0.710 [0.67,0.75] n=523
+
+[tau_reg] layer 1 kind=reg items=600 (dev 523, locked test 77, homology-flagged 1.0%)
+
+
+  rinalmo-micro?layers=last&pool=meandev_all: rho 0.329 [0.25,0.40] n=523  dev_pruned: rho 0.331 [0.26,0.40] n=517
+  rinalmo-micro?layers=mid&pool=meandev_all: rho 0.371 [0.30,0.44] n=523  dev_pruned: rho 0.372 [0.30,0.44] n=517
+  rinalmo-micro?layers=mid&pool=meanmaxdev_all: rho 0.374 [0.30,0.45] n=523  dev_pruned: rho 0.373 [0.30,0.44] n=517
+  rinalmo-micro?layers=4,8,last&pool=meanmaxdev_all: rho 0.339 [0.27,0.40] n=523  dev_pruned: rho 0.341 [0.28,0.41] n=517
+  concat:kmer+rinalmo-micro?layers=mid&pool=meanmaxdev_all: rho 0.357 [0.28,0.43] n=523  dev_pruned: rho 0.359 [0.30,0.43] n=517
+  kmer@400                dev_all: rho 0.323 [0.24,0.39] n=523  dev_pruned: rho 0.329 [0.27,0.40] n=517
+
+[testis_clf] layer 1 kind=clf items=600 (dev 523, locked test 77, homology-flagged 1.0%)
+  rinalmo-micro?layers=last&pool=meandev_all: AUROC 0.633 [0.58,0.68] n=523  dev_pruned: AUROC 0.632 [0.58,0.68] n=517
+  rinalmo-micro?layers=mid&pool=meandev_all: AUROC 0.589 [0.55,0.63] n=523  dev_pruned: AUROC 0.590 [0.54,0.65] n=517
+  rinalmo-micro?layers=mid&pool=meanmaxdev_all: AUROC 0.592 [0.54,0.64] n=523  dev_pruned: AUROC 0.592 [0.54,0.64] n=517
+  rinalmo-micro?layers=4,8,last&pool=meanmaxdev_all: AUROC 0.606 [0.56,0.64] n=523  dev_pruned: AUROC 0.609 [0.56,0.66] n=517
+  concat:kmer+rinalmo-micro?layers=mid&pool=meanmaxdev_all: AUROC 0.621 [0.58,0.66] n=523  dev_pruned: AUROC 0.622 [0.58,0.67] n=517
+  kmer@400                dev_all: AUROC 0.617 [0.56,0.66] n=523  dev_pruned: AUROC 0.619 [0.57,0.67] n=517
+
+[rbp_K562] layer 1 kind=multi items=1738 (dev 1555, locked test 183, homology-flagged 1.3%)
+
+
+  rinalmo-micro?layers=last&pool=meandev_all: macroAUROC 0.625 | expr-strat 0.631 | expr+len-strat 0.620 (RBPs 43)  dev_pruned: macroAUROC 0.624 | expr-strat 0.630 | expr+len-strat 0.619 (RBPs 43)
+  rinalmo-micro?layers=mid&pool=meandev_all: macroAUROC 0.589 | expr-strat 0.592 | expr+len-strat 0.582 (RBPs 43)  dev_pruned: macroAUROC 0.588 | expr-strat 0.591 | expr+len-strat 0.580 (RBPs 43)
+  rinalmo-micro?layers=mid&pool=meanmaxdev_all: macroAUROC 0.597 | expr-strat 0.600 | expr+len-strat 0.593 (RBPs 43)  dev_pruned: macroAUROC 0.595 | expr-strat 0.597 | expr+len-strat 0.590 (RBPs 43)
+  rinalmo-micro?layers=4,8,last&pool=meanmaxdev_all: macroAUROC 0.639 | expr-strat 0.645 | expr+len-strat 0.635 (RBPs 43)  dev_pruned: macroAUROC 0.638 | expr-strat 0.644 | expr+len-strat 0.634 (RBPs 43)
+  concat:kmer+rinalmo-micro?layers=mid&pool=meanmaxdev_all: macroAUROC 0.603 | expr-strat 0.604 | expr+len-strat 0.599 (RBPs 43)  dev_pruned: macroAUROC 0.601 | expr-strat 0.602 | expr+len-strat 0.597 (RBPs 43)
+  kmer@400                dev_all: macroAUROC 0.567 | expr-strat 0.566 | expr+len-strat 0.565 (RBPs 43)  dev_pruned: macroAUROC 0.567 | expr-strat 0.566 | expr+len-strat 0.565 (RBPs 43)
+YIELD_DONE

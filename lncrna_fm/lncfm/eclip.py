@@ -85,9 +85,9 @@ def encode_expression(cell: str) -> pd.Series:
     return s[~s.index.duplicated()]
 
 
-def build_binding_table(cell: str, min_pos: int = 15):
-    """Returns (df, Y, rbps): df rows = expressed lncRNA genes (representative transcript), Y (n x R) 0/1."""
-    out = paths.ensure(paths.DATA / "processed") / f"rbp_{cell}.pkl"
+def _raw_table(cell: str):
+    """(rep, Y, names): expressed lncRNAs in `cell` x ALL assayed RBPs (no positive-count filter). Cached."""
+    out = paths.ensure(paths.DATA / "processed") / f"rbp_raw_{cell}.pkl"
     if out.exists():
         return pickle.loads(out.read_bytes())
     tx_exons, tx_meta = gencode._cached_gtf("human", None)
@@ -98,8 +98,8 @@ def build_binding_table(cell: str, min_pos: int = 15):
     # exons of the representative transcript, 0-based half-open
     ex_rows = []
     for gi, (tid, chrom, strand) in enumerate(zip(rep.tx_id, rep.chrom, rep.strand)):
-        for s, e in tx_exons[tid]:
-            ex_rows.append((gi, chrom, strand, s - 1, e))
+        for s_, e_ in tx_exons[tid]:
+            ex_rows.append((gi, chrom, strand, s_ - 1, e_))
     EX = pd.DataFrame(ex_rows, columns=["g", "chrom", "strand", "s", "e"])
     man = pd.DataFrame(json.load(open(paths.DATA / "eclip" / "manifest.json")))
     man = man[man.cell == cell]
@@ -119,9 +119,48 @@ def build_binding_table(cell: str, min_pos: int = 15):
         y[np.unique(EX.g.values[hit])] = 1.0
         cols[rbp] = y
     Y = pd.DataFrame(cols)
-    keep = Y.columns[Y.sum() >= min_pos]
-    Y = Y[keep]
-    res = (rep, Y.values.astype(np.float32), list(keep))
+    res = (rep, Y.values.astype(np.float32), list(Y.columns))
+    out.write_bytes(pickle.dumps(res))
+    return res
+
+
+def build_binding_table(cell: str, min_pos: int = 15):
+    """Returns (df, Y, rbps): df rows = expressed lncRNA genes (representative transcript), Y (n x R) 0/1.
+    RBPs with fewer than `min_pos` positive genes are dropped."""
+    rep, Y, names = _raw_table(cell)
+    keep = np.where(Y.sum(0) >= min_pos)[0]
+    return rep, Y[:, keep], [names[i] for i in keep]
+
+
+def build_union_table(min_pos: int = 20):
+    """K562 + HepG2 pooled: genes expressed in either line; RBPs assayed in both.
+    label 1 = IDR peak overlapping the representative transcript in ANY line where it is expressed;
+    label 0 = no peak in any such line. More positives per RBP than either line alone, at the cost of mixing contexts."""
+    out = paths.ensure(paths.DATA / "processed") / f"rbp_union_m{min_pos}.pkl"
+    if out.exists():
+        return pickle.loads(out.read_bytes())
+    rk, Yk, nk = _raw_table("K562")
+    rh, Yh, nh = _raw_table("HepG2")
+    hset = set(nh)
+    common = [n for n in nk if n in hset]
+    ik, ih = [nk.index(n) for n in common], [nh.index(n) for n in common]
+    posk, posh = {g: i for i, g in enumerate(rk.gene_id_nov)}, {g: i for i, g in enumerate(rh.gene_id_nov)}
+    genes = list(dict.fromkeys(list(rk.gene_id_nov) + list(rh.gene_id_nov)))
+    Y = np.zeros((len(genes), len(common)), np.float32)
+    rows = []
+    for gi, g in enumerate(genes):
+        a, b = posk.get(g), posh.get(g)
+        if a is not None:
+            Y[gi] = np.maximum(Y[gi], Yk[a, ik])
+        if b is not None:
+            Y[gi] = np.maximum(Y[gi], Yh[b, ih])
+        src = rk.iloc[a] if a is not None else rh.iloc[b]
+        tpm = max(rk.tpm.iloc[a] if a is not None else 0.0, rh.tpm.iloc[b] if b is not None else 0.0)
+        d = src.to_dict(); d["tpm"] = tpm
+        rows.append(d)
+    df = pd.DataFrame(rows)
+    keep = np.where(Y.sum(0) >= min_pos)[0]
+    res = (df, Y[:, keep], [common[i] for i in keep])
     out.write_bytes(pickle.dumps(res))
     return res
 

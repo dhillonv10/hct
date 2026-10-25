@@ -451,3 +451,82 @@ python -m lncfm.lncbench report $LNCFM_RUNS/v2/full_*.json --scope dev_pruned
 python -m lncfm.lncbench compare "$LNCFM_RUNS/v2/full_rinalmo.json:rinalmo" "$LNCFM_RUNS/v2/full_baselines.json:kmer"
 ```
 Go / no-go for building on RiNALMo: on the full data, an adapted model must beat the **frozen** RiNALMo probe on `rbp_K562` and `rbp_HepG2` (paired CI over RBPs excluding 0) and on `loc_clf`; otherwise keep the frozen features and spend the effort on the clinical layer and new labels (m6A, half-life, in-cell structure).
+
+---
+
+## 11. Yield upgrades, the AML genotype panel, and whether to release a model family
+
+Everything in this section was run in the same CPU sandbox as section 10 (600-1,700 genes per task, first 400 nt, 200 bootstrap resamples). Files: `results/v3/` and `results/v2/aml_genotype.*`.
+
+### 11.1 What was added to make the full run more informative
+| addition | where | verified |
+|---|---|---|
+| `rbp_union`: K562 + HepG2 eCLIP pooled (RBPs assayed in both; label = peak in any line where the gene is expressed) | `lncbench.py`, `eclip.build_union_table` | 2,196 genes, 38 RBPs, median 32 positives per RBP (K562 alone: 1,738 genes, 43 RBPs) |
+| AML **genotype panel**: 14 driver genes, lncRNA vs mRNA vs age, BeatAML CV + external TCGA-LAML | `aml/genotype.py`, stage `genotype` | scored, section 11.3 |
+| frozen-feature sweep: layer subset x pooling x multi-window tiling x k-mer stacking | `embed.py`, `lncbench.parse_variant`, stage `variants` | scored, section 11.2 |
+| more foundation models: RNA-FM (99.5M), RiNALMo-mega (148M) | stage `fms` | **load and embed only** (0.30 and 0.66 s/sequence on CPU; all-layer pass equals the plain pass, cosine 1.0000). Not benchmarked. |
+| Benjamini-Hochberg column in `compare` | `lncbench.compare` | run on existing paired tables |
+| ortholog retrieval stage | stage `retrieval` | v1 code, unchanged |
+
+`rbp_union` scored (RiNALMo-micro, 400 nt, `results/v3/rbp_union.txt`): macro-AUROC stratified by expression and length **0.630 vs 0.586 for k-mers**; the sequence-free `expr_len` baseline falls to 0.501 under that stratification (its raw 0.633 is entirely expression + length). Paired CIs were not computed for this run; the K562/HepG2 versions (section 10.2) are the ones with paired intervals.
+
+### 11.2 The feature sweep did **not** produce a better recipe
+RiNALMo-micro, 600 genes per gene-level task and the full K562 RBP task, 400 nt, dev scope. Gene-task intervals are about +-0.04 to +-0.08 and overlap across every row; the K562 RBP interval is about +-0.03 (e.g. last layer 0.620 [0.586,0.653]), so none of the differences between feature recipes is established.
+
+| task | last layer, mean | mid layer, mean | mid, mean+max | layers 4,8,last mean+max | k-mer + mid mean+max (stacked) | k-mer |
+|---|---|---|---|---|---|---|
+| loc_reg (rho) | 0.383 | 0.391 | 0.393 | 0.391 | 0.379 | 0.336 |
+| loc_clf (AUROC) | **0.761** | 0.748 | 0.747 | 0.752 | 0.745 | 0.709 |
+| tau_reg (rho) | 0.329 | **0.371** | **0.374** | 0.339 | 0.357 | 0.323 |
+| testis_clf (AUROC) | **0.633** | 0.589 | 0.592 | 0.606 | 0.621 | 0.617 |
+| rbp_K562 (expr+len-strat. macro-AUROC) | 0.620 | 0.582 | 0.593 | **0.635** | 0.599 | 0.565 |
+
+- No configuration wins across tasks. The middle layer helps tau_reg (+0.04) and hurts testis and RBP; the last layer is best on testis and loc_clf; the three-layer mean+max is best on RBP (+0.015 over last layer, inside the noise).
+- Stacking k-mer features on top of RiNALMo never beat RiNALMo alone: whatever the k-mers know, the language model already has.
+- **Recommendation: keep last-layer mean pooling as the default.** If you want layer choice, treat it as a hyperparameter selected inside the training folds on the full run, never from the table above (that would be choosing on the evaluation data). The `variants` stage exists to measure this properly on the full data; I would not expect it to change the conclusions.
+
+### 11.3 AML genotype panel (`results/v2/aml_genotype.txt`)
+Per-gene 5-fold CV AUROC for "is gene X mutated" from expression of the 1,000 most variable lncRNAs, the 1,000 most variable mRNAs, or age, BeatAML (n=346) with external TCGA-LAML (n=151, PanCancer Atlas mutation calls) where there are >= 8 mutated patients.
+
+| | age | lncRNA | mRNA |
+|---|---|---|---|
+| 14 genes, BeatAML CV, mean AUROC | 0.633 | **0.871** | 0.877 |
+| 11 genes, TCGA-LAML external, mean AUROC | n/a | **0.841** | 0.871 |
+| lncRNA minus mRNA, CV (per-gene range) | | -0.006 (-0.034 to +0.027) | |
+
+Highlights (CV / external): NPM1 0.984 / 0.967; TP53 0.975 / 0.996; SRSF2 0.969 (no external events); IDH2 0.929 / 0.882; RUNX1 0.920 / 0.951; CEBPA 0.889 / 0.871. Weakest: NRAS 0.687 / 0.642, ASXL1 0.795.
+
+How to read it: the lncRNA transcriptome reads out the AML molecular subtype about as well as the mRNA transcriptome, replicated externally. It does **not** say a lncRNA is special, and it is not evidence that these lncRNAs are functional. Driver mutations co-occur (NPM1 with DNMT3A and FLT3; SRSF2, RUNX1 and ASXL1 define a secondary-type AML signature), so a high score for one gene partly reflects its co-mutated partners, and the panel measures subtype recognition, not gene-specific biology. As a benchmark item it is robust and cheap, but a sequence model can be scored on it only through the sequence-tied embedding route (`--emb`), which was a null in the solid-tumour experiments.
+
+### 11.4 Data that would add real yield but is **not** built (not verified, so not claimed)
+- **m6A, RNA half-life, translation / ribosome-association labels** for lncRNAs: I have not found and checked a public, versioned source with lncRNA-level labels that I would trust, so no task was written.
+- **In-cell structure**: ENCODE lists 6 icSHAPE experiments; not downloaded or parsed.
+- **Task-specific published predictors** (for RBP binding and for subcellular localization) as extra baselines: not run. A reviewer will ask for at least one; they have to be run by hand and compared on the same folds.
+- **Token-level probing** (can the model find exon junctions / splice-aware positions from sequence alone?): the exon-junction head exists in pretraining, but no probe benchmark was written.
+- **Seeds**: not needed for the probes (outer folds are fixed, probes are deterministic); needed for any trained-from-scratch or fine-tuned arm.
+
+### 11.5 Should we train and release a small family? A gated plan
+Short answer: **yes as a plan, not as a commitment, and only members that clear a pre-stated gate get released.** Three facts decide this:
+1. The 0.89M from-scratch pilot was about equal to k-mers (section 10), so "a bigger one will be good" is a hypothesis, not a result.
+2. Human lncRNA is small data for a language model: ~195.8 Mb of transcript sequence, 191k transcripts of which far fewer are independent after de-duplicating isoforms and repeats (roughly 75 Mb unique per species by my count). A 39M model on that will see each nucleotide many times.
+3. A frozen RiNALMo-micro already beats k-mers on RBP binding and localization with paired CIs excluding zero. A new model has to beat **that**, not k-mers.
+
+| member | what it is | cost (estimates from counted FLOPs; run `speedtest`) | release gate |
+|---|---|---|---|
+| **A: RiNALMo-lnc** | RiNALMo-micro (33.5M) after continual pretraining on lncRNA (`cpt.py`, span-MLM) and/or LoRA / top-2 layers, with a lightweight multi-task head | hours to ~1 day on the M4 | beats the **frozen** probe on `rbp_K562`, `rbp_HepG2` and `loc_clf` (paired CI excludes 0) and is not worse elsewhere. Inherits AGPL-3.0, so the weights must be released under it. |
+| **B: LncFM-small** | 6.7M, from scratch: conv stem + RoPE transformer, span-MLM + exon-junction + isoform contrastive | 1e9 nt of training ~ 9.6 h at 0.3 TFLOP/s, 2.9 h at 1.0 TFLOP/s | >= k-mers on full-length inputs with a paired CI **and** within noise of frozen RiNALMo on >= 2 tasks. Else it is a negative result, not a release. |
+| **C: LncFM-base** | 39M, same recipe | ~55 h at 0.3 TFLOP/s, ~16 h at 1.0 | only trained if small beats tiny (0.89M) by a clear margin on held-out-chromosome MLM loss **and** on the benchmark. If tiny -> small shows no gain, do not train base. |
+
+Order of work (cheapest first, each step can stop the next): adaptation ladder -> continual pretraining (A) -> tiny vs small on the same batches (B) -> base (C).
+
+What the family would accomplish if the gates are met:
+- A controlled **scaling and objective study** for lncRNA (0.9M -> 6.7M -> 39M, same data, same batches, with and without junction / contrastive heads). Nobody in this niche has published one; it is reportable whichever way it comes out, including "scale does not help on this much data".
+- **Small CPU-friendly models** others can run on a laptop, with the benchmark as the credibility anchor.
+- A set of **fixed reference points** on LncBench so later models are compared against something other than k-mers.
+
+What it would not accomplish: it would not be a clinical tool, and "foundation model" is an overclaim unless transfer to several unrelated tasks is shown. I would call the artefacts "lncRNA language models" in the first release and let the numbers justify more.
+
+Release hygiene (must be decided before training, not after):
+- Pretraining excludes human chr8/13/18/21 (locked test) and chr9/16/22 (validation) by default. A released model keeps those exclusions and says so; otherwise the benchmark can no longer be used on it.
+- Model card with: data release pins (GENCODE v50, M39), exclusions, license, the exact benchmark table with CIs, and the homology caveat (a held-out chromosome is not a homology-held-out gene; the `leak` flag and pruned scope exist for this).
+- Maintenance: Hugging Face-compatible weights plus the `multimolecule`-style loading path, tests on CPU/MPS, and a pinned benchmark version.

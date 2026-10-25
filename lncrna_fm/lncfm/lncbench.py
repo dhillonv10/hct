@@ -54,7 +54,7 @@ def _gene_task(name, builder, ycol, kind, layer="1"):
 
 def _rbp_task(cell):
     from . import eclip
-    rep, Y, names = eclip.build_binding_table(cell)
+    rep, Y, names = eclip.build_union_table() if cell == "union" else eclip.build_binding_table(cell)
     df = splits.attach(rep.assign(log_tpm=np.log2(rep.tpm.values + 1), loglen=np.log10(rep.length.values)))
     Y = Y[df._row.values]
     e5 = pd.qcut(df.log_tpm, 5, labels=False, duplicates="drop").values
@@ -77,14 +77,14 @@ def load_task(name: str) -> Task:
     if name == "coding_clf":
         return _gene_task(name, T.task_coding_vs_lnc, "y", "clf")
     if name.startswith("rbp_"):
-        return _rbp_task(name.split("_", 1)[1])
+        return _rbp_task(name.split("_", 1)[1])      # rbp_K562 | rbp_HepG2 | rbp_union
     if name.startswith("aml_"):
         from .aml import tasks as AT
         return AT.load_gene_task(name, splits)
     raise KeyError(name)
 
 
-LAYER1 = ["loc_reg", "loc_clf", "tau_reg", "testis_clf", "brain_clf", "rbp_K562", "rbp_HepG2", "coding_clf"]
+LAYER1 = ["loc_reg", "loc_clf", "tau_reg", "testis_clf", "brain_clf", "rbp_K562", "rbp_HepG2", "rbp_union", "coding_clf"]
 LAYER2B = ["aml_vs_normal_reg", "aml_vs_normal_resid_reg", "aml_vs_normal_resid_clf", "aml_npm1_reg"]
 
 
@@ -97,11 +97,51 @@ def subsample(task: Task, max_n: int | None, seed=0) -> Task:
                 task.cov_cols, None if task.strata is None else {k: v[idx] for k, v in task.strata.items()}, task.names, task.meta)
 
 
+class _Lazy:
+    """Defer loading a big model until an embedding is actually missing from the cache."""
+
+    def __init__(self, factory):
+        self.factory, self.obj = factory, None
+
+    def __call__(self, seqs):
+        if self.obj is None:
+            self.obj = self.factory()
+        return self.obj(seqs)
+
+
+def parse_variant(name: str):
+    """'rinalmo-micro?layers=6,last&pool=meanmax&win=3' -> ('rinalmo-micro', {'layers': '6,last', 'pool': 'meanmax', 'win': '3'})"""
+    if "?" not in name:
+        return name, {}
+    base, q = name.split("?", 1)
+    return base, dict(kv.split("=", 1) for kv in q.split("&") if kv)
+
+
+def _variant_features(task: Task, provider: str, trunc):
+    """Features from one cached all-layer forward pass, sliced by layer / pooling. One pass serves every variant."""
+    from .embed import HFProvider, hf_dims
+    base, o = parse_variant(provider)
+    win, nt = int(o.get("win", 1)), (trunc or 1000)
+    full = bench.cached_embed(f"{base}#all@{nt}w{win}", _Lazy(lambda: HFProvider(base, max_nt=nt, all_layers=True, windows=win)), task.df)
+    nh, d = hf_dims(base)
+    A = full.reshape(len(full), nh, 2, d)
+    layers = []
+    for tok in o.get("layers", "last").split(","):
+        layers.append(nh - 1 if tok == "last" else nh // 2 if tok == "mid" else int(tok))
+    pools = {"mean": [0], "max": [1], "meanmax": [0, 1]}[o.get("pool", "mean")]
+    return A[:, layers][:, :, pools].reshape(len(full), -1).astype(np.float32)
+
+
 def features(task: Task, provider: str, trunc=None):
+    if provider.startswith("concat:"):               # stacking: e.g. concat:kmer+rinalmo-micro?layers=mid
+        parts = [features(task, p, trunc)[0] for p in provider[len("concat:"):].split("+")]
+        return np.hstack(parts), provider
     if provider == "cnn":                            # trained network: no frozen features; handled in evaluate()
         return np.zeros((len(task.df), 1), np.float32), "cnn"
     if provider == "expr_len":                       # sequence-free baseline: expression/length covariates only
         return task.df[task.cov_cols].values.astype(np.float32), provider
+    if "?" in provider:
+        return _variant_features(task, provider, trunc), provider
     pn, prov = bench.make_provider(provider, trunc)
     return bench.cached_embed(pn, prov, task.df, task.name), pn
 
@@ -224,11 +264,13 @@ def compare(spec_a: str, spec_b: str, scope="dev_all"):
     """Paired bootstrap A - B on identical items. spec = 'file.json:provider-substring'. Needs runs made with --save-oof."""
     from . import evalkit as ek
     def load(spec):
-        f, prov = spec.rsplit(":", 1)
+        f, prov = spec.split(".json:", 1)
+        f += ".json"
         rows = [r for r in json.load(open(f)) if r.get("scope") == scope and prov in r["provider"] and "oof" in r]
         return {r["task"]: r for r in rows}
     A, B = load(spec_a), load(spec_b)
-    print(f"\n### {spec_a}  minus  {spec_b}   ({scope})\n| task | metric | A | B | delta [95% CI] | p(A<=B) |\n|---|---|---|---|---|---|")
+    print(f"\n### {spec_a}  minus  {spec_b}   ({scope})\n| task | metric | A | B | delta [95% CI] | p(A<=B) | p_BH |\n|---|---|---|---|---|---|---|")
+    out = []
     for t in A:
         if t not in B or A[t]["kind"] == "multi":
             continue
@@ -238,7 +280,15 @@ def compare(spec_a: str, spec_b: str, scope="dev_all"):
         assert np.allclose(y, np.array(rb["y"])[ok]), f"items differ for {t}: run both with the same --max-n/--trunc"
         d, lo, hi, p = ek.paired_diff(y, np.array(ra["oof"], dtype=float)[ok], np.array(rb["oof"], dtype=float)[ok], ra["kind"])
         key = "auroc" if ra["kind"] == "clf" else "spearman"
-        print(f"| {t} | {key} | {ra[key]:.3f} | {rb[key]:.3f} | {d:+.3f} [{lo:+.3f},{hi:+.3f}] | {p:.3f} |")
+        out.append((t, key, ra[key], rb[key], d, lo, hi, p))
+    # Benjamini-Hochberg over the one-sided p-values of this table (multiplicity across tasks)
+    ps = np.array([o[-1] for o in out]); order = np.argsort(ps); m = len(ps)
+    adj = np.empty(m); run = 1.0
+    for rank, i in zip(range(m, 0, -1), order[::-1]):
+        run = min(run, ps[i] * m / rank); adj[i] = run
+    for o, q in zip(out, adj):
+        t, key, a_, b_, d, lo, hi, p = o
+        print(f"| {t} | {key} | {a_:.3f} | {b_:.3f} | {d:+.3f} [{lo:+.3f},{hi:+.3f}] | {p:.3f} | {q:.3f} |")
 
 
 def main(argv=None):

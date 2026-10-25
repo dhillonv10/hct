@@ -11,21 +11,26 @@ scripts/m4_run_all.sh quick      # baselines + frozen RiNALMo on 800 genes/task,
 scripts/m4_run_all.sh full       # everything, whole benchmark + locked test
 scripts/m4_run_all.sh ladder     # frozen / LoRA / top-k / full fine-tuning of RiNALMo
 scripts/m4_run_all.sh aml        # patient-level AML tasks with external validation
+scripts/m4_run_all.sh genotype   # which AML driver genotypes can be read from lncRNA expression (14 genes)
+scripts/m4_run_all.sh variants   # frozen-feature sweep: layers x pooling x tiling x k-mer stacking
+scripts/m4_run_all.sh fms        # more foundation models: RNA-FM, RiNALMo-mega
+scripts/m4_run_all.sh retrieval  # human->mouse positional-ortholog retrieval
 ```
 
 | layer | tasks | label source | what it asks |
 |---|---|---|---|
 | 1 molecular | `loc_reg/clf`, `tau_reg`, `testis_clf`, `brain_clf` | ENCODE fractionation, GTEx | where is it, in which tissue |
-| 1 molecular | `rbp_K562`, `rbp_HepG2` (multi-label) | ENCODE eCLIP IDR peaks | which RNA-binding proteins bind it (expression- and length-controlled) |
+| 1 molecular | `rbp_K562`, `rbp_HepG2`, `rbp_union` (multi-label) | ENCODE eCLIP IDR peaks | which RNA-binding proteins bind it (expression- and length-controlled); `union` pools both lines |
 | 1 sanity | `coding_clf` | GENCODE | easy tier only |
 | 2b AML, gene level | `aml_vs_normal_*`, `aml_npm1_reg` | TARGET marrow vs normal; BeatAML + TCGA-LAML | which lncRNAs are leukaemia / NPM1-associated |
-| 2a AML, patient level | `npm1`, `flt3_itd`, `eln_adverse`, `induction_cr`, `os` | BeatAML (dev) -> TCGA-LAML, TARGET (external) | does lncRNA expression carry genotype / risk / outcome |
+| 2a AML, patient level | `npm1`, `flt3_itd`, `eln_adverse`, `induction_cr`, `os`, 14-gene genotype panel | BeatAML (dev) -> TCGA-LAML, TARGET (external) | does lncRNA expression carry genotype / risk / outcome |
 
 Protocol: dev = chromosome-group 5-fold CV; locked test = chr8/13/18/21 (scored only with `--final`); every metric is
 reported on all items and on the homology-pruned subset; sequence-free baselines (`expr_len`) and an untrained twin must
 be in every comparison; paired bootstrap for model-vs-model claims (`lncbench report`, `scripts/compare.py`).
 
 Measured results, caveats and the go/no-go criteria are in `PLAN.md` section 10; raw outputs are in `results/v2/`.
+Section 11 covers the yield upgrades (what helped and what did not), the AML genotype panel, and the gated plan for training and releasing a small family of lncRNA models (`results/v3/`).
 
 Everything below this line is the v1 toolkit (pretraining, Option B, TCGA solid tumours) and still works.
 

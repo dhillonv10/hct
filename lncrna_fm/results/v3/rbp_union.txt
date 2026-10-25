@@ -1,0 +1,7 @@
+[rbp_union] layer 1 kind=multi items=2196 (dev 1957, locked test 239, homology-flagged 1.3%)
+  kmer@400                dev_all: macroAUROC 0.597 | expr-strat 0.593 | expr+len-strat 0.586 (RBPs 38)  dev_pruned: macroAUROC 0.597 | expr-strat 0.594 | expr+len-strat 0.587 (RBPs 38)
+  rinalmo-micro@400       dev_all: macroAUROC 0.637 | expr-strat 0.640 | expr+len-strat 0.630 (RBPs 38)  dev_pruned: macroAUROC 0.636 | expr-strat 0.639 | expr+len-strat 0.628 (RBPs 38)
+  expr_len                dev_all: macroAUROC 0.633 | expr-strat 0.554 | expr+len-strat 0.501 (RBPs 38)  dev_pruned: macroAUROC 0.633 | expr-strat 0.553 | expr+len-strat 0.501 (RBPs 38)
+real	0m25.467s
+user	0m40.185s
+sys	0m3.242s

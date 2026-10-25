@@ -1,0 +1,15 @@
+BeatAML n=346 | TCGA-LAML n=151
+  NPM1    BeatAML pos 107 | CV AUROC age 0.562 lncRNA 0.984 mRNA 0.983 | TCGA (38 pos) lncRNA 0.967 mRNA 0.965
+  FLT3    BeatAML pos 119 | CV AUROC age 0.528 lncRNA 0.830 mRNA 0.840 | TCGA (47 pos) lncRNA 0.825 mRNA 0.808
+  DNMT3A  BeatAML pos  70 | CV AUROC age 0.605 lncRNA 0.843 mRNA 0.848 | TCGA (36 pos) lncRNA 0.772 mRNA 0.835
+  IDH1    BeatAML pos  21 | CV AUROC age 0.595 lncRNA 0.854 mRNA 0.887 | TCGA (14 pos) lncRNA 0.936 mRNA 0.961
+  IDH2    BeatAML pos  41 | CV AUROC age 0.631 lncRNA 0.929 mRNA 0.930 | TCGA (17 pos) lncRNA 0.882 mRNA 0.906
+  TP53    BeatAML pos  25 | CV AUROC age 0.716 lncRNA 0.975 mRNA 0.957 | TCGA (11 pos) lncRNA 0.996 mRNA 1.000
+  RUNX1   BeatAML pos  24 | CV AUROC age 0.631 lncRNA 0.920 mRNA 0.927 | TCGA (15 pos) lncRNA 0.951 mRNA 0.960
+  NRAS    BeatAML pos  50 | CV AUROC age 0.597 lncRNA 0.687 mRNA 0.699 | TCGA (8 pos) lncRNA 0.642 mRNA 0.855
+  TET2    BeatAML pos  40 | CV AUROC age 0.719 lncRNA 0.824 mRNA 0.858 | TCGA (12 pos) lncRNA 0.658 mRNA 0.716
+  CEBPA   BeatAML pos  20 | CV AUROC age 0.509 lncRNA 0.889 mRNA 0.905 | TCGA (13 pos) lncRNA 0.871 mRNA 0.878
+  ASXL1   BeatAML pos  24 | CV AUROC age 0.724 lncRNA 0.795 mRNA 0.798
+  SRSF2   BeatAML pos  25 | CV AUROC age 0.785 lncRNA 0.969 mRNA 0.968
+  WT1     BeatAML pos  24 | CV AUROC age 0.636 lncRNA 0.896 mRNA 0.905 | TCGA (10 pos) lncRNA 0.747 mRNA 0.697
+  STAG2   BeatAML pos  21 | CV AUROC age 0.620 lncRNA 0.793 mRNA 0.767
