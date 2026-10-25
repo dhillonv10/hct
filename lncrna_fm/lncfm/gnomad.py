@@ -99,7 +99,7 @@ def common_benign(gene_ids, af_min=1e-4, min_an=20000) -> pd.DataFrame:
 
 def build_eval_table(min_stars=0, af_min=1e-4, min_path=3, use_gnomad=True, refresh=False) -> pd.DataFrame:
     """ClinVar ncRNA SNVs + (optionally) common gnomAD variants for genes with >= `min_path` pathogenic variants."""
-    out = paths.ensure(paths.DATA / "processed") / f"ncvar_eval_s{min_stars}_af{af_min:g}_{int(use_gnomad)}.pkl"
+    out = paths.ensure(paths.DATA / "processed") / f"ncvar_eval_v3_s{min_stars}_af{af_min:g}_{int(use_gnomad)}.pkl"
     if out.exists() and not refresh:
         return pd.read_pickle(out)
     cv = ncvar.build_clinvar_table(min_stars).copy()

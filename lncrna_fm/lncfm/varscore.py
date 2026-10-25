@@ -1,7 +1,8 @@
 """Variant-effect scoring for ncRNA single-nucleotide variants: scorers, within-gene evaluation, a VCF scorer.
 
     python -m lncfm.varscore eval  --models rinalmo-micro --out $LNCFM_RUNS/v2/varscore.json
-    python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner.json
+    python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner_micro.json --out scored.tsv
+    python -m lncfm.varscore saturate --gene RNU4-2 --models rinalmo-micro --out rnu4-2_saturation.tsv
 
 Every score is oriented "higher = more damaging" and is never flipped after the fact.
 
@@ -473,6 +474,55 @@ def cmd_score(a):
     print(f"wrote {a.out}  (scores: higher = more damaging; 'combined' is a ranking score, not a probability)")
 
 
+def genomic_of_offset(exons, strand, off):
+    """Inverse of ncvar.tx_offset: genomic position of the spliced-transcript offset."""
+    cum = 0
+    for st, en in sorted(exons, reverse=(strand == "-")):
+        n = en - st + 1
+        if off < cum + n:
+            return st + (off - cum) if strand == "+" else en - (off - cum)
+        cum += n
+    raise ValueError(off)
+
+
+def cmd_saturate(a):
+    """Score every possible SNV of one ncRNA (3 x length variants): a per-position intolerance map."""
+    tx_exons, tx_meta = ncvar.load_annotation()
+    cands = [t for t, m in tx_meta.items() if m["gene_name"] == a.gene and m["gene_type"] in ncvar.NC_TYPES]
+    if not cands:
+        raise SystemExit(f"{a.gene}: not a non-coding gene in GENCODE v{paths.GENCODE_HUMAN_RELEASE}")
+    tid = sorted(cands, key=lambda t: (not tx_meta[t]["canonical"], -ncvar.spliced_len(tx_exons[t])))[0]
+    m = tx_meta[tid]
+    fa = paths.human(f"gencode.v{paths.GENCODE_HUMAN_RELEASE}.transcripts.fa.gz")
+    from . import gencode
+    seq = next(sq.upper().replace("T", "U") for h, sq in gencode.read_fasta_gz(fa) if h.split("|")[0] == tid)
+    comp = str.maketrans("ACGU", "UGCA")
+    rows = []
+    for off, ref in enumerate(seq):
+        g = genomic_of_offset(tx_exons[tid], m["strand"], off)
+        for alt in "ACGU":
+            if alt == ref:
+                continue
+            gr, ga = (ref, alt) if m["strand"] == "+" else (ref.translate(comp), alt.translate(comp))
+            rows.append({"chrom": m["chrom"], "pos": g, "ref": gr.replace("U", "T"), "alt": ga.replace("U", "T"),
+                         "gene_id": m["gene_id"], "gene": a.gene, "gene_type": m["gene_type"], "tx_id": tid,
+                         "strand": m["strand"], "offset": off, "ref_t": ref, "alt_t": alt, "label": 0, "seq": seq,
+                         "tx_len": len(seq)})
+    d = pd.DataFrame(rows)
+    print(f"{a.gene} ({m['gene_type']}, {tid}): {len(seq)} nt -> {len(d)} possible SNVs")
+    X = features(d, a.models, not a.no_struct, True, a.cadd, a.device, a.max_nt, a.batch, not a.no_emb)
+    out = pd.concat([d[["chrom", "pos", "ref", "alt", "gene", "tx_id", "offset", "ref_t", "alt_t"]], X], axis=1)
+    main_col = f"lm:{model_tag(a.models[0])}:mask" if a.models else None
+    if main_col:
+        out["site_mean_" + main_col] = out.groupby("offset")[main_col].transform("mean")
+    out.to_csv(a.out, sep="\t", index=False)
+    print(f"wrote {a.out}")
+    if main_col:
+        site = out.groupby("offset").agg(ref=("ref_t", "first"), pos=("pos", "first"), mean_damage=(main_col, "mean"))
+        print("most intolerant positions (mean masked-LM damage over the 3 substitutions):")
+        print(site.sort_values("mean_damage", ascending=False).head(12).round(2).to_string())
+
+
 def cmd_check(a):
     """Regression tests for the scoring path: batch/padding invariance, score orientation, window handling."""
     d = gnomad.build_eval_table(0, use_gnomad=False)
@@ -516,7 +566,7 @@ def main(argv=None):
     ck.add_argument("--models", nargs="+", default=["rinalmo-micro"])
     ck.add_argument("--device", default="cpu")
     ck.add_argument("--max-nt", type=int, default=1000)
-    for name in ("eval", "score"):
+    for name in ("eval", "score", "saturate"):
         p = sub.add_parser(name)
         p.add_argument("--models", nargs="*", default=[], help="rinalmo-micro rinalmo-mega rnafm local:<dir> lncfm:<ckpt.pt>")
         p.add_argument("--device", default="auto")
@@ -538,11 +588,13 @@ def main(argv=None):
     e.add_argument("--ref", default=None, help="score the others are compared with (default: first model's :mask)")
     e.add_argument("--combine", action="store_true", help="also fit the leave-one-gene-out combiner")
     e.add_argument("--save-combiner", default=None)
+    st = sub.choices["saturate"]
+    st.add_argument("--gene", required=True, help="GENCODE gene symbol of a non-coding gene, e.g. RMRP, RNU4-2, TERC, MT-TL1")
     s = sub.choices["score"]
     s.add_argument("--input", required=True, help="VCF (GRCh38) or 4-column TSV: chrom pos ref alt")
     s.add_argument("--combiner", default=None, help="combiner.json from `eval --combine --save-combiner`")
     a = ap.parse_args(argv)
-    {"eval": cmd_eval, "score": cmd_score, "check": cmd_check}[a.cmd](a)
+    {"eval": cmd_eval, "score": cmd_score, "check": cmd_check, "saturate": cmd_saturate}[a.cmd](a)
 
 
 if __name__ == "__main__":

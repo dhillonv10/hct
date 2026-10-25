@@ -11,6 +11,13 @@ Label sets
             overlapping protein-coding gene. Without these two filters the label belongs to the coding gene (TTN-AS1)
             or to the opposite-strand gene (TERC vs its antisense transcript), not to the ncRNA being scored.
             UTR and intronic consequences are allowed: RNU2-2 sits inside the 5' UTR exon of WDR74.
+            For lncRNA genes only: a pathogenic record that ClinVar also attributes to a protein-coding gene is dropped
+            unless the disease name mentions the lncRNA ("RBM8A-related_disorder" on the antisense lncRNA LIX1L-AS1
+            goes). Antisense lncRNAs overlapping coding genes are the documented failure mode. The rule is NOT applied
+            to snRNA / snoRNA / tRNA genes: the same co-attribution there marks genuine ncRNA disease genes (RNU4-2,
+            SNORD118), and a first version applied to all types wrongly removed them. The lncRNA rule was added after the
+            first scoring run showed LIX1L-AS1 / HNRNPK-AS1 in the panel (3 pathogenic records each, both really
+            RBM8A / HNRNPK disease); results are reported with and without it.
   gnomad  : (optional, `gnomad.py`) common population variants in the same genes, used as an extra benign set.
 
 The scoring code never sees the label; evaluation is WITHIN-GENE (see `varscore.within_gene_auroc`) because
@@ -117,7 +124,7 @@ def read_clinvar_snvs(path=None, min_stars=0) -> pd.DataFrame:
             gi = re.search(r"GENEINFO=([^;]+)", info)
             sym = ",".join(x.split(":")[0] for x in gi.group(1).split("|")) if gi else ""
             rows.append((_chrom(f[0]), int(f[1]), f[3], f[4], int(m.group(1) in PATH), m.group(1), stars,
-                         d.group(1)[:80] if d else "", f[2], sym))
+                         d.group(1)[:400] if d else "", f[2], sym))
     df = pd.DataFrame(rows, columns=["chrom", "pos", "ref", "alt", "label", "clnsig", "stars", "disease", "clinvar_id",
                                      "geneinfo"])
     df.attrs["coding_consequence_dropped"] = n_coding
@@ -132,6 +139,7 @@ def map_to_transcripts(df: pd.DataFrame, types=NC_TYPES, attributed_only=True):
     gene when the variant has no GENEINFO symbol and the gene has no symbol of its own).
     """
     tx_exons, tx_meta = load_annotation()
+    pc_names = {m["gene_name"] for m in tx_meta.values() if m["gene_type"] == "protein_coding"}
     items = []
     for tid, ex in tx_exons.items():
         m = tx_meta.get(tid)
@@ -139,7 +147,7 @@ def map_to_transcripts(df: pd.DataFrame, types=NC_TYPES, attributed_only=True):
             for s, e in ex:
                 items.append((m["chrom"], s, e, tid))
     idx = ExonIndex(items)
-    rep = {"input": len(df), "no_ncrna_exon": 0, "not_attributed": 0}
+    rep = {"input": len(df), "no_ncrna_exon": 0, "not_attributed": 0, "pathogenic_attributed_to_coding_gene": 0}
     out = []
     for r in df.itertuples():
         tids = idx.hits(r.chrom, r.pos)
@@ -159,6 +167,11 @@ def map_to_transcripts(df: pd.DataFrame, types=NC_TYPES, attributed_only=True):
             rep["not_attributed"] += 1
         for _, t in best.values():
             m = tx_meta[t]
+            if r.label == 1 and attributed_only and m["gene_type"] == "lncRNA":   # pathogenic, but really the overlapping coding gene's disease?
+                others = (syms - {m["gene_name"]}) & pc_names
+                if others and m["gene_name"].lower() not in r.disease.lower():
+                    rep["pathogenic_attributed_to_coding_gene"] += 1
+                    continue
             off = tx_offset(tx_exons[t], m["strand"], r.pos)
             ref, alt = (r.ref, r.alt) if m["strand"] == "+" else (r.ref.translate(_COMP), r.alt.translate(_COMP))
             out.append({**r._asdict(), "gene_id": m["gene_id"], "gene": m["gene_name"], "gene_type": m["gene_type"],
@@ -187,7 +200,7 @@ def attach_sequences(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_clinvar_table(min_stars=0, refresh=False) -> pd.DataFrame:
     """Labelled ClinVar ncRNA SNVs with sequences. Cached; `min_stars` filters on ClinVar review status."""
-    out = paths.ensure(paths.DATA / "processed") / f"ncvar_clinvar_v2_s{min_stars}.pkl"
+    out = paths.ensure(paths.DATA / "processed") / f"ncvar_clinvar_v3_s{min_stars}.pkl"
     if out.exists() and not refresh:
         return pd.read_pickle(out)
     raw = read_clinvar_snvs(min_stars=min_stars)
