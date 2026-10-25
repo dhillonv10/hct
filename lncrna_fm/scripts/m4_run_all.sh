@@ -67,8 +67,10 @@ case "$stage" in
         --out "$OUT/retrieval.json" ;;
   varscore)
     python -m lncfm.gnomad                                 # builds + prints the evaluation table (needs internet: gnomAD API)
+    python -m lncfm.varscore eval --models rinalmo-micro --combine \
+        --save-combiner "$OUT/combiner_micro.json" --out "$OUT/varscore_micro_nocadd.json"      # offline combiner for `varscore score`
     python -m lncfm.varscore eval --models rinalmo-micro --cadd --combine \
-        --save-combiner "$OUT/combiner_micro.json" --out "$OUT/varscore_micro.json"            # the light model: used by `varscore score`
+        --save-combiner "$OUT/combiner_micro_cadd.json" --out "$OUT/varscore_micro.json"        # + CADD (internet); best nuclear-gene scorer
     python -m lncfm.varscore eval --models rinalmo-micro rinalmo-mega rnafm --cadd --combine \
         --save-combiner "$OUT/combiner_all.json" --out "$OUT/varscore_main.json"
     # sensitivity: do the conclusions depend on how the benign set is built?

@@ -31,9 +31,10 @@ Do `check` first. If it reports an MPS/CPU mismatch or a very low speed, stop an
 The model decision (section 11.5 of PLAN.md) hinges on the `ladder` stage: does adapting RiNALMo beat the frozen probe on
 `rbp_K562`, `rbp_HepG2`, `loc_clf`?
 
-## 2b. Scoring your own variants (after `varscore` has produced `combiner_micro.json`)
+## 2b. Scoring your own variants (after `varscore` has produced `combiner_micro.json` and `combiner_micro_cadd.json`)
 ```bash
 python -m lncfm.varscore score --input my_variants.vcf --models rinalmo-micro --combiner $LNCFM_RUNS/v2/combiner_micro.json --out scored.tsv
+# with CADD (nuclear genes; needs internet; better): add  --cadd  and use  combiner_micro_cadd.json
 ```
 Input is a GRCh38 VCF, or a 4-column tab file `chrom pos ref alt`. Only SNVs that fall inside exons of annotated non-coding
 genes are scored. Output: one row per variant x gene with every score (higher = more damaging), `combined` (a ranking score,

@@ -15,7 +15,10 @@ Scores (one column per score)
                        pairing probability of the reference base, base-pair distance between MFE structures
   b:*                  baselines with no sequence model: transversion, CpG, distance to transcript end, local GC
   cadd                 CADD PHRED (GRCh38 v1.7) from the public API, nuclear genome only; a strong, conservation-aware
-                       reference that any new model has to be compared with
+                       reference that any new model has to be compared with (missing for chrM; enters the combiner as the
+                       training mean there)
+  combined             leave-one-gene-out logistic regression over all of the above (per-gene intercepts, so only within-gene
+                       variation sets the weights). Pre-specified as "everything"; a ranking score, not a probability
 
 Evaluation = WITHIN-GENE: for every gene with >= `min_each` pathogenic and benign variants, the AUROC of the score for
 separating the two classes inside that gene; the headline is the mean over genes weighted by min(n_path, n_benign).
@@ -408,9 +411,10 @@ def cmd_eval(a):
     S = X.copy()
     primary = [c for c in S if c.endswith(":mask")] + [c for c in ("cadd",) if c in S]
     if a.combine and len(a.models):
-        feats = [c for c in X if c.startswith(("lm:", "st:", "b:")) and not c.endswith(":wt")]
+        feats = [c for c in X if (c.startswith(("lm:", "st:", "b:")) and not c.endswith(":wt")) or c == "cadd"]
         Xc = X[feats]
-        S["combined(lm+struct+base)"], comb = logo_combiner(d, Xc, a.min_each)
+        name = "combined(lm+struct+base" + ("+cadd)" if "cadd" in feats else ")")
+        S[name], comb = logo_combiner(d, Xc, a.min_each)
         out["combiner"] = comb
         if a.save_combiner:
             from pathlib import Path
