@@ -1,0 +1,11 @@
+scenario                            oracle                  kmer              expr_len         rinalmo-micro
+S1 planted (50% of positives)        0.761     0.754 [0.71,0.79]     0.451 [0.40,0.50]     0.727 [0.69,0.76]
+S2 weak (15% of positives)           0.575     0.555 [0.51,0.61]     0.451 [0.40,0.50]     0.550 [0.51,0.58]
+S3 shuffled labels                   0.500     0.520 [0.48,0.56]     0.469 [0.42,0.51]     0.509 [0.46,0.56]
+S4 label = length                    1.000     0.701 [0.66,0.74]     1.000 [1.00,1.00]     0.950 [0.93,0.96]
+[kmer] negative control (shuffled labels): AUROC 0.520, CI contains 0.5: PASS
+[expr_len] negative control (shuffled labels): AUROC 0.469, CI contains 0.5: PASS
+[rinalmo-micro] negative control (shuffled labels): AUROC 0.509, CI contains 0.5: PASS
+[kmer] positive control: recovers 97% of the above-chance signal (needs >= 80%): PASS
+[expr_len] covariate baseline finds a pure length label: AUROC 1.000 (needs >= 0.95): PASS
+CONTROLS OK

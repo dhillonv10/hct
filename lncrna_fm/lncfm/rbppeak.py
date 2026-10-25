@@ -223,8 +223,12 @@ def _auc(y, p, m):
     return roc_auc_score(y[m], p[m]) if m.sum() > 10 and len(np.unique(y[m])) == 2 else np.nan
 
 
-def run(cell, neg, providers, trunc=None, max_rbps=None, final=False, min_peaks=60, max_pos=800, out=None, n_boot=1000):
+def run(cell, neg, providers, trunc=None, max_rbps=None, final=False, min_peaks=60, max_pos=800, out=None, n_boot=1000, min_each=30):
     D = build(cell, neg, None, min_peaks, max_pos)
+    cnt = D.groupby("rbp").y.agg(["sum", "size"])
+    ok = cnt[(cnt["sum"] >= min_each) & ((cnt["size"] - cnt["sum"]) >= min_each)].index        # tiny RBPs give AUROC = 1.0 by chance
+    print(f"  dropped {len(cnt) - len(ok)} RBPs with fewer than {min_each} windows in a class: {sorted(set(cnt.index) - set(ok))}")
+    D = D[D.rbp.isin(ok)].reset_index(drop=True)
     rbps = sorted(D.rbp.unique())
     if max_rbps:
         rbps = rbps[:max_rbps]

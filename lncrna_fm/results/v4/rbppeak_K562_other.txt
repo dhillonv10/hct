@@ -1,0 +1,10 @@
+  dropped 4 RBPs with fewer than 30 windows in a class: ['EIF4G2', 'PPIL4', 'SAFB2', 'TRA2A']
+[rbp_peak K562 neg=other] 35 RBPs, 6929 windows (36% positive); homology-flagged 0.0%
+  lengc                      macro-AUROC 0.587 [0.547,0.629] over 35 RBPs   pruned 0.587   (6s)
+  kmer                       macro-AUROC 0.679 [0.642,0.721] over 35 RBPs   pruned 0.679   (14s)
+  cnn                        macro-AUROC 0.518 [0.470,0.568] over 35 RBPs   pruned 0.518   (41s)
+  rinalmo-micro              macro-AUROC 0.682 [0.635,0.727] over 35 RBPs   pruned 0.682   (18s)
+  paired differences over RBPs (dev_all):
+    kmer - lengc: +0.092 [+0.044,+0.146]  better on 26/35 RBPs
+    cnn - lengc: -0.069 [-0.123,-0.016]  better on 9/35 RBPs
+    rinalmo-micro - lengc: +0.095 [+0.048,+0.145]  better on 24/35 RBPs

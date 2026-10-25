@@ -19,7 +19,7 @@ Everything below was measured on a 4-core CPU sandbox, so these are *pilot-scale
    (~77 Mnt, about one pass over the unique gene-level corpus) beats its own *untrained twin* on 5 of 6 tasks (+0.01 to +0.05, paired 95% CIs exclude 0).
    Probe quality rose from step 500 to ~2000 and then flattened (so did validation MLM loss, after ~1,250 steps), but on whole transcripts it **ties** the k-mer baseline (localization Δρ +0.020, CI -0.011 to +0.048) and is
    worse on the coding-vs-lncRNA sanity task. Adding exon-junction + isoform-contrastive objectives helped modestly over plain masked LM.
-3. **Transfer (Option B) is the strongest cheap lever, with caveats.** Frozen RiNALMo-micro (33M params, pretrained on ncRNA) significantly beats k-mers on
+3. **Transfer (Option B) is the strongest cheap lever, with caveats. (Qualified in §13: on the stricter peak-level RBP task frozen RiNALMo ties k-mers.)** Frozen RiNALMo-micro (33M params, pretrained on ncRNA) significantly beats k-mers on
    localization (Δρ +0.10), testis-vs-rest and coding-vs-lncRNA at matched input (first 400 nt, n=800). Continual pretraining is implemented and smoke-tested but **not run at scale**.
    Evo-1 never saw a eukaryote; Evo 2 needs an NVIDIA GPU (1B also Hopper/FP8); Caduceus needs a port off `mamba_ssm`.
 4. **Negatives that matter.** (a) Ortholog retrieval: nothing learned beats the alignment-free shared-10-mer baseline (300 queries vs a 3,000-gene mouse pool: hit@10 0.375 on the 56 named pairs vs 0.21 for the best learned model; at full scale, 36,103 genes, shared 10-mers still give 0.41).
@@ -608,3 +608,44 @@ Reading: RNA-FM is the best single score on the nuclear genes, but the one nomin
 ### 12.6 Where the long training run fits
 `scripts/m4_run_all.sh cpt` continually pretrains RiNALMo-micro (or another model: `CPT_MODEL=rnafm scripts/m4_run_all.sh cpt`, ~3x slower) on lncRNA, protein-coding replay, and **small ncRNAs (snRNA, snoRNA, tRNA, ...) with all 13 panel genes held out**, so `cpt_eval` is a clean held-out-gene test: does adaptation to ncRNA improve the zero-shot score? The run is resumable (checkpoint every 500 steps; re-run the same command after an interruption). Decision rule, set now: the CPT model counts as better only if its masked-LM within-gene AUROC exceeds the frozen model's with a paired CI (printed by `varscore eval` as "delta vs ...") that excludes 0 on the same variants, **and** it does not lose on `rbp_K562`, `rbp_HepG2`, `loc_clf`. With 13 genes that is a high bar; a smaller true effect than ~+0.1 will not be detectable, so a "no difference" outcome is the likely one and should be reported as such.
 Next in line, if this task is worth pushing: score indels with a windowed pseudo-log-likelihood ratio; add a second labelled source (e.g. a saturation-mutagenesis or MPRA study of an ncRNA, if one is public and can be verified); and test whether training on multi-species alignments (the GPN-MSA / PhyloGPN idea) beats any single-sequence model, which is the natural reason to build a dedicated ncRNA family.
+
+---
+
+## 13. Benchmark audit: anchoring to the RNA literature (read this before trusting §10)
+
+Prompted by the right question: are our benchmarks measuring anything real? `BENCHMARK_CATALOG.md` lists the RNA benchmark tasks I could verify (BEACON's 13 tasks, RiNALMo's tasks, lncRNA localization and RNA-protein interaction datasets, RBP-binding benchmarks, a lncRNA nuclear-enrichment MPRA, lncRNA half-life data, a lncRNA CRISPRi screen), how each would translate to lncRNA, a re-grade of our own tasks, and a build queue. Key fact from that search: **there is no established lncRNA benchmark for RNA language models, and published lncRNA predictors (localization, lncRNA-protein interaction) cannot be ranked against each other because each uses its own dataset and split**; BEACON also found that plain ResNet / LSTM baselines beat RNA language models on several tasks, so every task now needs a trained non-language-model baseline.
+
+### 13.1 Harness controls (`python -m lncfm.controls`, `results/v4/controls.txt`)
+Synthetic random RNA pushed through the same feature -> probe -> metric code as the real benchmark.
+
+| scenario | oracle | k-mer | sequence-free (length) | RiNALMo-micro |
+|---|---|---|---|---|
+| planted 15-nt AU-rich element in 50% of positives | 0.76 | 0.75 | 0.45 | 0.73 |
+| same, 15% of positives | 0.58 | 0.56 | 0.45 | 0.55 |
+| labels shuffled | 0.50 | 0.52 | 0.47 | 0.51 |
+| label = "longer than median" | 1.00 | 0.70-0.88 | 1.00 | **0.95** |
+
+The pipeline finds a planted signal (k-mers recover ~97% of what exists, RiNALMo ~87%, so mean-pooled embeddings do keep a local motif), and returns chance for shuffled labels. It also shows something that matters for every gene-level result: **frozen RiNALMo embeddings encode transcript length (AUROC 0.95 on random sequences of 200-400 nt)**. A task whose label correlates with length can therefore be "solved" by a language model without any sequence knowledge, which is why the length / expression covariate baselines and stratified metrics stay in every table.
+
+### 13.2 Peak-level RBP binding in lncRNAs (`python -m lncfm.rbppeak`, `results/v4/rbppeak_K562_*.txt`)
+The formulation the RBP literature uses: 101-nt windows centred on ENCODE eCLIP IDR peaks inside expressed lncRNA exons, versus windows that are not. A systematic benchmark of 37 methods found the choice of negatives decides the result, so two are run: **(a) unbound** = same transcripts as the positives, same relative-position decile, >= 100 nt from any peak of that RBP (controls expression, length, position); **(b) other-RBP** = windows centred on peaks of other RBPs (>= 100 nt from this RBP's peaks), a bias-aware negative asking only for RBP specificity. At most 12 positive windows per gene per RBP (a handful of giant lncRNAs such as NEAT1 and MALAT1 otherwise carry most peaks); chromosome-group folds; RBPs with fewer than 30 windows in a class are dropped (a 69-window RBP scored AUROC 1.0 by chance). K562, 34-35 RBPs, 5.5-6.9k windows (median ~57 positive windows per RBP); macro-AUROC over RBPs, [95% CI over RBPs]:
+
+| model | (a) unbound negatives | (b) other-RBP negatives |
+|---|---|---|
+| length + GC | 0.506 [0.468,0.541] | 0.587 [0.547,0.629] |
+| k-mer spectrum | 0.583 [0.544,0.624] | 0.679 [0.642,0.721] |
+| small CNN trained from scratch (per RBP) | 0.495 [0.458,0.532] | 0.518 [0.470,0.568] |
+| RiNALMo-micro, frozen | 0.607 [0.567,0.648] | 0.682 [0.635,0.727] |
+| RiNALMo - k-mer, paired over RBPs | +0.024 [-0.002,+0.051] | +0.002 [-0.023,+0.026] |
+
+Reading it:
+- **The task behaves like a real benchmark.** The composition-only baseline is at chance (0.51) when negatives come from the same transcripts, as designed; the same baseline is at 0.59 against other-RBP negatives, i.e. composition alone separates one RBP's sites from other RBPs' sites. The strongest RBPs are the ones with known sequence preferences (ELAVL1, PTBP1, KHSRP, MATR3, HNRNPK, TARDBP).
+- **The signal is small.** 0.58-0.61 against matched negatives.
+- **Frozen RiNALMo does not beat k-mers here** (+0.024, interval touches 0; +0.002). This conflicts with the gene-level result in §10.2 (+0.055 K562 over k-mers, intervals excluding 0). The likeliest reading is that part of the gene-level advantage came from transcript-level properties that survive expression x length stratification, not from local binding sequence. **I therefore no longer treat "RiNALMo beats k-mers on RBP binding" as established**; it holds for the gene-level label and not for the stricter peak-level one.
+- The from-scratch CNN is at chance: ~57 positive windows per RBP is too little for a CNN, which is the BEACON lesson in reverse (CNNs win with enough data). A CNN trained jointly across all RBPs (as the published methods do) is the missing baseline; not built.
+- One cell line, 34-35 RBPs, small windows, CPU sandbox. The M4 `peak` stage adds HepG2, RNA-FM and the locked test.
+
+### 13.3 What changes
+1. `rbp_peak` becomes the headline RBP task; the gene-level `rbp_*` tasks are supporting only (BENCHMARK_CATALOG.md section 3).
+2. `check` now runs the controls first; if they print `CONTROLS FAILED`, nothing downstream is to be trusted.
+3. §0 item 3 and §10.9 should be read with the peak-level result above: the case for RiNALMo over k-mers now rests on localization classification and testis (gene-level), which have not been re-tested at a stricter formulation.

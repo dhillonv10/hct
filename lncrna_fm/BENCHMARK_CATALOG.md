@@ -24,8 +24,8 @@ Evidence tags: **[V]** = checked by web search while writing this (link given); 
 ### A. Harness controls (these decide whether the numbers mean anything)
 | ID | Control | Status |
 |---|---|---|
-| A1 | Planted-motif positive control: windows with an inserted motif must be detected (AUROC near 1) through the same feature -> probe -> metric path | **built** (`lncfm.controls`) |
-| A2 | Shuffled-label negative control: AUROC must be 0.5 +- CI | **built** |
+| A1 | Planted-motif positive control: windows with an inserted motif must be detected through the same feature -> probe -> metric path | **built and passing** (`lncfm.controls`; k-mers recover 97% of the possible signal, RiNALMo 87%) |
+| A2 | Shuffled-label negative control: AUROC must be 0.5 +- CI | **built and passing**; also shows frozen RiNALMo embeddings encode length (AUROC 0.95 on a pure length label) |
 | A3 | Untrained-twin and sequence-free baselines in every table | built [ours] |
 | A4 | Batch/padding invariance of embeddings; offset/strand mapping round trip | built (`selfcheck`, `varscore check`) |
 | A5 | Anchor to a published number: reproduce a published RNA-LM result with our probe (e.g. ncRNA family classification on nRC13, 8,840 sequences / 13 classes [V: [nRC](https://link.springer.com/doi/10.1186/s13040-017-0148-2), [data](https://ieee-dataport.org/documents/nrc13)]; published accuracies come from different subsets and splits, so match one paper's split exactly) | **not built**; needs one paper's exact split |
@@ -45,7 +45,7 @@ Evidence tags: **[V]** = checked by web search while writing this (link given); 
 ### C. Position-level (a window or a nucleotide), the formulation the RNA field prefers
 | ID | Task | Literature anchor | lncRNA translation | Status | Main validity risk |
 |---|---|---|---|---|---|
-| C1 | **RBP binding sites (eCLIP peaks)** | systematic benchmark of 37 methods on CLIP-seq; result depends on how negatives are drawn; sites bound by other RBPs are a bias-aware negative [V: [Brief. Bioinform. 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10516373/)] | **peak windows inside lncRNA exons vs windows from the same transcripts: unbound, and bound by other RBPs; K562 -> HepG2 transfer** | **built now** (`rbp_peak`) | local coverage and accessibility still differ between peak and non-peak windows |
+| C1 | **RBP binding sites (eCLIP peaks)** | systematic benchmark of 37 methods on CLIP-seq; result depends on how negatives are drawn; sites bound by other RBPs are a bias-aware negative [V: [Brief. Bioinform. 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10516373/)] | **peak windows inside lncRNA exons vs windows from the same transcripts: unbound, and bound by other RBPs; K562 -> HepG2 transfer** | **built** (`rbp_peak`, K562 results in PLAN section 13: k-mer 0.58, RiNALMo 0.61 vs chance 0.51 on same-transcript negatives; RiNALMo does not beat k-mers) | local coverage and accessibility still differ between peak and non-peak windows |
 | C2 | RNA modification sites (m6A etc.) | MultiRM (12 modifications), DeepM6ASeq on miCLIP [V]; BEACON "Modif" task | evaluate on lncRNA-only sites (needs site coordinates from miCLIP / m6A-Atlas-type catalogues) | **new; not built** | site catalogues mix methods and cell types; no lncRNA-specific benchmark found |
 | C3 | Splice sites | RiNALMo multi-species splice-site task [V]; SpliceAI [M] | donor/acceptor vs GT/AG decoys inside lncRNA genes (needs the genome FASTA ~0.9 GB) | **new; not built** | lncRNA splice sites are weaker and less conserved, which is the interesting part; decoy choice matters |
 | C4 | Alternative polyadenylation | BEACON APA task [V] | lncRNA 3' end / poly(A) site usage from 3'-end sequencing | new; not built | 3' ends of lncRNAs poorly annotated |
@@ -96,7 +96,7 @@ Secondary structure (C6), ncRNA family classification (A5), mean ribosome loadin
 - **Somatic cancer mutations** in lncRNAs (e.g. NEAT1, MALAT1) exist in pan-cancer data [M]; recurrent-mutation claims there have been disputed [M], so I would not use them as labels.
 - Conclusion: **there is no lncRNA-body variant gold standard to find.** The valid options are (1) small ncRNAs with ClinVar labels (done), (2) the population-constraint test D2 on lncRNA exons, (3) a nuclear-enrichment MPRA (C7) where position-level function is measured on lncRNA sequence.
 
-## 5. Build queue
+## 5. Build queue (items 1-2 done)
 | order | item | why first | data in hand? |
 |---|---|---|---|
 | 1 | A1/A2 controls | proves the harness can detect a real signal and does not invent one | yes |
