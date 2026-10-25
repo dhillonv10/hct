@@ -52,12 +52,13 @@ Each card: question, mechanism, label, formulation, split and controls, baseline
 - **To build it.** Obtain the supplementary sequence/mapping table, reproduce the published region calls with the authors' model, check reproducibility on the called regions, then run the split-by-lncRNA task. Until then T3 is a design, not a result.
 - **Clinical bridge.** Predictable localization for therapeutic lncRNAs and oligo design.
 
-### T4. Does predicted damage track natural selection?  (built: `lncfm.constraint`)
+### T4. Does predicted damage track natural selection?  (built: `lncfm.constraint`; passes its controls, PLAN section 15.1)
 - **Mechanism.** Purifying selection removes variants that damage function, so damaging variants are seen less often in the population than mutation alone predicts. No clinical label is needed, so it applies to every lncRNA.
 - **Label.** gnomAD v4 observed/unobserved status of every possible SNV in the exons of an lncRNA, against a trinucleotide-context mutation model calibrated per gene.
 - **Formulation.** Cluster-robust score test: within-gene damage vs the residual (observed - expected); O/E by damage decile.
 - **Controls.** Shuffled-damage control (z ~ 0); a **positive-control set chosen before any result** (abundant functional ncRNAs: RNU*, RN7SK, RMRP, TERC, vault, Y RNAs, ...).
 - **Primary metric.** beta per SD of damage with gene-clustered SE.
+- **Result.** Positive-control ncRNAs: beta -0.22 (z -3.8, micro) and -0.23 (z -4.5, RNA-FM). 150 random lncRNAs: beta -0.093 (z -7.0) and -0.100 (z -7.2), i.e. about 9% fewer observed variants per SD of damage; the effect survives adjustment for GC, splice-junction distance, position and repeat proxies and removal of the least-damaging decile; shuffled controls give |z| < 1.7.
 - **Objections.** *"Weak constraint in lncRNAs means no power."* Right; that is why the positive-control set is run first, and a null on lncRNAs with a positive on the control set is itself a finding. *"gnomAD coverage differs by site."* Per-gene calibration absorbs gene-level coverage; within-gene coverage remains a limitation.
 - **Clinical bridge.** Prioritising variants in lncRNA exons without any disease labels.
 

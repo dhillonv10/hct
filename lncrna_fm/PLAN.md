@@ -693,3 +693,31 @@ What this means:
 2. Not supported: any use as a classifier for rare variants; any added value over CADD on the rare background.
 3. The primary metric for this task is now the rare/any-frequency background (clinically relevant); the common-benign background is secondary. `varscore` reports both; the M4 `audit` stage reproduces this section.
 4. Still true: no lncRNA ground truth exists (TERC aside); TERC contributes 30 pathogenic variants to the any-frequency analysis only.
+
+---
+
+## 15. New lncRNA tasks built or checked this round (`TASK_DESIGN.md` has the full defence cards)
+
+### 15.1 T4, population constraint (`python -m lncfm.constraint`, `results/v4/constraint_*.txt`): **built, passes its controls**
+Does the language model's predicted damage track which single-nucleotide changes are *absent* from the human population (gnomAD v4), beyond what mutation rate predicts? All possible SNVs of each spliced transcript (3 x length); expected probability of being observed from a 96-class trinucleotide-context model calibrated per gene; cluster-robust score test on within-gene damage (beta per SD; negative = damaging changes are seen less). Zero-shot, so there is no training and no leakage of labels. The reference base gnomAD reports agrees with the transcript at every observed variant (0 disagreements).
+
+| gene set | model | SNVs (observed) | beta per SD [OR] | adjusted for GC, junction distance, position, repeat / low-complexity proxies | without each gene's 10% least-damaging positions |
+|---|---|---|---|---|---|
+| **positive control**: 38 abundant functional ncRNAs (RNU*, RN7SK, RMRP, TERC, vault, Y RNAs; list fixed before any result) | RiNALMo-micro | 18k (38%) | -0.221 (z -3.8) [OR 0.80] | -0.201 (z -3.8) | -0.157 (z -4.0) |
+| | RNA-FM | 18k (38%) | -0.232 (z -4.5) [0.79] | -0.224 (z -4.3) | -0.161 (z -4.1) |
+| **150 random lncRNAs** (300-3,000 nt) | RiNALMo-micro | 395k (8.7%) | -0.093 (z -7.0) [0.91] | -0.113 (z -7.8) | -0.069 (z -5.1) |
+| | RNA-FM | 395k (8.7%) | -0.100 (z -7.2) [0.91] | -0.120 (z -7.8) | -0.079 (z -5.7) |
+
+Observed / expected by damage decile (lncRNAs, micro): 1.18 for the least-damaging decile falling to 0.90 for the most damaging. Shuffling damage within gene gives |z| < 1.7 in every shuffle; local GC, junction distance and relative position used alone as the "score" do not reproduce the effect (GC even has the opposite sign). Reading: **the language models' damage scores carry a small but highly significant signal of purifying selection on lncRNA exons** (about 9% fewer observed variants per SD of damage), roughly 2.4x weaker per SD than in functional small ncRNAs, as expected for weakly constrained sequence. It does not say the variants are pathogenic, and it applies to the damage score as defined (unmasked log-odds), not to CADD, which was not tested here. Limits: within-gene gnomAD coverage differences are not modelled; one random draw of 150 genes; the M4 stage uses 300.
+
+### 15.2 T2, localization label quality (measured): the benchmark label is reliable
+Split-half correlation of the log2(cytosol/nucleus) index across the 15 ENCODE cell lines is 0.86 (Spearman-Brown reliability of the full mean about 0.93; 1,873 lncRNAs expressed in >=4 lines) and its correlation with expression level is +0.07. So localization is a stable, reproducible gene property and not an expression proxy; current models reach rho 0.3-0.4, far below the ~0.9 ceiling. 
+External check (literature-curated labels + a published predictor on our split): `lncfm/locext.py` is written but **cannot be run here**, because the RNALocate site did not answer from the sandbox. It was tested only on a synthetic file; run it locally with the table you download (RUN_ON_M4.md). Its first output, the agreement between our label and the literature label, is the check to look at first.
+
+### 15.3 T3, nuclear-enrichment MPRA: **not buildable from public files** (`TASK_DESIGN.md` T3)
+GEO GSE98828 has the counts and region calls but not the oligo sequences or the id mapping (supplementary table behind a browser challenge that I did not work around), and the naive nuclear/total log-ratio is not reproducible: split-half correlation about 0 even after averaging over 41 neighbouring tiles. Label reliability (design principle P3) fails for the simple version. It stays a design until the supplement and the authors' statistical model are obtained.
+
+### 15.4 What the task-design work changed
+- Tasks now have written defence cards with the objections a reviewer will raise (`TASK_DESIGN.md`); biology I did not verify is marked.
+- Variant task T5: primary metric moved to the rare-variant background (section 14).
+- Status of the lncRNA tasks: **T1 peak-level RBP binding (small signal, ties k-mers), T2 localization (reliable label, models far below ceiling), T4 population constraint (small, significant, controls pass)** are real; T3 is blocked; T5 is real but not a classifier and not for lncRNAs; T6-T9 are designed only.
