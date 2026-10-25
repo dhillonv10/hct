@@ -1,4 +1,4 @@
-# Python >= 3.10. On Apple silicon: plain `pip install torch` gives MPS support.
+# Python >= 3.10 (developed on 3.13). On Apple silicon plain `pip install torch` gives MPS support.
 torch>=2.3
 numpy
 pandas
@@ -8,7 +8,7 @@ lifelines
 requests
 tqdm
 matplotlib
+transformers     # needed for the RiNALMo / RNA-FM arm (LncBench v2 uses it)
+multimolecule    # RiNALMo / RNA-FM wrappers; loads without remote code
 # optional
-ViennaRNA        # RNA folding features (aux pretraining target); pip wheel exists for macOS arm64
-multimolecule    # RiNALMo / RNA-FM wrappers for the "Option B" frozen-feature arm
-transformers     # NT-v2 / HyenaDNA wrappers for the "Option B" arm
+ViennaRNA        # RNA folding features; pip wheel exists for macOS arm64

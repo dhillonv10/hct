@@ -1,0 +1,14 @@
+# Exact versions the sandbox runs (CPU, Linux) used. If something breaks on your Mac, try these first.
+# (torch there was the CPU build; on macOS `pip install torch==2.14.1` or newer gives MPS.)
+torch==2.14.1
+numpy==2.5.4
+pandas==2.3.3
+scipy==1.18.1
+scikit-learn==1.9.1
+lifelines==0.30.3
+requests==2.34.2
+tqdm==4.70.1
+matplotlib==3.11.2
+transformers==5.20.2
+multimolecule==0.2.2
+ViennaRNA==2.7.2
