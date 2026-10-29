@@ -1,0 +1,10 @@
+numpy
+pandas>=2
+scipy
+scikit-learn
+lightgbm
+torch                 # CPU is enough; Tiger2D reimplementation + (optional) RNA-FM
+ViennaRNA             # optional: accessibility profiles (structure.py) -- found NOT to help, kept for the record
+transformers          # optional: RNA-FM embeddings (lm.py) -- found NOT to help
+multimolecule         # optional: RNA-FM weights port
+tabdpt                # optional: pretrained tabular foundation model learner (cv.TabDPT)
