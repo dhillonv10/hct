@@ -99,3 +99,45 @@ def tabular(d: pd.DataFrame, tier: str = "core", flank: int = 2) -> pd.DataFrame
         ctx.loc[short, :] = np.nan
         X = pd.concat([X, ctx], axis=1)
     return X
+
+
+# Turner/Xia nearest-neighbour stacking free energies (kcal/mol, 37 C) for Watson-Crick RNA dinucleotides, 5'-XY-3' on one strand of the duplex.
+_NN = {"AA": -0.93, "UU": -0.93, "AU": -1.10, "UA": -1.33, "CU": -2.08, "AG": -2.08, "CA": -2.11, "UG": -2.11,
+       "GU": -2.24, "AC": -2.24, "GA": -2.35, "UC": -2.35, "CG": -2.36, "GG": -3.26, "CC": -3.26, "GC": -3.42}
+
+
+def thermo_frame(d: pd.DataFrame, col: str = "guide53") -> pd.DataFrame:
+    """Guide:target duplex stability from nearest-neighbour stacking: per-step profile, total, seed / middle / 3' thirds, end stabilities and their asymmetry."""
+    rows = []
+    for g in d[col]:
+        s = g.upper().replace("T", "U")
+        e = np.array([_NN.get(s[i:i + 2], np.nan) for i in range(len(s) - 1)])
+        r = {f"nn_{i}": v for i, v in enumerate(e)}
+        r.update(nn_total=np.nansum(e), nn_5p=np.nansum(e[:6]), nn_mid=np.nansum(e[6:14]), nn_3p=np.nansum(e[14:]),
+                 nn_end5=np.nansum(e[:4]), nn_end3=np.nansum(e[-4:]))
+        r["nn_asym"] = r["nn_end5"] - r["nn_end3"]
+        win = np.convolve(np.nan_to_num(e), np.ones(5), "valid")
+        r.update(nn_win_min=win.min(), nn_win_max=win.max(), nn_win_argmin=int(win.argmin()))
+        rows.append(r)
+    return pd.DataFrame(rows, index=d.index)
+
+
+def motif_frame(d: pd.DataFrame, col: str = "guide53") -> pd.DataFrame:
+    """Guide-expression and composition motifs: Pol III terminator (UUUU) and other homopolymer runs, longest runs, 3-mer counts."""
+    import itertools
+    out = []
+    k3 = ["".join(p) for p in itertools.product(NT, repeat=3)]
+    for g in d[col]:
+        s = g.upper().replace("U", "T")
+        r = {"has_TTTT": int("TTTT" in s), "has_GGGG": int("GGGG" in s), "has_AAAA": int("AAAA" in s), "has_CCCC": int("CCCC" in s), "n_TTT": s.count("TTT")}
+        for b in NT:
+            m = 0
+            cur = 0
+            for c in s:
+                cur = cur + 1 if c == b else 0
+                m = max(m, cur)
+            r[f"run_{b}"] = m
+        for i, k in enumerate(k3):
+            r[f"k3_{k}"] = sum(1 for j in range(len(s) - 2) if s[j:j + 3] == k)
+        out.append(r)
+    return pd.DataFrame(out, index=d.index)

@@ -25,6 +25,21 @@ Replicate noise ceiling: a perfect predictor would correlate ~0.89 with the obse
 
 How ens3 was chosen: the 12 development genes only. The two-model GBM + Konermann combination was fixed first (0.636 there); ens3 was the best of five pre-specified combinations (0.643). The locked genes then confirmed it.
 
+### What a guide designer gets: top-k picks per gene (leave-one-gene-out, 16 genes)
+
+Ordering each gene's guides and taking the top 10 (TIGER's own default list length), fraction of picked guides that are active (threshold from non-targeting guides) and mean activity in within-gene z units; random picks are 0.42 active and 0.20 z.
+
+| model | active in top 10 | mean z of top 10 |
+|---|---|---|
+| Konermann tool | 0.938 | 2.20 |
+| GBM | 0.906 | 2.15 |
+| Tiger2D (ours) | 0.963 | 2.40 |
+| GBM + Tiger2D | 0.950 | 2.40 |
+| ens3 | **0.994** | **2.54** |
+| oracle (true top 10) | 1.000 | 3.50 |
+
+ens3 minus Tiger2D in mean z of the top 10: +0.141 [+0.039, +0.263] (bootstrap over genes). Every model is close to saturation at the top (the best 10 of ~600 are nearly all active), so read this as supporting the ensemble result, not as a separate claim.
+
 ### External screens (models trained on all 16 HEK293T genes)
 
 | model | flow-cytometry: CD46/CD55/TFRC (different assay), within-gene Spearman | HAP1 titration, 1,082 genes (different cell line), within-gene Spearman |
@@ -94,6 +109,11 @@ Other siRNA analyses (`sirna_leakage_lodo.py`): shuffled 5-fold on Huesken PCC 0
 | smoothing predictions over neighbouring guides | 0.606 -> 0.576 as strength rises | worse at every setting |
 | LambdaRank objective | 0.527 / 0.532 | much worse |
 | 5-seed GBM bagging | 0.606 | -0.001 |
+| replicate-reliability sample weights (two strengths) | 0.600 / 0.596 | **-0.007 / -0.011** |
+| Huber objective | 0.604 | -0.003 [-0.005, +0.000] |
+| nearest-neighbour duplex stability profile (Turner stacking) | 0.605 | -0.002 [-0.006, +0.003] |
+| Pol III terminator / homopolymer / 3-mer motif features | 0.612 | +0.005 [-0.000, +0.010] (borderline; not adopted) |
+| using the mismatch/indel variants to denoise labels | not possible | variants exist for only ~100 sites in each of 6 genes (~600 of 9,985 sites, ~181 variants each) |
 
 Local accessibility and RNA-FM embeddings also did nothing for siRNA on Huesken. The residuals still carry short-range structure (neighbouring guides' residuals correlate 0.42 at 1 nt), so something local is unexplained, but none of these features captured it.
 
