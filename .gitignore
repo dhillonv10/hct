@@ -1,0 +1,3 @@
+# build artifact: rebuild with `cd /home/user/hct && zip -r guidefam_package.zip guidefam -x "*/__pycache__/*"`
+guidefam_package.zip
+__pycache__/
