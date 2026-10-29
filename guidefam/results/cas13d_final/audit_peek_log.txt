@@ -1,0 +1,14 @@
+/usr/local/lib/python3.13/dist-packages/torch/nn/modules/conv.py:560: UserWarning: Using padding='same' with even kernel lengths and odd dilation may require a zero-padded copy of the input be created (Triggered internally at /__w/pytorch/pytorch/aten/src/ATen/native/Convolution.cpp:1135.)
+  return F.conv2d(
+{'gene': 'CCT7', 'seed': 0, 'clean': 0.6863847899049369, 'peeking': 0.6991358070987943, 'epochs_clean': 252, 'epochs_peek': 202}
+{'gene': 'CCT7', 'seed': 1, 'clean': 0.7020473252957831, 'peeking': 0.6905572534828341, 'epochs_clean': 202, 'epochs_peek': 232}
+{'gene': 'SF3A2', 'seed': 0, 'clean': 0.3907175669847936, 'peeking': 0.39290626816417595, 'epochs_clean': 287, 'epochs_peek': 369}
+{'gene': 'SF3A2', 'seed': 1, 'clean': 0.3874434215213845, 'peeking': 0.39741904636903974, 'epochs_clean': 210, 'epochs_peek': 272}
+{'gene': 'AQR', 'seed': 0, 'clean': 0.6425162078698129, 'peeking': 0.6430148184127922, 'epochs_clean': 249, 'epochs_peek': 329}
+{'gene': 'AQR', 'seed': 1, 'clean': 0.6311331560899471, 'peeking': 0.6266810790436841, 'epochs_clean': 749, 'epochs_peek': 407}
+       clean  peeking
+gene                 
+AQR    0.637    0.635
+CCT7   0.694    0.695
+SF3A2  0.389    0.395
+mean over genes: clean 0.573  peeking 0.575  (difference +0.002)

@@ -65,7 +65,7 @@ Other siRNA analyses (`sirna_leakage_lodo.py`): shuffled 5-fold on Huesken PCC 0
 ## 3. Protocol audits (details in `PROTOCOL.md`)
 
 * TIGER's recipe of mapping predictions back to LFC with the held-out gene's own median/scale inflates pooled Pearson from 0.632 to 0.717 on identical predictions; a model that is only each gene's true median scores 0.279.
-* Early stopping on the evaluation fold: see section 5.
+* Early stopping on the evaluation fold: measured, no detectable effect (section 5).
 * OligoFormer's intra-dataset CV is a shuffled split (above).
 
 ## 4. Things that did NOT help (12 Cas13d development genes unless stated; base GBM 0.607)
@@ -87,7 +87,16 @@ Local accessibility and RNA-FM embeddings also did nothing for siRNA on Huesken.
 
 ## 5. Early stopping on the evaluation fold  (`audit_peek.py`)
 
-RESULT_PEEK_PLACEHOLDER
+The authors' cross-validation script passes the held-out fold as the validation set and restores its best-`val_loss` epoch. In principle that selects one hyper-parameter (the stopping epoch) on test data. We measured it on the re-implementation: 3 held-out genes (CCT7, SF3A2, AQR) x 2 seeds, same data and seed with (a) early stopping on an inner split of the training genes and (b) on the held-out gene itself.
+
+| gene | clean | stopping on the held-out gene |
+|---|---|---|
+| CCT7 | 0.694 | 0.695 |
+| SF3A2 | 0.389 | 0.395 |
+| AQR | 0.637 | 0.635 |
+| mean | 0.573 | 0.575 (**+0.002**) |
+
+Individual pairs ranged from -0.012 to +0.013, i.e. seed-to-seed noise is as large as any effect. **No detectable inflation of within-gene Spearman**; this is a methodological leak that does not matter much here (6 pairs, so small effects cannot be excluded). It is reported so that it is not repeated as a criticism of TIGER without evidence. It also shows that single-seed Tiger2D scores carry about +-0.01 of seed noise, which is why seed-bagging is in the M4 stage.
 
 ## 6. Caveats that limit every claim above
 

@@ -45,6 +45,8 @@ OligoFormer's `data/*.csv` carry two targets: `label` (normalised efficacy) and 
 
 ## 6. Audits of the published evaluation recipes
 
+Two of the three audits below found a measurable effect (6.1, 6.3); one found none (6.2).
+
 ### 6.1 TIGER de-normalises with the held-out gene's own labels  (`scripts/audit_denorm.py`)
 
 TIGER trains on per-gene-normalised LFC, then maps predictions back with the gene's median and (q90 - q10) *computed from that gene's observed LFCs, including for a held-out gene*, and reports pooled correlations. For the same leave-one-gene-out predictions (our GBM, all 16 genes):
@@ -59,7 +61,7 @@ So about 0.09 of pooled Pearson comes from label information about the test gene
 
 ### 6.2 TIGER early-stops on the evaluation fold  (`scripts/audit_peek.py`)
 
-`predictor_validation.py` passes the held-out fold as the validation set and `PerformanceCallback` restores the best-`val_loss` epoch (patience 100, up to 2000 epochs). Result of the controlled comparison is in `RESULTS.md` once run.
+`predictor_validation.py` passes the held-out fold as the validation set and `PerformanceCallback` restores the best-`val_loss` epoch (patience 100, up to 2000 epochs). Measured on our re-implementation (3 genes x 2 seeds): clean 0.573 vs stopping-on-the-held-out-gene 0.575, difference +0.002 with seed noise of about +-0.01, so **no detectable effect** on within-gene Spearman (`RESULTS.md` section 5). A leak in principle, negligible in practice here.
 
 ### 6.3 OligoFormer's intra-dataset CV is a shuffled split  (`scripts/sirna_leakage_lodo.py`)
 
