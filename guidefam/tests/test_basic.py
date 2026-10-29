@@ -63,6 +63,28 @@ def test_sirna_binary_conventions():
     assert SI.binary(d, "inter").sum() == 0 and SI.binary(d, "intra").sum() == 2
 
 
+def test_official_tiger_encoding():
+    import torch
+    from .. import official_tiger as OT
+    d = pd.DataFrame({"5p_context": ["ACGTAC", "G"], "target_seq": ["A" * 23, "C" * 23]})
+    t, g = OT.encode(d)
+    assert t.shape == (2, 26, 4) and g.shape == (2, 26, 4)
+    assert t[0, 2].tolist() == [0, 0, 0, 1] or t[0, 2].tolist() == [0, 1, 0, 0]          # 3rd flank nt of row 0 is 'C' (last 3 of ACGTAC = TAC -> idx 2 = C)
+    assert torch.equal(t[0, 3:], torch.tensor([[1., 0, 0, 0]] * 23))                      # target A's
+    assert torch.equal(g[0, 3:], torch.tensor([[0., 0, 0, 1]] * 23)) and g[0, :3].sum() == 0   # guide = complement (T), 3 empty positions first
+    assert t[1, :2].sum() == 0 and t[1, 2].tolist() == [0, 0, 1, 0]                       # short flank: padded with empty positions, 'G' last
+
+
+def test_paired_within_gene_matches_groupby_version():
+    rng = np.random.default_rng(1)
+    g = np.repeat([f"g{i}" for i in range(20)], 12)
+    act = rng.normal(size=len(g))
+    df = pd.DataFrame({"gene": g, "act": act, "a": act + rng.normal(size=len(g)) * 0.5, "b": act + rng.normal(size=len(g)) * 1.5, "block": g})
+    d0, lo, hi = M.paired_within_gene(df, "a", "b", n=100, min_n=5)
+    ref = M.within_group(df, "gene", "act", "a", min_n=5) - M.within_group(df, "gene", "act", "b", min_n=5)
+    assert abs(d0 - ref) < 1e-9 and lo < d0 < hi and d0 > 0
+
+
 if __name__ == "__main__":
     for n, f in list(globals().items()):
         if n.startswith("test_"):

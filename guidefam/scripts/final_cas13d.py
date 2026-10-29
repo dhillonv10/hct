@@ -48,6 +48,7 @@ def main():
     ap.add_argument("--boot", type=int, default=500)
     ap.add_argument("--ref", default="tiger2d_port")
     ap.add_argument("--skip-external-tiger", action="store_true")
+    ap.add_argument("--official-npz", default=None, help="weights exported by export_official_tiger (NYGC non-commercial licence); adds the released TIGER to the external tables")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
 
@@ -106,9 +107,12 @@ def main():
             if "konermann" in ext:
                 ext["ens3"] = (rk_within(ext, "gbm") + rk_within(ext, "tiger2d_port") + rk_within(ext, "konermann")) / 3
         ext = ext.reset_index(drop=True)
+        if a.official_npz:
+            from .. import official_tiger as OT
+            ext["official"] = OT.predict(OT.load(a.official_npz), ext)
         ext[[c for c in ("gene", "guide_id", "y", "act", "active", "deepcas13", "konermann", "rf", "gbm", "tiger2d_port", "gbm+tiger2d", "gbm+konermann", "ens3") if c in ext]].to_csv(
             os.path.join(a.out, f"ext_preds_{name}.csv"), index=False)
-        cs = [c for c in ("deepcas13", "rf", "konermann", "tiger2d_port", "gbm", "gbm+tiger2d", "gbm+konermann", "ens3") if c in ext and ext[c].notna().mean() > 0.5]
+        cs = [c for c in ("deepcas13", "rf", "konermann", "official", "tiger2d_port", "gbm", "gbm+tiger2d", "gbm+konermann", "ens3") if c in ext and ext[c].notna().mean() > 0.5]
         min_n = 30 if name == "flow-cytometry" else 5
         ext["block"] = ext["block"] if name == "flow-cytometry" else ext["gene"]
         tt = []
@@ -122,6 +126,10 @@ def main():
         out.append(t)
         print(f"\n=== EXTERNAL {name}: trained on all 16 HEK293T genes (n={len(ext)}, {ext.gene.nunique()} genes)")
         print(t.drop(columns="set").to_string(index=False))
+        if "official" in ext:
+            for m_ in ("tiger2d_port", "gbm", "gbm+tiger2d"):
+                d0, lo, hi = M.paired_within_gene(ext, m_, "official", block="block", n=min(a.boot, 300) if name != "flow-cytometry" else a.boot, min_n=min_n)
+                print(f"   paired: {m_} - released TIGER (sequence-only): {d0:+.3f} [{lo:+.3f},{hi:+.3f}]")
     pd.concat(out).to_csv(os.path.join(a.out, "final_cas13d_tables.csv"), index=False)
 
 

@@ -82,3 +82,36 @@ def paired_bootstrap(df: pd.DataFrame, pa: str, pb: str, metric, block: str = "b
         ds.append(metric(s, pa) - metric(s, pb))
     ds = np.array(ds)
     return d0, float(np.nanpercentile(ds, 2.5)), float(np.nanpercentile(ds, 97.5)), float(np.nanmean(ds > 0))
+
+
+def _gene_rhos(act, p, gid, min_n: int):
+    """within-gene Spearman per gene id, one pass over the sorted groups (much faster than groupby for 1,000+ genes)."""
+    from scipy.stats import rankdata
+    out = {}
+    order = np.argsort(gid, kind="stable")
+    g, a, q = gid[order], act[order], p[order]
+    cuts = np.flatnonzero(np.r_[True, g[1:] != g[:-1], True])
+    for s, e in zip(cuts[:-1], cuts[1:]):
+        if e - s >= min_n:
+            ra, rq = rankdata(a[s:e]), rankdata(q[s:e])
+            if ra.std() > 0 and rq.std() > 0:
+                out[g[s]] = float(np.corrcoef(ra, rq)[0, 1])
+    return out
+
+
+def paired_within_gene(df: pd.DataFrame, a: str, b: str, block: str = "block", n: int = 500, min_n: int = 5, seed: int = 0):
+    """(delta, lo, hi): mean within-gene Spearman of column a minus column b (genes present for both), block bootstrap. Requires `gene` and `act`."""
+    rng = np.random.default_rng(seed)
+    blocks = df[block].values
+    ub = np.unique(blocks)
+    idx = {k: np.flatnonzero(blocks == k) for k in ub}
+    act, pa, pb, gid = df["act"].values, df[a].values, df[b].values, df["gene"].values
+
+    def stat(ii):
+        ra, rb = _gene_rhos(act[ii], pa[ii], gid[ii], min_n), _gene_rhos(act[ii], pb[ii], gid[ii], min_n)
+        ks = set(ra) & set(rb)
+        return float(np.mean([ra[k] - rb[k] for k in ks])) if ks else float("nan")
+
+    d0 = stat(np.arange(len(df)))
+    ds = [stat(np.concatenate([idx[k] for k in rng.choice(ub, len(ub), replace=True)])) for _ in range(n)]
+    return d0, float(np.nanpercentile(ds, 2.5)), float(np.nanpercentile(ds, 97.5))

@@ -1,0 +1,26 @@
+
+=== flow-cytometry  n=5635  genes=3  (within-gene Spearman; models trained on HEK293T only, official = authors' released weights)
+   official               0.599
+   tiger2d_port           0.636
+   gbm                    0.626
+   gbm+tiger2d            0.656
+   gbm+official           0.644
+   gbm+tiger2d+official   0.655
+   paired tiger2d_port           - official : +0.037 [+0.021,+0.053]
+   paired gbm                    - official : +0.028 [+0.009,+0.047]
+   paired gbm+tiger2d            - official : +0.057 [+0.041,+0.073]
+   paired gbm+official           - official : +0.045 [+0.036,+0.056]
+   paired gbm+tiger2d+official   - official : +0.057 [+0.046,+0.068]
+
+=== hap-titration  n=8653  genes=1082  (within-gene Spearman; models trained on HEK293T only, official = authors' released weights)
+   official               0.111
+   tiger2d_port           0.163
+   gbm                    0.168
+   gbm+tiger2d            0.195
+   gbm+official           0.171
+   gbm+tiger2d+official   0.193
+   paired tiger2d_port           - official : +0.052 [+0.034,+0.076]
+   paired gbm                    - official : +0.057 [+0.038,+0.079]
+   paired gbm+tiger2d            - official : +0.084 [+0.066,+0.101]
+   paired gbm+official           - official : +0.060 [+0.049,+0.072]
+   paired gbm+tiger2d+official   - official : +0.082 [+0.069,+0.094]

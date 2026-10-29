@@ -19,6 +19,7 @@ Guides tile each transcript one nucleotide apart, so neighbouring guides share 2
 guidefam/
   data.py  features.py  structure.py  lm.py  sirna.py        data loading, features (structure/lm/TabDPT are optional and did not help)
   cv.py  metrics.py  comparators.py  tiger_torch.py            leave-one-gene-out, metrics + block bootstrap, published-tool scores, Tiger2D port
+  official_tiger.py                                             the authors' released TIGER weights as a PyTorch forward pass (export them yourself; licence)
   safepickle.py                                                 loads TIGER's pickles through an exact allowlist (refuses anything else)
   scripts/   run_all.sh  final_cas13d.py  final_sirna.py  m4_extend.py  sirna_plus_oligoformer.py  audit_*.py  dev_*.py  sirna_dev*.py  ...
   tests/test_basic.py                                           invariants (orientation, label conventions, hostile-pickle refusal, normalisation leakage)
@@ -36,4 +37,6 @@ bash guidefam/scripts/run_all.sh ~/guidefam_work                    # + Tiger2D 
 Then read `RUN_ON_M4.md` for the longer stages.
 
 ## Licences and provenance
+**Read `RESULTS.md` section 7.** TIGER is academic / non-commercial only; OligoFormer is proprietary (no modification, redistribution or competing use) and nothing from it is run or ported here.
+
 Third-party data and prediction files are not redistributed here: `run_all.sh` clones `daklab/tiger` and `lulab/OligoFormer` and reads them. Check their licences before reusing their data. TabPFN (not used for any reported number) needs a personal licence acceptance at Prior Labs; TabDPT (used in one neutral test) ships open safetensors weights. No code from the cloned repositories is executed; their pickles are read through `safepickle.py`.

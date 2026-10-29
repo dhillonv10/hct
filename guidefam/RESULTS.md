@@ -2,7 +2,7 @@
 
 Read `PROTOCOL.md` first for what is held out and how everything is scored. Numbers are copied from the scripts' output; the raw outputs are in `results/`.
 
-**One-line status.** Cas13d on-target: a rank-average of three models beats our re-implementation of TIGER's network by +0.026 within-gene Spearman (16 of 16 genes; replicated on 4 locked genes). siRNA: parity with OligoFormer on its own inter-dataset protocol, no improvement. Eight other ideas were tested and did not help (section 4).
+**One-line status.** Cas13d on-target: a rank-average of three models beats our re-implementation of TIGER's network by +0.026 within-gene Spearman (16 of 16 genes; replicated on 4 locked genes), and on the two screens TIGER never saw, models trained only on HEK293T beat the authors' *released* TIGER weights (flow-cytometry: GBM + Tiger2D 0.656 vs 0.599, paired +0.057 [+0.041, +0.073]). siRNA: parity with the two best published results (OligoFormer, DeepSilencer) on the Huesken -> Mixset protocol, no improvement. Eight other ideas were tested and did not help (section 4).
 
 ## 1. Cas13d on-target (TIGER HEK293T screen, 9,985 perfect-match guides, 16 genes)
 
@@ -31,7 +31,8 @@ How ens3 was chosen: the 12 development genes only. The two-model GBM + Konerman
 |---|---|---|
 | DeepCas13 | 0.393 [0.355, 0.432] | — |
 | Konermann * | 0.597 [0.563, 0.628] | — |
-| Tiger2D | 0.636 [0.601, 0.669] | 0.163 [0.146, 0.180] |
+| **TIGER as released** (authors' weights, sequence only; section 1b) | 0.599 | 0.111 |
+| Tiger2D (ours) | 0.636 [0.601, 0.669] | 0.163 [0.146, 0.180] |
 | GBM | 0.626 [0.591, 0.661] | 0.168 [0.151, 0.182] |
 | **GBM + Tiger2D** | **0.656 [0.619, 0.689]** | 0.195 [0.179, 0.212] |
 | GBM + Konermann * | 0.652 | — |
@@ -40,6 +41,17 @@ How ens3 was chosen: the 12 development genes only. The two-model GBM + Konerman
 \* developed on the CD46/CD55/TFRC flow screens, so **not an independent test** for the models that include it. The clean external result is GBM + Tiger2D: +0.020 [+0.012, +0.028] over Tiger2D, better in all three genes (CD46 0.727 -> 0.742, CD55 0.533 -> 0.559, TFRC 0.648 -> 0.665).
 
 HAP1 transfer is poor for every model (0.16-0.20) although its labels are reliable (within-gene replicate Spearman 0.67, ceiling ~0.93). 51 % of its perfect-match guides are below -2 LFC against 13 % in HEK293T, consistent with those guides having been selected for high predicted activity (which would remove the predictable range); we cannot confirm the selection from the files. The +0.03 there is not a headline. (Pooled AUROC is meaningless for rank-averaged scores and is not reported for them.)
+
+### 1b. Against the authors' released TIGER weights (`official_tiger.py`, `export_official_tiger.py`)
+
+The Hugging Face release (`Knowles-Lab/tiger`) is a sequence-only network (26-nt target window + guide, no scalar features) trained by the authors on HEK293T perfect-match **and** mismatch/indel guides. Its weights were read from the SavedModel's checkpoint index (nothing executed; the graph's ops are standard numeric ones plus Keras's save/restore plumbing, which inference never calls) and run as a PyTorch forward pass. Known-answer check: on the HEK293T guides it trained on it scores 0.723 within-gene (a mis-ported layout would give ~0); that figure is in-sample and is not a result. On the two screens it never trained on (we use the network's raw LFC estimate; the tool's later calibration and sigmoid scoring were not loaded):
+
+| external screen | released TIGER | Tiger2D (ours) | GBM (ours) | GBM + Tiger2D | paired gain of GBM + Tiger2D |
+|---|---|---|---|---|---|
+| flow-cytometry (3 genes, 5,635 guides) | 0.599 | 0.636 | 0.626 | **0.656** | **+0.057 [+0.041, +0.073]** |
+| HAP1 titration (1,082 genes, 8,653 guides) | 0.111 | 0.163 | 0.168 | **0.195** | **+0.084 [+0.066, +0.101]** |
+
+Even our individual models beat it (flow: Tiger2D +0.037 [+0.021, +0.053], GBM +0.028 [+0.009, +0.047]; HAP1: +0.052 and +0.057). Combining the released model with ours adds nothing over GBM + Tiger2D (flow 0.655, HAP1 0.193). Read this carefully: it is the *released, deployed* tool against models that also use TIGER's scalar descriptors (location, junction distance, accessibility), which the paper's full model uses but the released tool does not; so it supports "a user choosing between tools would do better with ours on these screens", not "our architecture beats theirs". The HAP1 numbers are low for every model for the reason given above. Licence: NYGC academic / non-commercial; the weights are not redistributed.
 
 ## 2. siRNA (OligoFormer tables; train Huesken, test Mixset / Takayuki)
 
@@ -56,7 +68,7 @@ Huesken -> Mixset (472 siRNAs, 58 % effective):
 | OligoFormer (published, same protocol) | 0.816 | 0.814 | 0.588 |
 | DSIR / OligoWalk / Monopoli-RF (published) | 0.748 / 0.708 / 0.744 | 0.764 / 0.700 / 0.739 | 0.503 / 0.559 / 0.463 |
 
-**Parity, not improvement**: both OligoFormer values lie inside our intervals. The flank features that helped on Huesken's own CV (PCC 0.607 -> 0.630) did not transfer (ridge 0.585 without, 0.563 with); recorded, not tuned after the fact.
+**Parity, not improvement**: both OligoFormer values lie inside our intervals. The same protocol is reported by [DeepSilencer (arXiv 2503.04200, Table 3)](https://arxiv.org/pdf/2503.04200): OligoFormer 0.815 AUC / F1 0.769, DeepSilencer (siRNA + thermodynamic features) **0.820 AUC / F1 0.775** — so the best published figure on this protocol is 0.820 against our 0.813 [0.778, 0.853]. DeepSilencer's repository contains only a README and data (no code, no licence), so it could not be run or combined with. With 472 test siRNAs the interval is about +-0.04 AUC: differences of 0.005-0.01 between OligoFormer, DeepSilencer and us cannot be resolved on this set. Showing a real siRNA improvement needs a larger evaluation (more held-out datasets), not a different statistic. The flank features that helped on Huesken's own CV (PCC 0.607 -> 0.630) did not transfer (ridge 0.585 without, 0.563 with); recorded, not tuned after the fact.
 
 Huesken -> Takayuki (EGFP, 702 siRNAs, 27 % effective): Reynolds rules AUC 0.763 / PCC 0.509; our ensemble 0.746 / 0.515; GBM 0.762 / 0.547; ridge 0.713 / 0.449. Trained models do not beat a simple rule here. No OligoFormer number exists for this pair in its paper.
 
@@ -100,9 +112,15 @@ Individual pairs ranged from -0.012 to +0.013, i.e. seed-to-seed noise is as lar
 
 ## 6. Caveats that limit every claim above
 
-* **Tiger2D is our re-implementation** from the architecture, loss, optimiser and early-stopping settings in the authors' repository (PyTorch, Keras-style initialisation, early stopping on an inner split of the training genes). It is not their code, weights or published numbers, and we did not verify it against the paper's figures. "Beats TIGER" in this document means "beats this re-implementation under this protocol".
+* **Tiger2D is our re-implementation** from the architecture, loss, optimiser and early-stopping settings in the authors' repository (PyTorch, Keras-style initialisation, early stopping on an inner split of the training genes). It is not their code or weights, and we did not verify it against the paper's figures. Where this document says "beats TIGER" it means either the re-implementation under leave-one-gene-out (section 1) or the authors' released weights on two external screens (section 1b); the latter is a sequence-only deployed tool, the former uses scalar descriptors.
 * The ensembles that include the Konermann scores rely on a third-party tool whose training data we cannot check; they need that tool's output for each transcript (a web portal). The tool-free combination gains less (+0.011 all genes, +0.006 on 4 locked genes — not significant on its own — +0.020 on the clean flow screen).
 * Four locked genes is a small test set; block-bootstrap CIs resample regions within genes, not genes. The per-gene sign test (16/16) and the flow screen are the stronger evidence.
 * Single seed throughout; no hyper-parameter tuning (defaults) except where stated.
 * siRNA: Mixset's binary column does not follow a clean threshold; we used the `test.py` convention. We did not re-run OligoFormer, so its numbers are the paper's.
 * Held-out-gene scores of 0.6 are roughly two thirds of what replicate noise would allow; this is a modest-signal prediction problem, not a solved one.
+
+## 7. Licences you need to respect
+
+* **TIGER** (code, data, predictions, released weights): NYGC *academic and non-commercial research only*; for-profit entities and any commercial use must contact NYGC first. We neither redistribute nor modify it; `run_all.sh` fetches it on your machine.
+* **OligoFormer**: *proprietary* ("All Rights Reserved", Tsinghua): use "subject to payment", no modification, no redistribution, no use to develop competing products. We therefore did **not** run, port or retrain its network, and this package contains none of its code. We do read its published data tables (Huesken / Mixset / Takayuki and its thermodynamic descriptors) from its repository; whether that is permitted for your use is for you (and its licensor, ott@tsinghua.edu.cn) to settle. The original Huesken and other source datasets are published and could replace those files. The combination script `sirna_plus_oligoformer.py` only reads a predictions file you produce yourself.
+* Reading its public training script showed that, for the `--datasets Hu Mix` path, the "validation" set is the *test* dataset and the checkpoint is saved when validation loss and AUC improve on it. Whether the paper's Table 2 was produced that way we cannot tell, and we did not measure how large the effect would be; it is a reason to prefer comparisons that do not depend on that number.

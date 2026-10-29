@@ -66,3 +66,7 @@ So about 0.09 of pooled Pearson comes from label information about the test gene
 ### 6.3 OligoFormer's intra-dataset CV is a shuffled split  (`scripts/sirna_leakage_lodo.py`)
 
 Same frozen model on Huesken: shuffled 5-fold (their recipe) PCC 0.668 / AUC 0.846; contiguous 5-fold 0.644 / 0.836; contiguous 10-fold 0.646 / 0.835. A shuffled split flatters the model by ~0.02 PCC. Whether it flatters OligoFormer more than a simple model cannot be said without re-training it.
+
+### 6.4 OligoFormer's released training script selects its checkpoint on the test dataset  (read, not measured)
+
+In `scripts/train.py` the `--datasets Hu Mix` path sets both `valid_df` and `test_df` to the second dataset (Mixset) and keeps the epoch with the best validation loss and AUC *on that set*. If Table 2 of the paper was produced this way, its Huesken -> Mixset figures are chosen on test labels. We did not run it (proprietary licence, see `RESULTS.md` section 7), so the size of any effect is unknown. Separately, its LSTMs are applied to `(batch, length, features)` tensors without `batch_first`, i.e. over the batch dimension, so a prediction can depend on which other siRNAs share its batch; again read from the source, not tested.

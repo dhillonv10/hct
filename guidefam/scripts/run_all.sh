@@ -24,6 +24,12 @@ if [ -z "${SKIP_TIGER:-}" ]; then
   python -m guidefam.scripts.final_cas13d --data "$W/data" --pred "$PRED" --tiger-oof "$W/results_tiger/oof_hek293t_logo.csv" --out "$W/final_cas13d"
 fi
 
+# 3b. optional: the authors' released TIGER weights as an external baseline (NYGC academic / non-commercial licence; needs tensorflow just to read the checkpoint)
+if [ -z "${SKIP_TIGER:-}" ] && python -c "import tensorflow" 2>/dev/null; then
+  python -m guidefam.scripts.export_official_tiger "$W/official_tiger.npz" && \
+  python -m guidefam.scripts.final_cas13d --data "$W/data" --pred "$PRED" --tiger-oof "$W/results_tiger/oof_hek293t_logo.csv" --out "$W/final_cas13d_vs_official" --official-npz "$W/official_tiger.npz"
+fi
+
 # 4. protocol audits
 python -m guidefam.scripts.audit_denorm --data "$W/data" --oof "$W/results/oof_hek293t_logo.csv"
 

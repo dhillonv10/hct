@@ -16,6 +16,14 @@ bash guidefam/scripts/run_all.sh ~/guidefam_work
 ```
 Expected (sandbox values, single seed; yours may differ in the third decimal): Cas13d ens3 within-gene Spearman 0.638 all genes / 0.622 locked genes; siRNA Huesken -> Mixset AUC 0.813, PCC 0.574. If your numbers differ by more than ~0.01, check library versions first and tell me.
 
+## 1b. Optional: compare with the authors' released TIGER weights
+```bash
+pip install tensorflow huggingface_hub          # TensorFlow is used only to read the checkpoint index
+python -m guidefam.scripts.export_official_tiger ~/guidefam_work/official_tiger.npz
+python -m guidefam.scripts.final_cas13d ... --official-npz ~/guidefam_work/official_tiger.npz
+```
+This accepts NYGC's academic / non-commercial licence (do not redistribute the .npz, and do not use it commercially). Expect the flow-cytometry "released TIGER" row near 0.60 and the HAP1 row near 0.11.
+
 ## 2. Extension stage: try to beat the current best (dev-first)
 ```bash
 python -m guidefam.scripts.m4_extend dev --data ~/guidefam_work/data --pred "~/guidefam_work/tiger/predictions (other models)" \
@@ -27,8 +35,8 @@ python -m guidefam.scripts.m4_extend report --data ... --pred ... --out ~/guidef
 ```
 That prints the 4 locked genes and the paired difference to Tiger2D, and writes your choice to `m4/chosen.json`. If you look at the locked genes first, say so: they stop being a test.
 
-## 3. siRNA: combine with OligoFormer (the idea that worked for Cas13d)
-Run OligoFormer from its README (`python scripts/main.py --datasets Hu Mix -t`, then `Hu Taka`), save `siRNA,score` CSVs, and
+## 3. siRNA: combine with OligoFormer (the idea that worked for Cas13d) -- only if you hold a licence
+OligoFormer is proprietary (payment, no modification, no competing use; see `RESULTS.md` section 7) and nothing from it is run here, so this step is yours to clear with the licensor. If you do: run OligoFormer from its README (`python scripts/main.py --datasets Hu Mix -t`, then `Hu Taka`), save `siRNA,score` CSVs, and
 ```bash
 python -m guidefam.scripts.sirna_plus_oligoformer --ours ~/guidefam_work/final_sirna/preds_Mix.csv --theirs oligoformer_Mix.csv --name Mix
 ```
