@@ -712,6 +712,171 @@ def ngram_scores(genomes, ref, pos0, ref_c, alt_c, k=5):
     return -(np.log(p[r, alt_c]) - np.log(p[r, ref_c]))
 
 
+def get_conservation(a, ref, genomes, accs, mammal):
+    """Conservation counts, cached in WORKDIR/cons_counts.npz (delete it if the corpus or the aligner changes)."""
+    p = wp(a, "cons_counts.npz")
+    if os.path.exists(p):
+        z = np.load(p)
+        return z["all"], z["mam"]
+    cvt, cm = conservation_counts(a, ref, genomes, accs, mammal)
+    np.savez_compressed(p, all=cvt, mam=cm)
+    return cvt, cm
+
+
+def gnomad_filtered_positions(a):
+    """1-based positions with ANY non-PASS gnomAD record (artifact-prone sites etc.): absence there is not evidence of selection."""
+    p = wp(a, "labels", "gnomad_filtered_pos.txt")
+    if not os.path.exists(p):
+        pos = set()
+        with gzip.open(wp(a, "raw", "gnomad_chrM.vcf.bgz"), "rt") as f:
+            for line in f:
+                if line.startswith("#"):
+                    continue
+                c = line.split("\t", 8)
+                if c[6] != "PASS":
+                    pos.add(int(c[1]))
+        open(p, "w").write("\n".join(map(str, sorted(pos))) + "\n")
+    return {int(x) for x in open(p).read().split()}
+
+
+def annotation_frame(ref, pos0, ref_c, alt_c):
+    import pandas as pd
+    region = ref.region[pos0]
+    info = [ref.consequence(int(p), BASES[int(al)]) for p, al in zip(pos0, alt_c)]
+    A = pd.DataFrame({"reg_prot": region == 1, "reg_trna": region == 2, "reg_rrna": region == 3,
+                      "cp1": [c[0] == 1 for c in info], "cp2": [c[0] == 2 for c in info], "cp3": [c[0] == 3 for c in info],
+                      "syn": [c[1] == "syn" for c in info], "mis": [c[1] == "mis" for c in info], "stop": [c[1] in ("stopgain", "stoploss") for c in info],
+                      "blosum": [c[2] for c in info],
+                      "transition": [(int(r), int(al)) in {(0, 2), (2, 0), (1, 3), (3, 1)} for r, al in zip(ref_c, alt_c)]}).astype(float)
+    for r0 in range(4):
+        for t0 in range(4):
+            if r0 != t0:
+                A[f"sub_{BASES[r0]}{BASES[t0]}"] = ((ref_c == r0) & (alt_c == t0)).astype(float)
+    return A, region
+
+
+def matched_auc(y, s, strata, min_n=5):
+    """AUROC computed WITHIN strata (same substitution + flanking bases) and averaged with weights n1*n0: removes first-order mutation-rate effects.
+    y = 1 for the class the score should rank higher."""
+    from scipy.stats import rankdata
+    o = np.argsort(strata, kind="stable")
+    st, yy, ss = strata[o], y[o], s[o]
+    cuts = np.flatnonzero(np.r_[True, st[1:] != st[:-1], True])
+    num, den = 0.0, 0.0
+    for a0, b0 in zip(cuts[:-1], cuts[1:]):
+        n1 = int(yy[a0:b0].sum())
+        n0 = (b0 - a0) - n1
+        if n1 >= min_n and n0 >= min_n:
+            r = rankdata(ss[a0:b0])
+            num += (n1 * n0) * ((r[yy[a0:b0] == 1].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
+            den += n1 * n0
+    return num / den if den else float("nan")
+
+
+def stage_constraint(a, sizes):
+    """Population-constraint task: of all ~49,700 possible mtDNA SNVs, which were never seen among 56,434 gnomAD individuals? Compared WITHIN
+    substitution + flanking-base strata, so mutation-rate differences cannot explain a score. ~100x more labels than ClinVar pathogenic variants."""
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GroupKFold
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    rep = []
+
+    def say(*x):
+        s = " ".join(str(i) for i in x)
+        print(s, flush=True)
+        rep.append(s)
+    ref = Reference(wp(a, "raw", "human.gb"))
+    gn = pd.read_csv(wp(a, "labels", "gnomad_mt.tsv"), sep="\t")
+    tot = gn.AC_hom + gn.AC_het
+    observed = {(int(p), al) for p, al, t in zip(gn.pos, gn.alt, tot) if t >= a.min_carriers}
+    excl = gnomad_filtered_positions(a)
+    L = ref.L
+    alts = np.array([[c for c in range(4) if c != r] for r in ref.codes])
+    pos0 = np.repeat(np.arange(L), 3)
+    ref_c, alt_c = np.repeat(ref.codes, 3).astype(int), alts.ravel()
+    keep = np.array([(p + 1) not in excl for p in pos0])
+    pos0, ref_c, alt_c = pos0[keep], ref_c[keep], alt_c[keep]
+    y = np.array([(int(p) + 1, BASES[int(al)]) not in observed for p, al in zip(pos0, alt_c)]).astype(int)       # 1 = never observed (selected against)
+    say(f"constraint task: {len(y)} possible SNVs at {len(set(pos0))} positions after excluding {len(excl)} artifact-prone positions; "
+        f"observed in >= {a.min_carriers} individual(s): {int((1 - y).sum())} ({(1 - y).mean():.1%}), never observed: {int(y.sum())}")
+    if len(y) > a.constraint_n:
+        sel = np.random.default_rng(0).choice(len(y), a.constraint_n, replace=False)
+        pos0, ref_c, alt_c, y = pos0[sel], ref_c[sel], alt_c[sel], y[sel]
+        say(f"  scored subsample: {len(y)} variants ({int(y.sum())} never observed)")
+    left, right = ref.codes[(pos0 - 1) % L].astype(int), ref.codes[(pos0 + 1) % L].astype(int)
+    strata = ((ref_c * 4 + alt_c) * 4 + left) * 4 + right
+    A, region = annotation_frame(ref, pos0, ref_c, alt_c)
+    blocks = pos0 // 100
+    genomes, val, mammal, accs = load_corpus(a)
+    cvt, cm = get_conservation(a, ref, genomes, accs, mammal)
+    md = 5 if a.smoke else 20
+    cons_m, cons_mr, _ = cons_scores(cm, pos0, ref_c, alt_c, md)
+    cons_v, _, _ = cons_scores(cvt, pos0, ref_c, alt_c, md)
+    ng = ngram_scores([g for g, v in zip(genomes, val) if not v], ref, pos0, ref_c, alt_c)
+    lm = {}
+    for sz in sizes:
+        s = lm_scores(a, ref, sz, pos0, ref_c, alt_c)
+        if s is None:
+            say(f"(no checkpoint for size {sz}; skipped)")
+        else:
+            lm[sz] = s
+    ok = ~np.isnan(cons_m) & ~np.isnan(cons_v)
+    say(f"  variants with conservation depth >= {md}: {int(ok.sum())}")
+    pos0, ref_c, alt_c, y, strata, region, blocks = pos0[ok], ref_c[ok], alt_c[ok], y[ok], strata[ok], region[ok], blocks[ok]
+    A = A[ok].reset_index(drop=True)
+    cons_m, cons_v, cons_mr, ng = cons_m[ok], cons_v[ok], cons_mr[ok], ng[ok]
+    lm = {k: v[ok] for k, v in lm.items()}
+
+    def cv_pred(F):
+        p = np.zeros(len(y))
+        for tr, te in GroupKFold(5).split(F, y, blocks):
+            m = make_pipeline(StandardScaler(), LogisticRegression(C=0.5, max_iter=3000))
+            m.fit(F.iloc[tr], y[tr])
+            p[te] = m.predict_proba(F.iloc[te])[:, 1]
+        return p
+    F2 = A.copy()
+    F2["cons_m"], F2["cons_v"], F2["cons_mr"] = cons_m, cons_v, cons_mr
+    scores = {"conservation (mammals)": cons_m, "conservation (vertebrates)": cons_v, "control: context n-gram (zero-shot)": ng}
+    for sz, s in lm.items():
+        scores[f"language model {sz} (zero-shot)"] = s
+    scores["annotation (LR, CV)"] = cv_pred(A)
+    scores["annotation + conservation (LR, CV)"] = cv_pred(F2)
+    F3 = F2.copy()
+    F3["ngram"] = ng
+    scores["annotation + conservation + n-gram control (LR, CV)"] = cv_pred(F3)
+    for sz, s in lm.items():
+        F4 = F2.copy()
+        F4["lm"] = s
+        scores[f"annotation + conservation + LM {sz} (LR, CV)"] = cv_pred(F4)
+    say(f"\n=== Population constraint (never-observed vs observed SNVs), strata = substitution x flanking bases ({len(np.unique(strata))} strata)")
+    say(f"{'method':58s} {'matched AUROC [95% CI]':26s} {'protein':>8s} {'tRNA':>6s} {'rRNA':>6s} {'unmatched':>9s}")
+    rows = []
+    for nm, s in scores.items():
+        lo, hi = block_boot(lambda ii: matched_auc(y[ii], s[ii], strata[ii]), blocks, n=a.boot)
+        per = [matched_auc(y[region == r], s[region == r], strata[region == r]) for r in (1, 2, 3)]
+        m0 = matched_auc(y, s, strata)
+        rows.append(dict(method=nm, matched_auroc=m0, lo=lo, hi=hi, protein=per[0], trna=per[1], rrna=per[2], unmatched=auc(y, s), n=len(y)))
+        say(f"{nm:58s} {m0:.3f} [{lo:.3f},{hi:.3f}]        {per[0]:8.3f} {per[1]:6.3f} {per[2]:6.3f} {auc(y, s):9.3f}")
+    base, ctrl = "annotation + conservation (LR, CV)", "annotation + conservation + n-gram control (LR, CV)"
+    d = lambda k1, k2: (lambda ii: matched_auc(y[ii], scores[k1][ii], strata[ii]) - matched_auc(y[ii], scores[k2][ii], strata[ii]))
+    full = np.arange(len(y))
+    lo, hi = block_boot(d(ctrl, base), blocks, n=a.boot)
+    say(f"  control: does the trivial n-gram score add to annotation + conservation?  matched-AUROC difference {d(ctrl, base)(full):+.3f} [{lo:+.3f},{hi:+.3f}]")
+    for sz in lm:
+        k = f"annotation + conservation + LM {sz} (LR, CV)"
+        lo, hi = block_boot(d(k, ctrl), blocks, n=a.boot)
+        zs_lm, zs_ng = matched_auc(y, lm[sz], strata), matched_auc(y, ng, strata)
+        say(f"  KEY TEST: LM {sz} minus n-gram control, both stacked on annotation + conservation: {d(k, ctrl)(full):+.3f} [{lo:+.3f},{hi:+.3f}]")
+        say(f"  VERDICT {sz}: " + ("LM adds information beyond annotation + conservation + a trivial context model." if (lo > 0 and zs_lm > zs_ng) else
+            f"NOT demonstrated (needs key-test interval above 0 AND zero-shot matched AUROC above the n-gram control's: here {zs_lm:.3f} vs {zs_ng:.3f})."))
+    say("\nCaveats: absence from gnomAD is also driven by sampling (56,434 people, mostly of European ancestry) and by calling filters; strata remove first-order mutation-rate effects only.")
+    pd.DataFrame(rows).to_csv(wp(a, "results", "metrics_constraint.csv"), index=False)
+    open(wp(a, "results", "report_constraint.txt"), "w").write("\n".join(rep) + "\n")
+    log(f"wrote {wp(a, 'results', 'report_constraint.txt')}")
+
+
 def lm_scores(a, ref, size, pos0, ref_c, alt_c):
     """Zero-shot masked-marginal LLR (alt - ref) at the centre of a 512-nt circular window, forward and reverse strand averaged. Higher = more damaging."""
     torch = get_torch()
@@ -826,7 +991,7 @@ def stage_evaluate(a, sizes):
                 A[f"sub_{r0}{t0}"] = ((allv.ref == r0) & (allv.alt == t0)).values.astype(float)
     # conservation baselines
     genomes, val, mammal, accs = load_corpus(a)
-    cvt, cm = conservation_counts(a, ref, genomes, accs, mammal)
+    cvt, cm = get_conservation(a, ref, genomes, accs, mammal)
     md = 5 if a.smoke else 20
     allv["cons_mammal"], allv["cons_mammal_ref"], allv["depth_mammal"] = cons_scores(cm, allv.pos0.values, allv.ref_c.values, allv.alt_c.values, md)
     allv["cons_vert"], allv["cons_vert_ref"], _ = cons_scores(cvt, allv.pos0.values, allv.ref_c.values, allv.alt_c.values, md)
@@ -915,7 +1080,9 @@ def stage_evaluate(a, sizes):
 # --------------------------------------------------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1], formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate"])
+    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint"])
+    ap.add_argument("--constraint-n", type=int, default=24000, help="variants scored in the population-constraint task (of ~49,700 possible)")
+    ap.add_argument("--min-carriers", type=int, default=1, help="a variant counts as 'observed' in gnomAD if carried by at least this many individuals")
     ap.add_argument("--workdir", default=None)
     ap.add_argument("--sizes", default="small")
     ap.add_argument("--hours", type=float, default=4.0, help="time cap per size (the step count is fitted to it); 0 = no cap")
@@ -949,6 +1116,8 @@ def main():
             stage_pretrain(a, s)
     if a.stage in ("all", "evaluate"):
         stage_evaluate(a, sizes)
+    if a.stage in ("all", "evaluate", "constraint"):
+        stage_constraint(a, sizes)
 
 
 if __name__ == "__main__":
