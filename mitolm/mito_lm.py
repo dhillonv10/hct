@@ -882,8 +882,8 @@ def stage_constraint(a, sizes):
     log(f"wrote {wp(a, 'results', 'report_constraint.txt')}")
 
 
-COLS = {"pos": ("pos", "position", "start", "chromstart", "mt_pos", "m_pos"), "ref": ("ref", "reference", "ref_allele", "refallele"),
-        "alt": ("alt", "alternate", "alt_allele", "altallele", "mut_allele"), "vaf": ("vaf", "af", "heteroplasmy", "hl", "allele_fraction", "maf", "hf"),
+COLS = {"pos": ("pos", "position", "location", "start", "chromstart", "mt_pos", "m_pos"), "ref": ("ref", "reference", "ref_allele", "refallele"),
+        "alt": ("alt", "alternate", "alt_allele", "altallele", "mut_allele"), "vaf": ("vaf", "af", "frequency", "heteroplasmy", "hl", "allele_fraction", "maf", "hf"),
         "sample": ("sample", "sample_id", "patient", "patient_id", "tumor_sample_barcode", "case")}
 
 

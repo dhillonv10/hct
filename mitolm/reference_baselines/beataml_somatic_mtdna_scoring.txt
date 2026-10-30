@@ -1,0 +1,16 @@
+Scorer applied to the somatic mtDNA calls in the supplement of Zhao, Wang, Wang, Br J Haematol 2022 (DOI 10.1111/bjh.18444; Beat AML exome-derived calls).
+Input (not redistributed here): 134 single-base mutations, 78 patients, heteroplasmy 1.0% - 94.8% (median 4.9%); T>C 40, G>A 37, C>T 24, A>G 22, other 11.
+Damage score = logistic model on population-constraint labels (region, codon position, consequence, BLOSUM62, conservation from 7,770 vertebrate / 1,633 mammal genomes); no language model.
+Percentile = rank among ALL possible SNVs with the same substitution + flanking bases + region (0.5 = same as mutation-matched random SNVs). Permutation test, 2000 draws.
+
+All 134:        mean percentile 0.517 (null sd 0.025), p = 0.503; top decile 0.11 (null 0.10), bottom decile 0.11
+                protein n=82 0.526 | tRNA n=19 0.561 | rRNA n=22 0.504 | noncoding n=11 0.405
+                damage vs heteroplasmy: Spearman +0.125 [-0.050, +0.289]
+VAF >= 5%:      n=66, mean percentile 0.549 (null sd 0.034), p = 0.149; Spearman with heteroplasmy -0.037 [-0.311, +0.234]
+VAF >= 10%:     n=41, mean percentile 0.515 (null sd 0.045), p = 0.736; Spearman with heteroplasmy +0.138 [-0.126, +0.423]
+
+Known-answer controls with the same scorer (same run): ClinVar pathogenic 0.667, ClinVar benign 0.420, gnomAD common 0.302, gnomAD heteroplasmic 0.355
+(gnomAD heteroplasmic: damage vs max heteroplasmy Spearman -0.278, partial -0.132 [-0.182, -0.081] after controlling for carrier count).
+
+Reading: no detectable selection signal in these AML somatic mtDNA mutations at any heteroplasmy threshold; shifts larger than about +-0.05 (2 null sd) would have been seen at n=134.
+Caveats: exome off-target calls near the 1% floor contain artifacts that would dilute a real signal; gnomAD (>=10% heteroplasmy, germline) and Beat AML (>=1%, somatic) have different ascertainment.
