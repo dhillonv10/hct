@@ -620,6 +620,43 @@ def cons_scores(counts, pos0, ref_c, alt_c, min_depth=20):
     return np.where(bad, np.nan, rarity), np.where(bad, np.nan, refc), n
 
 
+def ngram_scores(genomes, ref, pos0, ref_c, alt_c, k=5):
+    """CONTROL for the language model: the same zero-shot score from a trivial model, p(base | k bases each side) counted over the training genomes
+    (both strands, circular). If the transformer cannot beat this, it has learned local composition and nothing more."""
+    n = 4 ** (2 * k + 1)
+    tab = np.zeros(n, np.int64)
+    chunk = []
+
+    def flush():
+        if chunk:
+            tab[:] += np.bincount(np.concatenate(chunk), minlength=n)
+            chunk.clear()
+    for g in genomes:
+        for x in (g, revcomp_codes(g)):
+            y = np.concatenate([x, x[:2 * k]]).astype(np.int64)
+            m = len(y) - 2 * k
+            code, good = np.zeros(m, np.int64), np.ones(m, bool)
+            for j in range(2 * k + 1):
+                code = code * 4 + np.minimum(y[j:m + j], 3)
+                good &= y[j:m + j] < 4
+            chunk.append(code[good])
+        if len(chunk) > 800:
+            flush()
+    flush()
+    offs = np.arange(1, k + 1)
+    left = np.zeros(len(pos0), np.int64)
+    right = np.zeros(len(pos0), np.int64)
+    for o in range(k, 0, -1):
+        left = left * 4 + ref.codes[(pos0 - o) % ref.L]
+    for o in offs:
+        right = right * 4 + ref.codes[(pos0 + o) % ref.L]
+    base = left * 4 ** (k + 1) + right
+    cnt = np.stack([tab[base + c * 4 ** k] for c in range(4)], 1).astype(float)
+    p = (cnt + 0.5) / (cnt.sum(1, keepdims=True) + 2.0)
+    r = np.arange(len(pos0))
+    return -(np.log(p[r, alt_c]) - np.log(p[r, ref_c]))
+
+
 def lm_scores(a, ref, size, pos0, ref_c, alt_c):
     """Zero-shot masked-marginal LLR (alt - ref) at the centre of a 512-nt circular window, forward and reverse strand averaged. Higher = more damaging."""
     torch = get_torch()
@@ -743,6 +780,7 @@ def stage_evaluate(a, sizes):
             continue
         allv[f"lm_{sz}"] = s
         lm_cols.append(f"lm_{sz}")
+    allv["ngram"] = ngram_scores([g for g, v in zip(genomes, val) if not v], ref, allv.pos0.values, allv.ref_c.values, allv.alt_c.values)
     allv.to_csv(wp(a, "results", "variant_scores.csv"), index=False)
     rows = []
 
@@ -757,19 +795,23 @@ def stage_evaluate(a, sizes):
     for setname, sel in (("ClinVar P/LP vs B/LB", (allv["set"] == "clinvar").values), ("ClinVar P/LP vs B/LB + gnomAD common", np.ones(len(allv), bool))):
         d = allv[sel].reset_index(drop=True)
         Ad = A[sel].reset_index(drop=True)
-        need = ["cons_mammal", "cons_vert"] + lm_cols
+        need = ["cons_mammal", "cons_vert", "ngram"] + lm_cols
         full = d[need].notna().all(axis=1).values
         d, Ad = d[full].reset_index(drop=True), Ad[full].reset_index(drop=True)
         y = d.y.values
         say(f"\n=== {setname}: n={len(d)} (pathogenic {int(y.sum())}, benign {int((1 - y).sum())}); common subset with every score available")
         blocks, region = d.block.values, d.region.values
         scores = {"conservation (mammals)": d.cons_mammal.values, "conservation (vertebrates)": d.cons_vert.values}
+        scores["control: context n-gram (zero-shot)"] = d.ngram.values
         for c in lm_cols:
             scores[f"language model {c[3:]} (zero-shot)"] = d[c].values
         scores["annotation (LR, CV)"] = cv_pred(Ad, d, y, blocks)
         F2 = Ad.copy()
         F2["cons_m"], F2["cons_v"], F2["cons_mr"] = d.cons_mammal.values, d.cons_vert.values, d.cons_mammal_ref.values
         scores["annotation + conservation (LR, CV)"] = cv_pred(F2, d, y, blocks)
+        F3 = F2.copy()
+        F3["ngram"] = d.ngram.values
+        scores["annotation + conservation + n-gram control (LR, CV)"] = cv_pred(F3, d, y, blocks)
         for c in lm_cols:
             F3 = F2.copy()
             F3["lm"] = d[c].values
@@ -788,10 +830,19 @@ def stage_evaluate(a, sizes):
             diff = lambda ii, k=k: auc(y[ii], scores[k][ii]) - auc(y[ii], scores[base][ii])
             lo, hi = block_boot(diff, blocks, n=a.boot)
             say(f"  does LM {c[3:]} add to annotation + conservation?  AUROC difference {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
+        ctrl = "annotation + conservation + n-gram control (LR, CV)"
+        say(f"  control: does the trivial n-gram score add to annotation + conservation?  AUROC difference "
+            f"{auc(y, scores[ctrl]) - auc(y, scores[base]):+.3f} [{block_boot(lambda ii: auc(y[ii], scores[ctrl][ii]) - auc(y[ii], scores[base][ii]), blocks, n=a.boot)[0]:+.3f},"
+            f"{block_boot(lambda ii: auc(y[ii], scores[ctrl][ii]) - auc(y[ii], scores[base][ii]), blocks, n=a.boot)[1]:+.3f}]")
         for c in lm_cols:
+            k = f"annotation + conservation + LM {c[3:]} (LR, CV)"
+            diff = lambda ii, k=k: auc(y[ii], scores[k][ii]) - auc(y[ii], scores[ctrl][ii])
+            lo, hi = block_boot(diff, blocks, n=a.boot)
+            say(f"  KEY TEST: LM {c[3:]} minus n-gram control, both stacked on annotation + conservation: {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
             diff = lambda ii, c=c: auc(y[ii], d[c].values[ii]) - auc(y[ii], d.cons_mammal.values[ii])
             lo, hi = block_boot(diff, blocks, n=a.boot)
             say(f"  zero-shot LM {c[3:]} minus mammal conservation (both zero-shot): {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
+        say("  (a zero-shot AUROC below 0.5 means the score is anti-informative -- expected for an untrained or barely trained model; the sign is not flipped)")
     pd.DataFrame(rows).to_csv(wp(a, "results", "metrics.csv"), index=False)
     say("\nRead this with the caveats in the header of mito_lm.py: ~100 positives, region imbalance, partly circular ClinVar labels.")
     open(wp(a, "results", "report.txt"), "w").write("\n".join(rep) + "\n")
