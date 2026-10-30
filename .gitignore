@@ -7,3 +7,4 @@ feature_discovery.csv
 data_untrusted/
 guidefam/results/aso/*.log
 guidefam/results/aso/*oof*.csv
+hct_compare.zip

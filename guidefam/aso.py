@@ -92,6 +92,7 @@ def _merge_genes(d: pd.DataFrame) -> pd.Series:
 
 def load(path: str) -> pd.DataFrame:
     d = pd.read_csv(path, low_memory=False)
+    d["raw_id"] = np.arange(len(d))                                           # position in the original table, before de-duplication (joins external predictions)
     d["aso"] = d.aso_sequence_5_to_3.str.upper().str.replace("U", "T")
     d["y"] = d.inhibition_percent.astype(float) / 100.0
     d["screen"] = d.custom_id

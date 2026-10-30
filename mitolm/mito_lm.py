@@ -833,8 +833,18 @@ def stage_constraint(a, sizes):
             say(f"(no checkpoint for size {sz}; skipped)")
         else:
             lm[sz] = s
+    if a.external:
+        ext = pd.read_csv(a.external)
+        look = {(int(p), r, al): i for i, (p, r, al) in enumerate(zip(ext.pos, ext.ref, ext.alt))}
+        rows = np.array([look.get((int(p) + 1, BASES[int(r)], BASES[int(al)]), -1) for p, r, al in zip(pos0, ref_c, alt_c)])
+        for c in [c for c in ext.columns if c not in ("pos", "ref", "alt")]:
+            v = np.where(rows >= 0, ext[c].values[np.maximum(rows, 0)], np.nan).astype(float)
+            lm[c] = v
+            say(f"external score '{c}': available for {int(np.isfinite(v).sum())} of {len(v)} scored variants")
     ok = ~np.isnan(cons_m) & ~np.isnan(cons_v)
-    say(f"  variants with conservation depth >= {md}: {int(ok.sum())}")
+    for v_ in lm.values():
+        ok &= np.isfinite(v_)
+    say(f"  variants with conservation depth >= {md} and every score available: {int(ok.sum())}")
     pos0, ref_c, alt_c, y, strata, region, blocks = pos0[ok], ref_c[ok], alt_c[ok], y[ok], strata[ok], region[ok], blocks[ok]
     A = A[ok].reset_index(drop=True)
     cons_m, cons_v, cons_mr, ng = cons_m[ok], cons_v[ok], cons_mr[ok], ng[ok]
@@ -1203,6 +1213,16 @@ def stage_evaluate(a, sizes):
             continue
         allv[f"lm_{sz}"] = s
         lm_cols.append(f"lm_{sz}")
+    if a.external:
+        ext = pd.read_csv(a.external)
+        keys = ["pos", "ref", "alt"]
+        n0 = len(allv)
+        allv = allv.merge(ext, on=keys, how="left")
+        assert len(allv) == n0, "external score file has duplicate (pos, ref, alt) rows"
+        for c in [c for c in ext.columns if c not in keys]:
+            allv[f"lm_{c}"] = allv[c]
+            lm_cols.append(f"lm_{c}")
+            say(f"external score '{c}': available for {int(allv[c].notna().sum())} of {n0} variants (the tests below use the variants that have every score)")
     allv["ngram"] = ngram_scores([g for g, v in zip(genomes, val) if not v], ref, allv.pos0.values, allv.ref_c.values, allv.alt_c.values)
     allv.to_csv(wp(a, "results", "variant_scores.csv"), index=False)
     rows = []
@@ -1277,6 +1297,36 @@ def stage_evaluate(a, sizes):
 
 
 # --------------------------------------------------------------------------------------------------------------------- main
+def stage_export_variants(a):
+    """Write the exact variant lists the ClinVar and constraint tests use, so an outside model (e.g. Nucleotide Transformer) can score the same variants."""
+    import pandas as pd
+    ref = Reference(wp(a, "raw", "human.gb"))
+    os.makedirs(wp(a, "export"), exist_ok=True)
+    cv = pd.read_csv(wp(a, "labels", "clinvar_mt.tsv"), sep="\t")
+    gn = pd.read_csv(wp(a, "labels", "gnomad_mt.tsv"), sep="\t")
+    cvl = cv[(cv.stars >= 1) & cv["class"].isin(["P", "B"])].copy()
+    pvar = set(zip(cvl[cvl["class"] == "P"].pos, cvl[cvl["class"] == "P"].alt))
+    common = gn[(gn.AF_hom >= 1e-3)].copy()
+    common = common[[(p, al) not in pvar for p, al in zip(common.pos, common.alt)]]
+    common = common[~common.set_index(["pos", "alt"]).index.isin(cvl.set_index(["pos", "alt"]).index)]
+    v = pd.concat([cvl[["pos", "ref", "alt"]], common[["pos", "ref", "alt"]]]).drop_duplicates()
+    ok = np.array([1 <= p <= ref.L and ref.seq[p - 1] == r for p, r in zip(v.pos, v.ref)])
+    v[ok].to_csv(wp(a, "export", "variants_clinvar.csv"), index=False)
+    # constraint subsample: identical logic and seed to stage_constraint
+    observed = {(int(p), al) for p, al, t in zip(gn.pos, gn.alt, gn.AC_hom + gn.AC_het) if t >= a.min_carriers}
+    excl = gnomad_filtered_positions(a)
+    valid = np.flatnonzero(ref.codes < 4)
+    alts = np.array([[c for c in range(4) if c != ref.codes[p]] for p in valid])
+    pos0, ref_c, alt_c = np.repeat(valid, 3), np.repeat(ref.codes[valid], 3).astype(int), alts.ravel()
+    keep = np.array([(p + 1) not in excl for p in pos0])
+    pos0, ref_c, alt_c = pos0[keep], ref_c[keep], alt_c[keep]
+    if len(pos0) > a.constraint_n:
+        sel = np.random.default_rng(0).choice(len(pos0), a.constraint_n, replace=False)
+        pos0, ref_c, alt_c = pos0[sel], ref_c[sel], alt_c[sel]
+    pd.DataFrame({"pos": pos0 + 1, "ref": [BASES[int(r)] for r in ref_c], "alt": [BASES[int(x)] for x in alt_c]}).to_csv(wp(a, "export", "variants_constraint.csv"), index=False)
+    log(f"exported {int(ok.sum())} ClinVar/gnomAD-common variants and {len(pos0)} constraint variants to {wp(a, 'export')} (use --constraint-n {a.constraint_n} again at evaluate time)")
+
+
 def check_deps(stage, variants=""):
     """Fail in the first second, not after hours of training, if a package needed later is missing."""
     import importlib
@@ -1299,7 +1349,8 @@ def check_deps(stage, variants=""):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1], formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint", "score"])
+    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint", "score", "export-variants"])
+    ap.add_argument("--external", default="", help="evaluate/constraint: CSV with columns pos, ref, alt + one column per extra zero-shot score (higher = more damaging); folded into the same tests and VERDICT logic as the language model")
     ap.add_argument("--variants", default="", help="score stage: TSV/CSV of mtDNA SNVs (pos, ref, alt, optional sample, optional vaf/heteroplasmy)")
     ap.add_argument("--out-table", default="", help="score stage: where to write the per-variant table (default: next to the input)")
     ap.add_argument("--self-test", action="store_true", help="score stage: run the known-answer controls (ClinVar pathogenic/benign, gnomAD common)")
@@ -1341,6 +1392,8 @@ def main():
         stage_evaluate(a, sizes)
     if a.stage in ("all", "evaluate", "constraint"):
         stage_constraint(a, sizes)
+    if a.stage == "export-variants":
+        stage_export_variants(a)
     if a.stage == "score":
         if not (a.variants or a.self_test):
             sys.exit("score stage: give --variants FILE and/or --self-test")
