@@ -586,10 +586,13 @@ class Reference:
 
 
 # --------------------------------------------------------------------------------------------------------------------- baselines
-def conservation_counts(a, ref, genomes, accs, mammal, k=12, win=48, min_ident=0.55):
-    """Column base counts, for all vertebrates and for mammals only, from genomes aligned to the human reference by seeded ungapped windows
-    (12-mer diagonal vote per 48-nt window, window identity >= 55%). Returns (counts_all, counts_mammal), each (L, 4)."""
+def conservation_counts(a, ref, genomes, accs, mammal, k=10, win=48, min_ident=0.55, min_ident_prop=0.5):
+    """Column base counts, for all vertebrates and for mammals only, from genomes aligned to the human reference by ungapped 48-nt windows:
+    a window takes the offset voted by >= 2 shared 10-mer seeds (identity >= 55%); windows without seeds borrow the offset of a window within 3 steps
+    (+-3 nt indel shifts tried, identity >= 50%). A weak conservation baseline would flatter the language model, so sensitivity matters here.
+    Returns (counts_all, counts_mammal), each (L, 4)."""
     L = ref.L
+    nwin = (L + win - 1) // win
     hc = ref.codes.astype(np.int64)
     kk = np.zeros(L - k + 1, np.int64)
     ok = np.ones(L - k + 1, bool)
@@ -632,20 +635,31 @@ def conservation_counts(a, ref, genomes, accs, mammal, k=12, win=48, min_ident=0
         w_id, d_val = uk // 200000, uk % 200000 - 100000
         order = np.lexsort((-c2, w_id))
         first_w = np.r_[True, w_id[order][1:] != w_id[order][:-1]]
-        for wi, dv, cc in zip(w_id[order][first_w], d_val[order][first_w], c2[order][first_w]):
-            if cc < 2:
-                continue
+        seeded = {int(wi): int(dv) for wi, dv, cc in zip(w_id[order][first_w], d_val[order][first_w], c2[order][first_w]) if cc >= 2}
+        if not seeded:
+            continue
+        for wi in range(nwin):
+            if wi in seeded:
+                cand, shifts, thr = [seeded[wi]], (0,), min_ident
+            else:                                                                 # divergent window: borrow a neighbour's offset (genomes are collinear), allow small indel shifts
+                cand = sorted({seeded[nb] for dist in (1, 2, 3) for nb in (wi - dist, wi + dist) if nb in seeded})
+                shifts, thr = range(-3, 4), min_ident_prop
+                if not cand:
+                    continue
             hi = np.arange(wi * win, min((wi + 1) * win, L))
-            oi = hi - dv
-            v = (oi >= 0) & (oi < len(g))
-            hi, oi = hi[v], oi[v]
-            b = g[oi]
-            good = b < 4
-            if good.sum() < win // 2 or (b[good] == ref.codes[hi][good]).mean() < min_ident:
+            dvals = np.array([c + s for c in cand for s in shifts])
+            oi = hi[None, :] - dvals[:, None]
+            b = g[np.clip(oi, 0, len(g) - 1)]
+            ok_ = (oi >= 0) & (oi < len(g)) & (b < 4)
+            nv = ok_.sum(1)
+            ident = np.where(nv >= win // 2, ((b == ref.codes[hi][None, :]) & ok_).sum(1) / np.maximum(nv, 1), 0.0)
+            j = int(np.argmax(ident))
+            if ident[j] < thr:
                 continue
-            np.add.at(counts, (hi[good], b[good]), 1)
+            sel = ok_[j]
+            np.add.at(counts, (hi[sel], b[j][sel]), 1)
             if mammal[gi]:
-                np.add.at(counts_m, (hi[good], b[good]), 1)
+                np.add.at(counts_m, (hi[sel], b[j][sel]), 1)
         used += 1
     log(f"  conservation panel: {used} genomes aligned; median depth {int(np.median(counts.sum(1)))} (all) / {int(np.median(counts_m.sum(1)))} (mammals) per position")
     return counts, counts_m
