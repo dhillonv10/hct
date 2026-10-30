@@ -1,0 +1,838 @@
+#!/usr/bin/env python3
+"""mito_lm.py -- a vertebrate mitogenome language model: download, build, pretrain, and test it against honest baselines. One file.
+
+WHAT IT BUILDS
+  A masked nucleotide transformer (single-base tokens, 512-nt windows, circular wrap, reverse-complement augmentation) pretrained on the
+  ~7,900 RefSeq vertebrate mitochondrial genomes. It scores human mtDNA single-nucleotide variants ZERO-SHOT (no labels): the log-likelihood
+  ratio log P(alt) - log P(ref) at the masked variant position, averaged over both strands. Three sizes (tiny ~0.9M, small ~5M, base ~14M
+  parameters) make it a small family.
+
+WHAT IT TESTS (the part that decides whether the model is worth anything)
+  Pathogenic vs benign discrimination on human mtDNA SNVs from ClinVar (labels with >= 1 review star), plus a second set that adds common
+  gnomAD-mito polymorphisms as benign proxies. Against:
+    * conservation  : alignment-column statistics from the same vertebrate / mammal genomes (simple, but it is the baseline that matters)
+    * annotation    : region, codon position, synonymous / missense / stop, BLOSUM62, transition vs transversion (logistic regression, cross-validated)
+    * stacked       : annotation + conservation, with and without the language-model score. The headline question is whether the LM adds anything
+                      beyond conservation + annotation (paired block-bootstrap).
+  All intervals are block bootstraps over 100-bp blocks (nearby variants are not independent). Pretraining validation uses held-out GENERA.
+
+HONEST CAVEATS BUILT INTO THE OUTPUT
+  * ClinVar has only ~118 pathogenic / likely-pathogenic mtDNA SNVs (>= 1 star): AUROC intervals are wide (about +-0.05).
+  * Pathogenic variants sit mostly in tRNA and ND genes, benign ones mostly in protein genes: the report gives per-region and region-stratified AUROC.
+  * ClinVar classifications partly rest on conservation / in-silico evidence, so "beats conservation" can be partly circular.
+  * MITOMAP blocks automated downloads (HTTP 403), so it is not used.
+
+USAGE
+  pip install torch numpy pandas scikit-learn scipy biopython
+  python mito_lm.py                          # everything: download -> corpus -> pretrain (small, 4 h cap) -> evaluate
+  python mito_lm.py --sizes tiny,small,base --hours 3        # the whole family, 3 h cap per size
+  python mito_lm.py download | corpus | pretrain | evaluate  # single stages (each is resumable and skips finished work)
+  python mito_lm.py --smoke                  # 2-minute plumbing check on tiny data (separate workdir)
+  Options: --workdir DIR (default ./mito_work)  --device mps|cuda|cpu (default: auto)  --steps N  --batch 64  --api-key NCBI_KEY  --email you@x.org
+  Downloads: ~130 MB sequences (NCBI Entrez), 200 MB ClinVar VCF (filtered then deletable), 5 MB gnomAD chrM. Total disk ~1 GB.
+  Outputs in WORKDIR/results: report.txt, variant_scores.csv, metrics.csv, train_log_<size>.csv; checkpoints in WORKDIR/ckpt.
+"""
+from __future__ import annotations
+
+import argparse
+import gzip
+import hashlib
+import json
+import math
+import os
+import re
+import sys
+import time
+import urllib.parse
+import urllib.request
+
+import numpy as np
+
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+ENTREZ = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+Q_VERT = "txid7742[Organism:exp] AND refseq[filter] AND mitochondrion[filter]"       # Vertebrata, RefSeq mitochondrial genomes
+Q_MAMM = "txid40674[Organism:exp] AND refseq[filter] AND mitochondrion[filter]"       # Mammalia
+CLINVAR_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz"
+GNOMAD_URL = "https://storage.googleapis.com/gcp-public-data--gnomad/release/3.1/vcf/genomes/gnomad.genomes.v3.1.sites.chrM.vcf.bgz"
+HUMAN_ACC = "NC_012920.1"                                                              # rCRS = GRCh38 chrM = coordinates of ClinVar / gnomAD
+UA = {"User-Agent": "mito_lm/1.0 (research script)"}
+
+SIZES = {"tiny": dict(d=128, layers=4, heads=4, ff=512, lr=1e-3, steps=20000),
+         "small": dict(d=256, layers=6, heads=8, ff=1024, lr=6e-4, steps=40000),
+         "base": dict(d=384, layers=8, heads=6, ff=1536, lr=4e-4, steps=60000)}
+WIN = 512
+PAD, N_TOK, MASK = 0, 5, 6                      # tokens: 0 pad, 1-4 = A C G T, 5 = N, 6 = [MASK]
+VOCAB = 7
+CODE = {"A": 0, "C": 1, "G": 2, "T": 3}         # array codes 0-3, 4 = N (tokens = code + 1)
+LUT = np.full(256, 4, np.uint8)
+for _c, _v in CODE.items():
+    LUT[ord(_c)] = _v
+    LUT[ord(_c.lower())] = _v
+
+
+def log(*a):
+    print(time.strftime("%H:%M:%S"), *a, flush=True)
+
+
+def wp(a, *p):
+    return os.path.join(a.workdir, *p)
+
+
+# --------------------------------------------------------------------------------------------------------------------- downloading
+def http_get(url, data=None, tries=5, timeout=120):
+    for k in range(tries):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=UA), timeout=timeout) as r:
+                return r.read()
+        except Exception as e:
+            if k == tries - 1:
+                raise
+            log(f"  retry {k + 1} after error: {e}")
+            time.sleep(2 ** (k + 1))
+
+
+def download(url, dest, label):
+    if os.path.exists(dest) and os.path.getsize(dest) > 1000:
+        log(f"  {label}: already present ({os.path.getsize(dest) / 1e6:.1f} MB)")
+        return
+    tmp = dest + ".part"
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=180) as r, open(tmp, "wb") as f:
+                total, got, nxt = int(r.headers.get("Content-Length") or 0), 0, 50e6
+                while True:
+                    b = r.read(1 << 20)
+                    if not b:
+                        break
+                    f.write(b)
+                    got += len(b)
+                    if got >= nxt:
+                        log(f"  {label}: {got / 1e6:.0f} / {total / 1e6:.0f} MB")
+                        nxt += 50e6
+            if total and got != total:
+                raise IOError(f"short read {got} of {total}")
+            os.replace(tmp, dest)
+            log(f"  {label}: done ({got / 1e6:.1f} MB)")
+            return
+        except Exception as e:
+            log(f"  {label}: attempt {attempt + 1} failed: {e}")
+            time.sleep(5 * (attempt + 1))
+    sys.exit(f"could not download {url}")
+
+
+def entrez_params(a, **kw):
+    kw.update(tool="mito_lm")
+    if a.email:
+        kw["email"] = a.email
+    if a.api_key:
+        kw["api_key"] = a.api_key
+    return kw
+
+
+def esearch(a, query):
+    u = ENTREZ + "esearch.fcgi?" + urllib.parse.urlencode(entrez_params(a, db="nuccore", term=query, retmax=20000, retmode="json", idtype="acc"))
+    return json.loads(http_get(u))["esearchresult"]["idlist"]
+
+
+def efetch(a, accs, rettype):
+    data = urllib.parse.urlencode(entrez_params(a, db="nuccore", id=",".join(accs), rettype=rettype, retmode="text")).encode()
+    time.sleep(0.12 if a.api_key else 0.40)                                  # NCBI limit: 3 requests/s without a key, 10/s with
+    return http_get(ENTREZ + "efetch.fcgi", data=data).decode()
+
+
+def prepare_clinvar(raw, out):
+    """MT SNVs from the ClinVar GRCh38 VCF -> TSV with pos, ref, alt, class (P / B / other), review stars, gene."""
+    def klass(s):
+        s = s.lower()
+        if "conflict" in s or "uncertain" in s:
+            return "other"
+        if "pathogenic" in s and "benign" not in s:
+            return "P"
+        if "benign" in s and "pathogenic" not in s:
+            return "B"
+        return "other"
+
+    def stars(r):
+        r = r.lower()
+        if "practice_guideline" in r or "reviewed_by_expert_panel" in r:
+            return 3
+        if "multiple_submitters" in r and "no_conflicts" in r:
+            return 2
+        if "criteria_provided" in r and "single_submitter" in r:
+            return 1
+        return 0
+    rows = []
+    with gzip.open(raw, "rt") as f:
+        for line in f:
+            if not line.startswith("MT\t"):
+                continue
+            c = line.rstrip("\n").split("\t")
+            if len(c[3]) != 1 or len(c[4]) != 1:
+                continue
+            d = dict(kv.split("=", 1) for kv in c[7].split(";") if "=" in kv)
+            gene = re.match(r"([^:|]+)", d.get("GENEINFO", ""))
+            rows.append((int(c[1]), c[3], c[4], klass(d.get("CLNSIG", "")), stars(d.get("CLNREVSTAT", "")), gene.group(1) if gene else ""))
+    with open(out, "w") as f:
+        f.write("pos\tref\talt\tclass\tstars\tgene\n")
+        f.writelines("\t".join(map(str, r)) + "\n" for r in rows)
+    log(f"  ClinVar: {len(rows)} MT SNVs kept")
+
+
+def prepare_gnomad(raw, out):
+    rows = []
+    with gzip.open(raw, "rt") as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            c = line.rstrip("\n").split("\t")
+            if c[6] != "PASS" or len(c[3]) != 1 or len(c[4]) != 1:
+                continue
+            d = dict(kv.split("=", 1) for kv in c[7].split(";") if "=" in kv)
+            rows.append((int(c[1]), c[3], c[4], d.get("AN", ""), d.get("AC_hom", "0"), d.get("AC_het", "0"), d.get("AF_hom", "0"), d.get("AF_het", "0"), d.get("max_hl", "")))
+    with open(out, "w") as f:
+        f.write("pos\tref\talt\tAN\tAC_hom\tAC_het\tAF_hom\tAF_het\tmax_hl\n")
+        f.writelines("\t".join(map(str, r)) + "\n" for r in rows)
+    log(f"  gnomAD-mito: {len(rows)} PASS SNVs kept")
+
+
+def stage_download(a):
+    raw = wp(a, "raw")
+    os.makedirs(raw, exist_ok=True)
+    os.makedirs(wp(a, "labels"), exist_ok=True)
+    log("1/4 sequences: RefSeq vertebrate mitochondrial genomes (NCBI Entrez)")
+    accp = os.path.join(raw, "accessions.json")
+    if not os.path.exists(accp):
+        vert, mamm = esearch(a, Q_VERT), esearch(a, Q_MAMM)
+        if a.smoke:                                                               # 40 mammals + 20 others + human
+            others = [x for x in vert if x not in set(mamm)]
+            vert = sorted(set(mamm[:40] + others[:20] + [HUMAN_ACC]))
+        json.dump({"vert": vert, "mammal": sorted(set(mamm) & set(vert))}, open(accp, "w"))
+    accs = json.load(open(accp))["vert"]
+    log(f"  {len(accs)} accessions")
+    for i in range(0, len(accs), 100):
+        fp = os.path.join(raw, f"fasta_{i // 100:04d}.fa")
+        if os.path.exists(fp):
+            continue
+        txt = efetch(a, accs[i:i + 100], "fasta")
+        if txt.count(">") < len(accs[i:i + 100]) * 0.9:
+            log(f"  warning: batch {i // 100} returned {txt.count('>')} of {len(accs[i:i + 100])} records")
+        open(fp + ".part", "w").write(txt)
+        os.replace(fp + ".part", fp)
+        if (i // 100) % 10 == 0:
+            log(f"  fetched {min(i + 100, len(accs))} / {len(accs)}")
+    log("2/4 human reference annotation (NC_012920.1 GenBank record)")
+    gb = os.path.join(raw, "human.gb")
+    if not os.path.exists(gb):
+        open(gb, "w").write(efetch(a, [HUMAN_ACC], "gb"))
+    log("3/4 ClinVar")
+    tsv = wp(a, "labels", "clinvar_mt.tsv")
+    if not os.path.exists(tsv):
+        download(CLINVAR_URL, os.path.join(raw, "clinvar.vcf.gz"), "ClinVar VCF")
+        prepare_clinvar(os.path.join(raw, "clinvar.vcf.gz"), tsv)
+    log("4/4 gnomAD-mito")
+    tsv = wp(a, "labels", "gnomad_mt.tsv")
+    if not os.path.exists(tsv):
+        download(GNOMAD_URL, os.path.join(raw, "gnomad_chrM.vcf.bgz"), "gnomAD chrM VCF")
+        prepare_gnomad(os.path.join(raw, "gnomad_chrM.vcf.bgz"), tsv)
+
+
+# --------------------------------------------------------------------------------------------------------------------- corpus
+def read_fasta(text):
+    head, seq = None, []
+    for line in text.splitlines():
+        if line.startswith(">"):
+            if head is not None:
+                yield head, "".join(seq)
+            head, seq = line[1:].strip(), []
+        else:
+            seq.append(line.strip())
+    if head is not None:
+        yield head, "".join(seq)
+
+
+def stage_corpus(a):
+    out = wp(a, "corpus.npz")
+    if os.path.exists(out):
+        log("corpus: already built")
+        return
+    mamm = set(json.load(open(wp(a, "raw", "accessions.json")))["mammal"])
+    recs, seen = [], set()
+    files = sorted(f for f in os.listdir(wp(a, "raw")) if f.startswith("fasta_") and f.endswith(".fa"))
+    dropped = dict(length=0, ambiguous=0, duplicate=0)
+    for fn in files:
+        for head, seq in read_fasta(open(wp(a, "raw", fn)).read()):
+            acc, desc = head.split(None, 1) if " " in head else (head, "")
+            arr = LUT[np.frombuffer(seq.encode(), np.uint8)]
+            if not 14000 <= len(arr) <= 20000:
+                dropped["length"] += 1
+                continue
+            if (arr == 4).mean() > 0.01:
+                dropped["ambiguous"] += 1
+                continue
+            h = hashlib.md5(arr.tobytes()).hexdigest()
+            if h in seen:
+                dropped["duplicate"] += 1
+                continue
+            seen.add(h)
+            genus = desc.split()[0] if desc else acc
+            recs.append((acc, genus, acc in mamm, arr))
+    # validation = ~3% of GENERA (congeneric mitogenomes are near-identical, so a random genome split would leak)
+    val = np.array([int(hashlib.md5(r[1].encode()).hexdigest()[:8], 16) % 100 < 3 for r in recs])
+    off = np.cumsum([0] + [len(r[3]) for r in recs])
+    np.savez_compressed(out, seq=np.concatenate([r[3] for r in recs]), off=off, val=val, mammal=np.array([r[2] for r in recs]),
+                        acc=np.array([r[0] for r in recs]), genus=np.array([r[1] for r in recs]))
+    log(f"corpus: {len(recs)} genomes, {off[-1] / 1e6:.1f} Mnt, {len(set(r[1] for r in recs))} genera, {int(val.sum())} validation genomes "
+        f"({len(set(r[1] for r, v in zip(recs, val) if v))} held-out genera), {int(sum(r[2] for r in recs))} mammals; dropped {dropped}")
+
+
+def load_corpus(a):
+    z = np.load(wp(a, "corpus.npz"), allow_pickle=False)
+    off = z["off"]
+    g = [z["seq"][off[i]:off[i + 1]] for i in range(len(off) - 1)]
+    return g, z["val"], z["mammal"], z["acc"]
+
+
+# --------------------------------------------------------------------------------------------------------------------- model
+def get_torch():
+    import torch
+    return torch
+
+
+def pick_device(a):
+    torch = get_torch()
+    if a.device != "auto":
+        return a.device
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def build_model(cfg):
+    torch = get_torch()
+    nn = torch.nn
+
+    class MitoLM(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.tok = nn.Embedding(VOCAB, cfg["d"], padding_idx=PAD)
+            self.pos = nn.Embedding(WIN, cfg["d"])
+            layer = nn.TransformerEncoderLayer(cfg["d"], cfg["heads"], cfg["ff"], dropout=0.0, activation="gelu", batch_first=True, norm_first=True)
+            self.enc = nn.TransformerEncoder(layer, cfg["layers"], enable_nested_tensor=False)
+            self.norm = nn.LayerNorm(cfg["d"])
+            self.head = nn.Linear(cfg["d"], 4)
+
+        def forward(self, x):
+            h = self.tok(x) + self.pos(torch.arange(x.shape[1], device=x.device))
+            return self.head(self.norm(self.enc(h)))                              # logits over A, C, G, T
+    return MitoLM()
+
+
+def revcomp_codes(x):
+    """x: array of codes 0-3 (4 = N). Reverse complement along the last axis."""
+    y = np.where(x < 4, 3 - x, 4)
+    return y[..., ::-1]
+
+
+class Sampler:
+    def __init__(self, genomes, mammal_boost, seed):
+        self.g = genomes
+        w = np.array([len(x) for x in genomes], float)
+        self.rng = np.random.default_rng(seed)
+        self.w = w
+        self.mammal = None
+        self.p = w / w.sum()
+
+    def set_mammal(self, mask, boost):
+        w = self.w * np.where(mask, boost, 1.0)
+        self.p = w / w.sum()
+
+    def batch(self, B):
+        gi = self.rng.choice(len(self.g), B, p=self.p)
+        out = np.empty((B, WIN), np.uint8)
+        for k, i in enumerate(gi):
+            g = self.g[i]
+            idx = (self.rng.integers(len(g)) + np.arange(WIN)) % len(g)           # circular wrap: mtDNA has no ends
+            x = g[idx]
+            out[k] = revcomp_codes(x) if self.rng.random() < 0.5 else x
+        return out
+
+
+def mask_batch(codes, rng, frac=0.15):
+    """BERT-style: 15% of A/C/G/T positions; 80% -> [MASK], 10% -> random base, 10% unchanged. Returns tokens, labels (-100 = not scored)."""
+    tok = codes.astype(np.int64) + 1
+    cand = codes < 4
+    m = (rng.random(codes.shape) < frac) & cand
+    labels = np.where(m, codes.astype(np.int64), -100)
+    r = rng.random(codes.shape)
+    tok = np.where(m & (r < 0.8), MASK, tok)
+    rnd = m & (r >= 0.8) & (r < 0.9)
+    tok = np.where(rnd, rng.integers(1, 5, codes.shape), tok)
+    return tok, labels
+
+
+def stage_pretrain(a, size):
+    torch = get_torch()
+    F = torch.nn.functional
+    cfg = SIZES[size]
+    dev = pick_device(a)
+    genomes, val, mammal, _ = load_corpus(a)
+    train_g = [g for g, v in zip(genomes, val) if not v]
+    val_g = [g for g, v in zip(genomes, val) if v]
+    os.makedirs(wp(a, "ckpt"), exist_ok=True)
+    os.makedirs(wp(a, "results"), exist_ok=True)
+    ck = wp(a, "ckpt", f"{size}.pt")
+    torch.manual_seed(a.seed)
+    model = build_model(cfg).to(dev)
+    n_par = sum(p.numel() for p in model.parameters())
+    opt = torch.optim.AdamW(model.parameters(), lr=cfg["lr"], betas=(0.9, 0.98), weight_decay=0.01)
+    step, total = 0, a.steps or cfg["steps"]
+    if a.smoke:
+        total = 60
+    if os.path.exists(ck):
+        s = torch.load(ck, map_location="cpu", weights_only=True)
+        model.load_state_dict(s["model"])
+        opt.load_state_dict(s["opt"])
+        step, total = s["step"], s["total"]
+        log(f"[{size}] resumed from step {step} / {total}")
+        if step >= total:
+            log(f"[{size}] already trained")
+            return
+    log(f"[{size}] {n_par / 1e6:.2f}M parameters, device {dev}, {len(train_g)} training / {len(val_g)} validation genomes")
+    smp = Sampler(train_g, 1.0, a.seed + step)
+    smp.set_mammal(mammal[~val], a.mammal_boost)
+    # fixed validation windows from held-out genera
+    vs = Sampler(val_g, 1.0, 12345) if val_g else None
+    vcodes = vs.batch(min(1024, 16 * len(val_g) + 64)) if vs else None
+    vtok, vlab = mask_batch(vcodes, np.random.default_rng(7)) if vs else (None, None)
+    base = np.bincount(np.concatenate([g[:2000] for g in train_g[:200]]).clip(max=3), minlength=4)
+    base = base / base.sum()
+
+    def validate():
+        model.eval()
+        tl, tc, tn = 0.0, 0, 0
+        with torch.inference_mode():
+            for i in range(0, len(vtok), 128):
+                x = torch.from_numpy(vtok[i:i + 128]).to(dev)
+                y = torch.from_numpy(vlab[i:i + 128]).to(dev)
+                lg = model(x)
+                sel = y >= 0
+                tl += float(F.cross_entropy(lg[sel], y[sel], reduction="sum"))
+                tc += int((lg[sel].argmax(-1) == y[sel]).sum())
+                tn += int(sel.sum())
+        model.train()
+        return tl / tn, tc / tn
+    if vs:
+        yv = vlab[vlab >= 0]
+        log(f"[{size}] validation reference: unigram baseline accuracy {np.bincount(yv, minlength=4).max() / len(yv):.3f}, loss {-(np.log(base)[yv]).mean():.3f}"
+            f" (uniform = {math.log(4):.3f})")
+    logf = wp(a, "results", f"train_log_{size}.csv")
+    if not os.path.exists(logf):
+        open(logf, "w").write("step,train_loss,val_loss,val_acc,seq_per_s,elapsed_min\n")
+    rng = np.random.default_rng(a.seed + 1000 + step)
+    t0, tlast, run_loss, nrun = time.time(), time.time(), 0.0, 0
+    model.train()
+    warm = 300
+    while step < total:
+        lr = cfg["lr"] * min(1.0, (step + 1) / warm) * (1.0 if step < warm else 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * (step - warm) / max(1, total - warm))))
+        for gparam in opt.param_groups:
+            gparam["lr"] = lr
+        tok, lab = mask_batch(smp.batch(a.batch), rng)
+        x, y = torch.from_numpy(tok).to(dev), torch.from_numpy(lab).to(dev)
+        loss = F.cross_entropy(model(x).reshape(-1, 4), y.reshape(-1), ignore_index=-100)
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        step += 1
+        run_loss += loss.detach().item()
+        nrun += 1
+        if step == 50 and a.hours and not a.smoke:                                # fit the schedule to the time budget
+            rate = 50 * a.batch / (time.time() - t0)
+            fit = int(a.hours * 3600 * rate / a.batch)
+            if fit < total:
+                log(f"[{size}] {rate:.0f} windows/s -> {fit} steps fit in {a.hours} h (requested {total}); using {fit}")
+                total = fit
+            else:
+                log(f"[{size}] {rate:.0f} windows/s -> the full {total} steps take about {total * a.batch / rate / 3600:.1f} h")
+        if step % a.eval_every == 0 or step == total:
+            vl, vac = validate() if vs else (float("nan"), float("nan"))
+            sps = nrun * a.batch / (time.time() - tlast)
+            open(logf, "a").write(f"{step},{run_loss / nrun:.4f},{vl:.4f},{vac:.4f},{sps:.1f},{(time.time() - t0) / 60:.1f}\n")
+            log(f"[{size}] step {step}/{total} train {run_loss / nrun:.3f} val {vl:.3f} acc {vac:.3f} lr {lr:.1e} ({sps:.0f} windows/s)")
+            run_loss, nrun, tlast = 0.0, 0, time.time()
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step, total=total, cfg=cfg, size=size), ck + ".tmp")
+            os.replace(ck + ".tmp", ck)
+        if a.hours and (time.time() - t0) > a.hours * 3600 * 1.05:
+            log(f"[{size}] time cap reached at step {step}; saving")
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=total, total=total, cfg=cfg, size=size), ck)
+            break
+    log(f"[{size}] done")
+
+
+# --------------------------------------------------------------------------------------------------------------------- reference annotation
+class Reference:
+    """rCRS sequence + per-position region / codon information from the GenBank record."""
+
+    def __init__(self, gb_path):
+        from Bio import SeqIO
+        from Bio.Align import substitution_matrices
+        rec = SeqIO.read(gb_path, "genbank")
+        self.seq = str(rec.seq).upper()
+        self.L = len(self.seq)
+        self.codes = LUT[np.frombuffer(self.seq.encode(), np.uint8)]
+        self.region = np.zeros(self.L, np.int8)                                   # 0 noncoding, 1 protein, 2 tRNA, 3 rRNA
+        self.cds = []
+        self.cds_at = {}
+        for f in rec.features:
+            if f.type not in ("CDS", "tRNA", "rRNA"):
+                continue
+            strand = f.location.strand or 1
+            order = []
+            for part in (f.location.parts if strand == 1 else reversed(f.location.parts)):
+                r = range(int(part.start), int(part.end))
+                order.extend(r if strand == 1 else reversed(r))
+            if f.type == "CDS":
+                name = (f.qualifiers.get("gene") or ["?"])[0]
+                k = len(self.cds)
+                self.cds.append(dict(gene=name, strand=strand, order=order, seq=str(f.location.extract(rec.seq)).upper()))
+                for i, p in enumerate(order):
+                    self.cds_at.setdefault(p, (k, i))
+                    if self.region[p] == 0:
+                        self.region[p] = 1
+            else:
+                for p in order:
+                    self.region[p] = 3 if f.type == "rRNA" else 2
+        for p in list(self.cds_at):
+            if self.region[p] in (2, 3):
+                del self.cds_at[p]
+        self.blosum = substitution_matrices.load("BLOSUM62")
+        from Bio.Data import CodonTable
+        self.table = CodonTable.unambiguous_dna_by_id[2]                          # vertebrate mitochondrial code
+        counts = np.bincount(self.region, minlength=4)
+        log(f"reference: {self.L} nt, {len(self.cds)} CDS, positions: noncoding {counts[0]}, protein {counts[1]}, tRNA {counts[2]}, rRNA {counts[3]}")
+
+    def aa(self, codon):
+        if codon in self.table.stop_codons:
+            return "*"
+        return self.table.forward_table.get(codon, "X")
+
+    def consequence(self, p0, alt):
+        """(codon_pos 0-3, class in none/syn/mis/stopgain/stoploss/partial, blosum)."""
+        if p0 not in self.cds_at:
+            return 0, "none", 0.0
+        k, i = self.cds_at[p0]
+        c = self.cds[k]
+        cp = i % 3
+        codon = c["seq"][i - cp:i - cp + 3]
+        if len(codon) < 3:
+            return cp + 1, "partial", 0.0
+        nt = alt if c["strand"] == 1 else {"A": "T", "C": "G", "G": "C", "T": "A"}[alt]
+        mut = codon[:cp] + nt + codon[cp + 1:]
+        a0, a1 = self.aa(codon), self.aa(mut)
+        if a0 == a1:
+            return cp + 1, "syn", 0.0
+        if a1 == "*":
+            return cp + 1, "stopgain", 0.0
+        if a0 == "*":
+            return cp + 1, "stoploss", 0.0
+        try:
+            bl = float(self.blosum[a0][a1])
+        except Exception:
+            bl = 0.0
+        return cp + 1, "mis", bl
+
+
+# --------------------------------------------------------------------------------------------------------------------- baselines
+def conservation_counts(a, ref, genomes, accs, mammal, k=12, win=48, min_ident=0.55):
+    """Column base counts, for all vertebrates and for mammals only, from genomes aligned to the human reference by seeded ungapped windows
+    (12-mer diagonal vote per 48-nt window, window identity >= 55%). Returns (counts_all, counts_mammal), each (L, 4)."""
+    L = ref.L
+    hc = ref.codes.astype(np.int64)
+    kk = np.zeros(L - k + 1, np.int64)
+    ok = np.ones(L - k + 1, bool)
+    for j in range(k):
+        kk = kk * 4 + np.minimum(hc[j:L - k + 1 + j], 3)
+        ok &= hc[j:L - k + 1 + j] < 4
+    pos = np.flatnonzero(ok)
+    u, first, cnt = np.unique(kk[pos], return_index=True, return_counts=True)
+    keep = cnt == 1                                                               # human-unique seeds only
+    hs, hp = u[keep], pos[first[keep]]
+    counts = np.zeros((L, 4), np.int32)
+    counts_m = np.zeros((L, 4), np.int32)
+
+    def seeds(g):
+        n = len(g)
+        c = np.zeros(n - k + 1, np.int64)
+        ok2 = np.ones(n - k + 1, bool)
+        for j in range(k):
+            c = c * 4 + np.minimum(g[j:n - k + 1 + j].astype(np.int64), 3)
+            ok2 &= g[j:n - k + 1 + j] < 4
+        idx = np.searchsorted(hs, c)
+        idx[idx >= len(hs)] = 0
+        hit = ok2 & (hs[idx] == c)
+        return hp[idx[hit]], np.flatnonzero(hit)
+
+    used = 0
+    for gi in range(len(genomes)):
+        if accs[gi] == HUMAN_ACC:
+            continue
+        g = genomes[gi]
+        h, o = seeds(g)
+        h2, o2 = seeds(revcomp_codes(g).copy())
+        if len(h2) > len(h):
+            g, h, o = revcomp_codes(g).copy(), h2, o2
+        if len(h) < 20:
+            continue
+        diag = h - o
+        key = (h // win).astype(np.int64) * 200000 + (diag + 100000)
+        uk, c2 = np.unique(key, return_counts=True)
+        w_id, d_val = uk // 200000, uk % 200000 - 100000
+        order = np.lexsort((-c2, w_id))
+        first_w = np.r_[True, w_id[order][1:] != w_id[order][:-1]]
+        for wi, dv, cc in zip(w_id[order][first_w], d_val[order][first_w], c2[order][first_w]):
+            if cc < 2:
+                continue
+            hi = np.arange(wi * win, min((wi + 1) * win, L))
+            oi = hi - dv
+            v = (oi >= 0) & (oi < len(g))
+            hi, oi = hi[v], oi[v]
+            b = g[oi]
+            good = b < 4
+            if good.sum() < win // 2 or (b[good] == ref.codes[hi][good]).mean() < min_ident:
+                continue
+            np.add.at(counts, (hi[good], b[good]), 1)
+            if mammal[gi]:
+                np.add.at(counts_m, (hi[good], b[good]), 1)
+        used += 1
+    log(f"  conservation panel: {used} genomes aligned; median depth {int(np.median(counts.sum(1)))} (all) / {int(np.median(counts_m.sum(1)))} (mammals) per position")
+    return counts, counts_m
+
+
+def cons_scores(counts, pos0, ref_c, alt_c, min_depth=20):
+    n = counts[pos0].sum(1).astype(float)
+    n_alt = counts[pos0, alt_c]
+    n_ref = counts[pos0, ref_c]
+    rarity = -np.log((n_alt + 0.5) / (n + 2.0))                                   # high = alt allele unseen in other species
+    refc = (n_ref + 0.5) / (n + 2.0)
+    bad = n < min_depth
+    return np.where(bad, np.nan, rarity), np.where(bad, np.nan, refc), n
+
+
+def lm_scores(a, ref, size, pos0, ref_c, alt_c):
+    """Zero-shot masked-marginal LLR (alt - ref) at the centre of a 512-nt circular window, forward and reverse strand averaged. Higher = more damaging."""
+    torch = get_torch()
+    ck = wp(a, "ckpt", f"{size}.pt")
+    if not os.path.exists(ck):
+        return None
+    s = torch.load(ck, map_location="cpu", weights_only=True)
+    dev = pick_device(a)
+    model = build_model(s["cfg"]).to(dev)
+    model.load_state_dict(s["model"])
+    model.eval()
+    half = WIN // 2
+    idx = (pos0[:, None] - half + np.arange(WIN)[None, :]) % ref.L
+    fwd = ref.codes[idx]
+    rev = revcomp_codes(fwd).copy()
+    out = np.zeros(len(pos0))
+    for strand, win, ce, r_c, a_c in ((0, fwd, half, ref_c, alt_c), (1, rev, WIN - 1 - half, 3 - ref_c, 3 - alt_c)):
+        tok = win.astype(np.int64) + 1
+        tok[:, ce] = MASK
+        sc = np.zeros(len(pos0))
+        with torch.inference_mode():
+            for i in range(0, len(tok), 256):
+                lg = model(torch.from_numpy(tok[i:i + 256]).to(dev))[:, ce].float().log_softmax(-1).cpu().numpy()
+                r_i, a_i = r_c[i:i + 256], a_c[i:i + 256]
+                sc[i:i + 256] = lg[np.arange(len(lg)), a_i] - lg[np.arange(len(lg)), r_i]
+        out += sc / 2
+    return -out                                                                   # damaging = alt much less likely than ref
+
+
+# --------------------------------------------------------------------------------------------------------------------- evaluation
+def auc(y, s):
+    from sklearn.metrics import roc_auc_score
+    return float(roc_auc_score(y, s)) if len(np.unique(y)) == 2 else float("nan")
+
+
+def strat_auc(y, s, region):
+    """AUROC within each region (protein / tRNA / rRNA) averaged with weights = number of pathogenic variants: removes the 'tRNA vs protein' shortcut."""
+    num, den = 0.0, 0.0
+    for r in (1, 2, 3):
+        m = region == r
+        npos, nneg = int(y[m].sum()), int((1 - y[m]).sum())
+        if npos >= 5 and nneg >= 5:
+            num += npos * auc(y[m], s[m])
+            den += npos
+    return num / den if den else float("nan")
+
+
+def block_boot(fn, blocks, n=500, seed=0):
+    rng = np.random.default_rng(seed)
+    ub = np.unique(blocks)
+    idx = {b: np.flatnonzero(blocks == b) for b in ub}
+    vals = []
+    for _ in range(n):
+        ii = np.concatenate([idx[b] for b in rng.choice(ub, len(ub), replace=True)])
+        vals.append(fn(ii))
+    return float(np.nanpercentile(vals, 2.5)), float(np.nanpercentile(vals, 97.5))
+
+
+def stage_evaluate(a, sizes):
+    import pandas as pd
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import average_precision_score
+    from sklearn.model_selection import GroupKFold
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    os.makedirs(wp(a, "results"), exist_ok=True)
+    rep = []
+
+    def say(*x):
+        s = " ".join(str(i) for i in x)
+        print(s, flush=True)
+        rep.append(s)
+    ref = Reference(wp(a, "raw", "human.gb"))
+    cv = pd.read_csv(wp(a, "labels", "clinvar_mt.tsv"), sep="\t")
+    gn = pd.read_csv(wp(a, "labels", "gnomad_mt.tsv"), sep="\t")
+    for d, nm in ((cv, "ClinVar"), (gn, "gnomAD")):
+        bad = (d.pos < 1) | (d.pos > ref.L)
+        ok = ~bad & (np.array([ref.seq[p - 1] if 1 <= p <= ref.L else "?" for p in d.pos]) == d.ref.values)
+        say(f"{nm}: {len(d)} SNVs, reference allele matches rCRS for {ok.sum()} ({ok.mean():.1%}); non-matching dropped")
+        d.drop(d.index[~ok], inplace=True)
+    cvl = cv[(cv.stars >= 1) & cv["class"].isin(["P", "B"])].copy()
+    cvl["y"] = (cvl["class"] == "P").astype(int)
+    cvl["set"] = "clinvar"
+    pvar = set(zip(cvl[cvl.y == 1].pos, cvl[cvl.y == 1].alt))
+    common = gn[(gn.AF_hom >= 1e-3)].copy()
+    common = common[[(p, al) not in pvar for p, al in zip(common.pos, common.alt)]]
+    common = common[~common.set_index(["pos", "alt"]).index.isin(cvl.set_index(["pos", "alt"]).index)]
+    common["y"], common["set"], common["class"], common["stars"], common["gene"] = 0, "gnomad_common", "B", 0, ""
+    pos_set = cvl[cvl.y == 1]
+    say(f"labels: ClinVar P/LP (>=1 star) {len(pos_set)} at {pos_set.pos.nunique()} positions; B/LB {int((cvl.y == 0).sum())}; gnomAD common (AF_hom>=1e-3, not ClinVar) {len(common)}")
+    allv = pd.concat([cvl[["pos", "ref", "alt", "y", "set", "gene"]], common[["pos", "ref", "alt", "y", "set", "gene"]]], ignore_index=True)
+    allv["pos0"] = allv.pos - 1
+    allv["ref_c"] = [CODE[x] for x in allv.ref]
+    allv["alt_c"] = [CODE[x] for x in allv.alt]
+    allv["region"] = ref.region[allv.pos0.values]
+    cvg = allv.gene.fillna("")
+    cvr = np.where(cvg.str.match(r"^MT-T[A-Z]\d?$"), 2, np.where(cvg.str.startswith("MT-RNR"), 3, np.where(cvg.str.startswith("MT-"), 1, -1)))
+    chk = cvr >= 0
+    say(f"region cross-check (GenBank annotation vs ClinVar gene name): agree for {(cvr[chk] == allv.region.values[chk]).mean():.1%} of {int(chk.sum())} annotated variants")
+    allv["block"] = allv.pos0 // 100
+
+    # annotation features
+    cons_info = [ref.consequence(p, al) for p, al in zip(allv.pos0, allv.alt)]
+    A = pd.DataFrame({"reg_prot": (allv.region == 1), "reg_trna": (allv.region == 2), "reg_rrna": (allv.region == 3),
+                      "cp1": [c[0] == 1 for c in cons_info], "cp2": [c[0] == 2 for c in cons_info], "cp3": [c[0] == 3 for c in cons_info],
+                      "syn": [c[1] == "syn" for c in cons_info], "mis": [c[1] == "mis" for c in cons_info],
+                      "stop": [c[1] in ("stopgain", "stoploss") for c in cons_info], "blosum": [c[2] for c in cons_info],
+                      "transition": [(r, al) in {(0, 2), (2, 0), (1, 3), (3, 1)} for r, al in zip(allv.ref_c, allv.alt_c)]}).astype(float)
+    # conservation baselines
+    genomes, val, mammal, accs = load_corpus(a)
+    cvt, cm = conservation_counts(a, ref, genomes, accs, mammal)
+    md = 5 if a.smoke else 20
+    allv["cons_mammal"], allv["cons_mammal_ref"], allv["depth_mammal"] = cons_scores(cm, allv.pos0.values, allv.ref_c.values, allv.alt_c.values, md)
+    allv["cons_vert"], allv["cons_vert_ref"], _ = cons_scores(cvt, allv.pos0.values, allv.ref_c.values, allv.alt_c.values, md)
+    # language models
+    lm_cols = []
+    for sz in sizes:
+        s = lm_scores(a, ref, sz, allv.pos0.values, allv.ref_c.values, allv.alt_c.values)
+        if s is None:
+            say(f"(no checkpoint for size {sz}; skipped)")
+            continue
+        allv[f"lm_{sz}"] = s
+        lm_cols.append(f"lm_{sz}")
+    allv.to_csv(wp(a, "results", "variant_scores.csv"), index=False)
+    rows = []
+
+    def cv_pred(feats, d, y, groups):
+        p = np.zeros(len(d))
+        for tr, te in GroupKFold(5).split(d, y, groups):
+            m = make_pipeline(StandardScaler(), LogisticRegression(C=0.5, max_iter=3000, class_weight="balanced"))
+            m.fit(feats.iloc[tr], y[tr])
+            p[te] = m.predict_proba(feats.iloc[te])[:, 1]
+        return p
+
+    for setname, sel in (("ClinVar P/LP vs B/LB", (allv["set"] == "clinvar").values), ("ClinVar P/LP vs B/LB + gnomAD common", np.ones(len(allv), bool))):
+        d = allv[sel].reset_index(drop=True)
+        Ad = A[sel].reset_index(drop=True)
+        need = ["cons_mammal", "cons_vert"] + lm_cols
+        full = d[need].notna().all(axis=1).values
+        d, Ad = d[full].reset_index(drop=True), Ad[full].reset_index(drop=True)
+        y = d.y.values
+        say(f"\n=== {setname}: n={len(d)} (pathogenic {int(y.sum())}, benign {int((1 - y).sum())}); common subset with every score available")
+        blocks, region = d.block.values, d.region.values
+        scores = {"conservation (mammals)": d.cons_mammal.values, "conservation (vertebrates)": d.cons_vert.values}
+        for c in lm_cols:
+            scores[f"language model {c[3:]} (zero-shot)"] = d[c].values
+        scores["annotation (LR, CV)"] = cv_pred(Ad, d, y, blocks)
+        F2 = Ad.copy()
+        F2["cons_m"], F2["cons_v"], F2["cons_mr"] = d.cons_mammal.values, d.cons_vert.values, d.cons_mammal_ref.values
+        scores["annotation + conservation (LR, CV)"] = cv_pred(F2, d, y, blocks)
+        for c in lm_cols:
+            F3 = F2.copy()
+            F3["lm"] = d[c].values
+            scores[f"annotation + conservation + LM {c[3:]} (LR, CV)"] = cv_pred(F3, d, y, blocks)
+        say(f"{'method':58s} {'AUROC [95% CI]':24s} {'region-strat':>12s} {'protein':>8s} {'tRNA':>6s} {'rRNA':>6s} {'AP':>6s}")
+        for nm, s in scores.items():
+            lo, hi = block_boot(lambda ii: auc(y[ii], s[ii]), blocks, n=a.boot)
+            pr = [auc(y[region == r], s[region == r]) if (y[region == r].sum() >= 5 and (1 - y[region == r]).sum() >= 5) else float("nan") for r in (1, 2, 3)]
+            row = dict(set=setname, method=nm, auroc=auc(y, s), lo=lo, hi=hi, strat=strat_auc(y, s, region), protein=pr[0], trna=pr[1], rrna=pr[2],
+                       ap=float(average_precision_score(y, s)), n=len(d), n_pos=int(y.sum()))
+            rows.append(row)
+            say(f"{nm:58s} {row['auroc']:.3f} [{lo:.3f},{hi:.3f}]   {row['strat']:12.3f} {pr[0]:8.3f} {pr[1]:6.3f} {pr[2]:6.3f} {row['ap']:6.3f}")
+        base = "annotation + conservation (LR, CV)"
+        for c in lm_cols:
+            k = f"annotation + conservation + LM {c[3:]} (LR, CV)"
+            diff = lambda ii, k=k: auc(y[ii], scores[k][ii]) - auc(y[ii], scores[base][ii])
+            lo, hi = block_boot(diff, blocks, n=a.boot)
+            say(f"  does LM {c[3:]} add to annotation + conservation?  AUROC difference {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
+        for c in lm_cols:
+            diff = lambda ii, c=c: auc(y[ii], d[c].values[ii]) - auc(y[ii], d.cons_mammal.values[ii])
+            lo, hi = block_boot(diff, blocks, n=a.boot)
+            say(f"  zero-shot LM {c[3:]} minus mammal conservation (both zero-shot): {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
+    pd.DataFrame(rows).to_csv(wp(a, "results", "metrics.csv"), index=False)
+    say("\nRead this with the caveats in the header of mito_lm.py: ~100 positives, region imbalance, partly circular ClinVar labels.")
+    open(wp(a, "results", "report.txt"), "w").write("\n".join(rep) + "\n")
+    log(f"wrote {wp(a, 'results', 'report.txt')}")
+
+
+# --------------------------------------------------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[1], formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate"])
+    ap.add_argument("--workdir", default=None)
+    ap.add_argument("--sizes", default="small")
+    ap.add_argument("--hours", type=float, default=4.0, help="time cap per size (the step count is fitted to it); 0 = no cap")
+    ap.add_argument("--steps", type=int, default=0)
+    ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--device", default="auto")
+    ap.add_argument("--eval-every", type=int, default=500)
+    ap.add_argument("--mammal-boost", type=float, default=2.0)
+    ap.add_argument("--boot", type=int, default=500)
+    ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--email", default="")
+    ap.add_argument("--api-key", default="")
+    ap.add_argument("--smoke", action="store_true")
+    a = ap.parse_args()
+    a.workdir = a.workdir or ("mito_smoke" if a.smoke else "mito_work")
+    sizes = a.sizes.split(",")
+    if a.smoke:
+        sizes, a.eval_every, a.boot = ["tiny"], 20, 100
+    for s in sizes:
+        if s not in SIZES:
+            sys.exit(f"unknown size {s}; choose from {list(SIZES)}")
+    os.makedirs(a.workdir, exist_ok=True)
+    if a.stage in ("all", "download"):
+        stage_download(a)
+    if a.stage in ("all", "corpus"):
+        stage_corpus(a)
+    if a.stage in ("all", "pretrain"):
+        for s in sizes:
+            stage_pretrain(a, s)
+    if a.stage in ("all", "evaluate"):
+        stage_evaluate(a, sizes)
+
+
+if __name__ == "__main__":
+    main()
