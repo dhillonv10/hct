@@ -28,7 +28,9 @@ USAGE
   python mito_lm.py --sizes tiny,small,base --hours 3        # the whole family, 3 h cap per size
   python mito_lm.py download | corpus | pretrain | evaluate  # single stages (each is resumable and skips finished work)
   python mito_lm.py --smoke                  # 2-minute plumbing check on tiny data (separate workdir)
-  Options: --workdir DIR (default ./mito_work)  --device mps|cuda|cpu (default: auto)  --steps N  --batch 64  --api-key NCBI_KEY  --email you@x.org
+  Options: --workdir DIR (default ./mito_work)  --device mps|cuda|cpu (default: auto)  --steps N  --api-key NCBI_KEY  --email you@x.org
+  Memory: the effective batch is 64 windows, run as --batch 16 micro-batches x --accum 4. The script stops cleanly (checkpoint saved) if memory use passes
+  --mem-gb (default 55% of RAM). If it stops or reports out-of-memory, use --batch 8 --accum 8 (or 4 x 16).
   Downloads: ~130 MB sequences (NCBI Entrez), 200 MB ClinVar VCF (filtered then deletable), 5 MB gnomAD chrM. Total disk ~1 GB.
   Outputs in WORKDIR/results: report.txt, variant_scores.csv, metrics.csv, train_log_<size>.csv; checkpoints in WORKDIR/ckpt.
 """
@@ -289,8 +291,8 @@ def stage_corpus(a):
 
 def load_corpus(a):
     z = np.load(wp(a, "corpus.npz"), allow_pickle=False)
-    off = z["off"]
-    g = [z["seq"][off[i]:off[i + 1]] for i in range(len(off) - 1)]
+    off, seq = z["off"], z["seq"]                                                 # decompress the 130 MB array ONCE; genomes are views of it
+    g = [seq[off[i]:off[i + 1]] for i in range(len(off) - 1)]
     return g, z["val"], z["mammal"], z["acc"]
 
 
@@ -298,6 +300,28 @@ def load_corpus(a):
 def get_torch():
     import torch
     return torch
+
+
+def phys_ram_gb():
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1e9
+    except Exception:
+        return 16.0
+
+
+def used_mem_gb(dev):
+    """GPU / process memory in use by this script, in GB (MPS: the driver's allocation, which is what macOS actually counts)."""
+    torch = get_torch()
+    try:
+        if dev == "mps":
+            return torch.mps.driver_allocated_memory() / 1e9
+        if dev == "cuda":
+            return torch.cuda.max_memory_allocated() / 1e9
+    except Exception:
+        pass
+    import resource
+    r = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return r / (1e9 if sys.platform == "darwin" else 1e6)
 
 
 def pick_device(a):
@@ -427,6 +451,7 @@ def stage_pretrain(a, size):
         yv = vlab[vlab >= 0]
         log(f"[{size}] validation reference: unigram baseline accuracy {np.bincount(yv, minlength=4).max() / len(yv):.3f}, loss {-(np.log(base)[yv]).mean():.3f}"
             f" (uniform = {math.log(4):.3f})")
+    mem_cap = a.mem_gb or 0.55 * phys_ram_gb()
     logf = wp(a, "results", f"train_log_{size}.csv")
     if not os.path.exists(logf):
         open(logf, "w").write("step,train_loss,val_loss,val_acc,seq_per_s,elapsed_min\n")
@@ -438,27 +463,43 @@ def stage_pretrain(a, size):
         lr = cfg["lr"] * min(1.0, (step + 1) / warm) * (1.0 if step < warm else 0.1 + 0.9 * 0.5 * (1 + math.cos(math.pi * (step - warm) / max(1, total - warm))))
         for gparam in opt.param_groups:
             gparam["lr"] = lr
-        tok, lab = mask_batch(smp.batch(a.batch), rng)
-        x, y = torch.from_numpy(tok).to(dev), torch.from_numpy(lab).to(dev)
-        loss = F.cross_entropy(model(x).reshape(-1, 4), y.reshape(-1), ignore_index=-100)
         opt.zero_grad(set_to_none=True)
-        loss.backward()
+        step_loss = 0.0
+        try:
+            for _ in range(a.accum):                                              # micro-batches: same effective batch, a fraction of the memory
+                tok, lab = mask_batch(smp.batch(a.batch), rng)
+                x, y = torch.from_numpy(tok).to(dev), torch.from_numpy(lab).to(dev)
+                loss = F.cross_entropy(model(x).reshape(-1, 4), y.reshape(-1), ignore_index=-100) / a.accum
+                loss.backward()
+                step_loss += loss.detach().item()
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                sys.exit(f"\nOut of memory at step {step}. Re-run with a smaller micro-batch, e.g.  --batch 8 --accum 8  (same effective batch). Progress up to the last checkpoint is kept.")
+            raise
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         step += 1
-        run_loss += loss.detach().item()
+        run_loss += step_loss
         nrun += 1
+        if step in (1, 5) or step % 25 == 0:
+            gb = used_mem_gb(dev)
+            if step in (1, 5):
+                log(f"[{size}] memory in use after step {step}: {gb:.1f} GB (cap {mem_cap:.1f} GB of {phys_ram_gb():.0f} GB RAM)")
+            if gb > mem_cap:
+                torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), step=step, total=total, cfg=cfg, size=size), ck + ".tmp")
+                os.replace(ck + ".tmp", ck)
+                sys.exit(f"\nMemory use {gb:.1f} GB exceeds the cap of {mem_cap:.1f} GB; checkpoint saved at step {step}. Re-run with --batch 8 --accum 8 (or raise --mem-gb).")
         if step == 50 and a.hours and not a.smoke:                                # fit the schedule to the time budget
-            rate = 50 * a.batch / (time.time() - t0)
-            fit = int(a.hours * 3600 * rate / a.batch)
+            rate = 50 * a.batch * a.accum / (time.time() - t0)
+            fit = int(a.hours * 3600 * rate / (a.batch * a.accum))
             if fit < total:
                 log(f"[{size}] {rate:.0f} windows/s -> {fit} steps fit in {a.hours} h (requested {total}); using {fit}")
                 total = fit
             else:
-                log(f"[{size}] {rate:.0f} windows/s -> the full {total} steps take about {total * a.batch / rate / 3600:.1f} h")
+                log(f"[{size}] {rate:.0f} windows/s -> the full {total} steps take about {total * a.batch * a.accum / rate / 3600:.1f} h")
         if step % a.eval_every == 0 or step == total:
             vl, vac = validate() if vs else (float("nan"), float("nan"))
-            sps = nrun * a.batch / (time.time() - tlast)
+            sps = nrun * a.batch * a.accum / (time.time() - tlast)
             open(logf, "a").write(f"{step},{run_loss / nrun:.4f},{vl:.4f},{vac:.4f},{sps:.1f},{(time.time() - t0) / 60:.1f}\n")
             log(f"[{size}] step {step}/{total} train {run_loss / nrun:.3f} val {vl:.3f} acc {vac:.3f} lr {lr:.1e} ({sps:.0f} windows/s)")
             run_loss, nrun, tlast = 0.0, 0, time.time()
@@ -865,7 +906,9 @@ def main():
     ap.add_argument("--sizes", default="small")
     ap.add_argument("--hours", type=float, default=4.0, help="time cap per size (the step count is fitted to it); 0 = no cap")
     ap.add_argument("--steps", type=int, default=0)
-    ap.add_argument("--batch", type=int, default=64)
+    ap.add_argument("--batch", type=int, default=16, help="micro-batch (windows per forward pass); the effective batch is --batch x --accum = 64")
+    ap.add_argument("--accum", type=int, default=4, help="gradient-accumulation micro-batches per optimiser step")
+    ap.add_argument("--mem-gb", type=float, default=0.0, help="stop cleanly (checkpoint saved) if GPU/process memory exceeds this; 0 = 55%% of RAM")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--eval-every", type=int, default=500)
     ap.add_argument("--mammal-boost", type=float, default=2.0)
