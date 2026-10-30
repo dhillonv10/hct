@@ -1,0 +1,29 @@
+ClinVar: 3014 SNVs, reference allele matches rCRS for 3014 (100.0%); non-matching dropped
+gnomAD: 10434 SNVs, reference allele matches rCRS for 10434 (100.0%); non-matching dropped
+labels: ClinVar P/LP (>=1 star) 113 at 109 positions; B/LB 1597; gnomAD common (AF_hom>=1e-3, not ClinVar) 941
+region cross-check (GenBank annotation vs ClinVar gene name): agree for 99.5% of 1709 annotated variants
+(no checkpoint for size small; skipped)
+
+=== ClinVar P/LP vs B/LB: n=1710 (pathogenic 113, benign 1597); common subset with every score available
+method                                                     AUROC [95% CI]           region-strat  protein   tRNA   rRNA     AP
+conservation (mammals)                                     0.822 [0.772,0.871]          0.835    0.929  0.728    nan  0.342
+conservation (vertebrates)                                 0.768 [0.701,0.828]          0.785    0.907  0.645    nan  0.333
+control: context n-gram (zero-shot)                        0.631 [0.568,0.683]          0.616    0.631  0.599    nan  0.155
+annotation (LR, CV)                                        0.775 [0.726,0.834]          0.727    0.808  0.636    nan  0.325
+annotation + conservation (LR, CV)                         0.898 [0.857,0.939]          0.856    0.912  0.793    nan  0.548
+annotation + conservation + n-gram control (LR, CV)        0.897 [0.855,0.939]          0.855    0.912  0.791    nan  0.545
+  control: does the trivial n-gram score add to annotation + conservation?  AUROC difference -0.001 [-0.002,+0.000]
+  (a zero-shot AUROC below 0.5 means the score is anti-informative -- expected for an untrained or barely trained model; the sign is not flipped)
+
+=== ClinVar P/LP vs B/LB + gnomAD common: n=2651 (pathogenic 113, benign 2538); common subset with every score available
+method                                                     AUROC [95% CI]           region-strat  protein   tRNA   rRNA     AP
+conservation (mammals)                                     0.848 [0.804,0.894]          0.842    0.947  0.723    nan  0.309
+conservation (vertebrates)                                 0.788 [0.726,0.845]          0.791    0.921  0.642    nan  0.317
+control: context n-gram (zero-shot)                        0.648 [0.593,0.703]          0.623    0.645  0.598    nan  0.127
+annotation (LR, CV)                                        0.837 [0.794,0.875]          0.737    0.864  0.592    nan  0.317
+annotation + conservation (LR, CV)                         0.913 [0.877,0.947]          0.858    0.930  0.775    nan  0.519
+annotation + conservation + n-gram control (LR, CV)        0.913 [0.876,0.947]          0.857    0.930  0.775    nan  0.520
+  control: does the trivial n-gram score add to annotation + conservation?  AUROC difference -0.000 [-0.002,+0.001]
+  (a zero-shot AUROC below 0.5 means the score is anti-informative -- expected for an untrained or barely trained model; the sign is not flipped)
+
+Read this with the caveats in the header of mito_lm.py: ~100 positives, region imbalance, partly circular ClinVar labels.

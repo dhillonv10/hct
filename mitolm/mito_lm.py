@@ -14,6 +14,9 @@ WHAT IT TESTS (the part that decides whether the model is worth anything)
     * annotation    : region, codon position, synonymous / missense / stop, BLOSUM62, transition vs transversion (logistic regression, cross-validated)
     * stacked       : annotation + conservation, with and without the language-model score. The headline question is whether the LM adds anything
                       beyond conservation + annotation (paired block-bootstrap).
+  POPULATION CONSTRAINT (second task, ~100x more labels): of all ~49,700 possible mtDNA SNVs, which were never seen among the 56,434 gnomAD individuals?
+  Scored within strata of (substitution x flanking bases), so mutation-rate differences cannot explain a score; positions with any non-PASS gnomAD record
+  are excluded. (A plain "does the variant reach homoplasmy?" label is degenerate: 98.8% of variants with >= 3 carriers are seen homoplasmic.)
   All intervals are block bootstraps over 100-bp blocks (nearby variants are not independent). Pretraining validation uses held-out GENERA.
 
 HONEST CAVEATS BUILT INTO THE OUTPUT
@@ -26,7 +29,8 @@ USAGE
   pip install torch numpy pandas scikit-learn scipy biopython
   python mito_lm.py                          # everything: download -> corpus -> pretrain (small, 4 h cap) -> evaluate
   python mito_lm.py --sizes tiny,small,base --hours 3        # the whole family, 3 h cap per size
-  python mito_lm.py download | corpus | pretrain | evaluate  # single stages (each is resumable and skips finished work)
+  python mito_lm.py download | corpus | pretrain | evaluate | constraint  # single stages (resumable); `evaluate` runs ClinVar tests + constraint
+  After training, `python mito_lm.py evaluate --sizes tiny,small,base` scores every checkpoint it finds (the first run caches the conservation panel).
   python mito_lm.py --smoke                  # 2-minute plumbing check on tiny data (separate workdir)
   Options: --workdir DIR (default ./mito_work)  --device mps|cuda|cpu (default: auto)  --steps N  --api-key NCBI_KEY  --email you@x.org
   Memory: the effective batch is 64 windows, run as --batch 16 micro-batches x --accum 4. The script stops cleanly (checkpoint saved) if memory use passes
@@ -793,9 +797,10 @@ def stage_constraint(a, sizes):
     observed = {(int(p), al) for p, al, t in zip(gn.pos, gn.alt, tot) if t >= a.min_carriers}
     excl = gnomad_filtered_positions(a)
     L = ref.L
-    alts = np.array([[c for c in range(4) if c != r] for r in ref.codes])
-    pos0 = np.repeat(np.arange(L), 3)
-    ref_c, alt_c = np.repeat(ref.codes, 3).astype(int), alts.ravel()
+    valid = np.flatnonzero(ref.codes < 4)                                         # rCRS position 3107 is an 'N' placeholder
+    alts = np.array([[c for c in range(4) if c != ref.codes[p]] for p in valid])
+    pos0 = np.repeat(valid, 3)
+    ref_c, alt_c = np.repeat(ref.codes[valid], 3).astype(int), alts.ravel()
     keep = np.array([(p + 1) not in excl for p in pos0])
     pos0, ref_c, alt_c = pos0[keep], ref_c[keep], alt_c[keep]
     y = np.array([(int(p) + 1, BASES[int(al)]) not in observed for p, al in zip(pos0, alt_c)]).astype(int)       # 1 = never observed (selected against)

@@ -1,0 +1,16 @@
+constraint task: 33687 possible SNVs at 11229 positions after excluding 5339 artifact-prone positions; observed in >= 1 individual(s): 8865 (26.3%), never observed: 24822
+  scored subsample: 24000 variants (17620 never observed)
+(no checkpoint for size small; skipped)
+  variants with conservation depth >= 20: 23981
+
+=== Population constraint (never-observed vs observed SNVs), strata = substitution x flanking bases (192 strata)
+method                                                     matched AUROC [95% CI]      protein   tRNA   rRNA unmatched
+conservation (mammals)                                     0.772 [0.759,0.785]           0.779  0.753  0.772     0.762
+conservation (vertebrates)                                 0.745 [0.731,0.761]           0.763  0.709  0.712     0.735
+control: context n-gram (zero-shot)                        0.599 [0.582,0.617]           0.582  0.589  0.660     0.599
+annotation (LR, CV)                                        0.749 [0.729,0.767]           0.774  0.441  0.425     0.907
+annotation + conservation (LR, CV)                         0.821 [0.807,0.834]           0.831  0.758  0.781     0.924
+annotation + conservation + n-gram control (LR, CV)        0.821 [0.807,0.835]           0.831  0.756  0.778     0.924
+  control: does the trivial n-gram score add to annotation + conservation?  matched-AUROC difference -0.000 [-0.001,+0.001]
+
+Caveats: absence from gnomAD is also driven by sampling (56,434 people, mostly of European ancestry) and by calling filters; strata remove first-order mutation-rate effects only.
