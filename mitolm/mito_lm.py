@@ -1271,6 +1271,26 @@ def stage_evaluate(a, sizes):
 
 
 # --------------------------------------------------------------------------------------------------------------------- main
+def check_deps(stage, variants=""):
+    """Fail in the first second, not after hours of training, if a package needed later is missing."""
+    import importlib
+    need = {"numpy": "numpy"}
+    if stage in ("all", "pretrain", "evaluate", "constraint", "score"):
+        need["torch"] = "torch"
+    if stage in ("all", "evaluate", "constraint", "score"):
+        need.update({"pandas": "pandas", "sklearn": "scikit-learn", "scipy": "scipy", "Bio": "biopython"})
+    if str(variants).lower().endswith((".xlsx", ".xls")):
+        need["openpyxl"] = "openpyxl"
+    missing = []
+    for mod, pip_name in need.items():
+        try:
+            importlib.import_module(mod)
+        except ImportError:
+            missing.append(pip_name)
+    if missing:
+        sys.exit(f"Missing packages for stage '{stage}': {', '.join(missing)}\nInstall them first:  pip install {' '.join(missing)}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1], formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint", "score"])
@@ -1295,6 +1315,7 @@ def main():
     ap.add_argument("--api-key", default="")
     ap.add_argument("--smoke", action="store_true")
     a = ap.parse_args()
+    check_deps(a.stage, a.variants)
     a.workdir = a.workdir or ("mito_smoke" if a.smoke else "mito_work")
     sizes = a.sizes.split(",")
     if a.smoke:
