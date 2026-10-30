@@ -882,6 +882,179 @@ def stage_constraint(a, sizes):
     log(f"wrote {wp(a, 'results', 'report_constraint.txt')}")
 
 
+COLS = {"pos": ("pos", "position", "start", "chromstart", "mt_pos", "m_pos"), "ref": ("ref", "reference", "ref_allele", "refallele"),
+        "alt": ("alt", "alternate", "alt_allele", "altallele", "mut_allele"), "vaf": ("vaf", "af", "heteroplasmy", "hl", "allele_fraction", "maf", "hf"),
+        "sample": ("sample", "sample_id", "patient", "patient_id", "tumor_sample_barcode", "case")}
+
+
+def read_variant_table(path):
+    """TSV/CSV with pos/ref/alt (rCRS / GRCh38 chrM, 1-based), optional sample and vaf (heteroplasmy; percent is converted). Also accepts a
+    'variant' / 'mutation' column like 'm.8993T>G' or '8993T>G'."""
+    import pandas as pd
+    d = pd.read_csv(path, sep=None, engine="python")
+    low = {c.lower().strip(): c for c in d.columns}
+    out = {}
+    for k, names in COLS.items():
+        for n in names:
+            if n in low:
+                out[k] = d[low[n]]
+                break
+    if not {"pos", "ref", "alt"} <= set(out):
+        for n in ("variant", "mutation", "hgvs", "name"):
+            if n in low:
+                m = d[low[n]].astype(str).str.extract(r"(?:m\.|chrM:|MT:)?(\d+)\s*([ACGT])\s*>\s*([ACGT])")
+                if m.notna().all(axis=1).mean() > 0.5:
+                    out["pos"], out["ref"], out["alt"] = m[0].astype(float), m[1], m[2]
+                    break
+    if not {"pos", "ref", "alt"} <= set(out):
+        sys.exit(f"{path}: need columns pos/ref/alt (or a 'variant' column like m.8993T>G). Found: {list(d.columns)}")
+    v = pd.DataFrame({k: s.values for k, s in out.items()})
+    v["ref"], v["alt"] = v["ref"].astype(str).str.upper(), v["alt"].astype(str).str.upper()
+    v = v[v.pos.notna() & v.ref.isin(BASES) & v.alt.isin(BASES)].copy()
+    v["pos"] = v.pos.astype(int)
+    if "vaf" in v:
+        v["vaf"] = pd.to_numeric(v["vaf"], errors="coerce")
+        if v.vaf.max() > 1.0:
+            v["vaf"] = v.vaf / 100.0
+    return v.reset_index(drop=True)
+
+
+def stage_score(a, sizes):
+    """Score ANY table of mtDNA SNVs (e.g. somatic calls from AML samples, with heteroplasmy). Per variant: region, consequence, conservation, a 'damage'
+    score fitted on population-constraint labels, and its percentile among all possible SNVs with the same substitution + flanking bases + region.
+    Then (a) selection test: are the observed variants more / less damaging than mutation-matched random SNVs? (b) damage vs heteroplasmy."""
+    import pandas as pd
+    from scipy.stats import spearmanr
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import GroupKFold
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    ref = Reference(wp(a, "raw", "human.gb"))
+    L = ref.L
+    gn = pd.read_csv(wp(a, "labels", "gnomad_mt.tsv"), sep="\t")
+    observed = {(int(p), al) for p, al, t in zip(gn.pos, gn.alt, gn.AC_hom + gn.AC_het) if t >= a.min_carriers}
+    excl = gnomad_filtered_positions(a)
+    valid = np.flatnonzero(ref.codes < 4)
+    alts = np.array([[c for c in range(4) if c != ref.codes[p]] for p in valid])
+    b_pos, b_ref, b_alt = np.repeat(valid, 3), np.repeat(ref.codes[valid], 3).astype(int), alts.ravel()
+    keep = np.array([(p + 1) not in excl for p in b_pos])
+    b_pos, b_ref, b_alt = b_pos[keep], b_ref[keep], b_alt[keep]
+    b_y = np.array([(int(p) + 1, BASES[int(al)]) not in observed for p, al in zip(b_pos, b_alt)]).astype(int)
+    genomes, val, mammal, accs = load_corpus(a)
+    cvt, cm = get_conservation(a, ref, genomes, accs, mammal)
+    lmz = {}
+
+    def features(pos0, ref_c, alt_c):
+        A, region = annotation_frame(ref, pos0, ref_c, alt_c)
+        F = A[[c for c in A.columns if not c.startswith("sub_")]].copy()
+        cmv, cmr, depth = cons_scores(cm, pos0, ref_c, alt_c, 5 if a.smoke else 20)
+        cvv, _, _ = cons_scores(cvt, pos0, ref_c, alt_c, 5 if a.smoke else 20)
+        F["cons_m"], F["cons_v"], F["cons_mr"] = cmv, cvv, cmr
+        for sz in sizes:
+            s = lm_scores(a, ref, sz, pos0, ref_c, alt_c)
+            if s is not None:
+                F[f"lm_{sz}"] = s
+        return F, region, A
+    Fb, region_b, _ = features(b_pos, b_ref, b_alt)
+    okb = Fb.notna().all(axis=1).values
+    Fb, b_pos, b_ref, b_alt, b_y, region_b = Fb[okb].reset_index(drop=True), b_pos[okb], b_ref[okb], b_alt[okb], b_y[okb], region_b[okb]
+    mk = lambda: make_pipeline(StandardScaler(), LogisticRegression(C=0.5, max_iter=3000))
+    b_score = np.zeros(len(b_y))
+    for tr, te in GroupKFold(5).split(Fb, b_y, b_pos // 100):                    # out-of-fold, so the background is not scored by a model that saw its labels
+        b_score[te] = mk().fit(Fb.iloc[tr], b_y[tr]).predict_proba(Fb.iloc[te])[:, 1]
+    final = mk().fit(Fb, b_y)
+    log(f"damage score fitted on {len(b_y)} possible SNVs ({int(b_y.sum())} never observed); features: {list(Fb.columns)}")
+    lft, rgt = ref.codes[(b_pos - 1) % L].astype(int), ref.codes[(b_pos + 1) % L].astype(int)
+    key = lambda r_, a_, l_, rr_, reg_: (((r_ * 4 + a_) * 4 + l_) * 4 + rr_) * 4 + reg_
+    bkey = key(b_ref, b_alt, lft, rgt, region_b)
+    groups = {}
+    for k_ in np.unique(bkey):
+        groups[int(k_)] = np.sort(b_score[bkey == k_])
+    ctx_groups = {}
+    ckey = key(b_ref, b_alt, lft, rgt, 0) // 4
+    for k_ in np.unique(ckey):
+        ctx_groups[int(k_)] = np.sort(b_score[ckey == k_])
+
+    def pct(score, k_, ck_):
+        g = groups.get(int(k_))
+        if g is None or len(g) < 20:
+            g = ctx_groups.get(int(ck_))
+        if g is None or len(g) < 20:
+            return np.nan, np.nan
+        return (np.searchsorted(g, score, "left") + np.searchsorted(g, score, "right")) / (2.0 * len(g)), len(g)
+
+    def run(v, name, say):
+        v = v[(v.pos >= 1) & (v.pos <= L)].copy()
+        v["pos0"] = v.pos - 1
+        v = v[[ref.seq[p] == r for p, r in zip(v.pos0, v.ref)]].copy()
+        if v.empty:
+            say(f"{name}: no usable variants after reference check")
+            return v
+        r_c = np.array([CODE[x] for x in v.ref])
+        a_c = np.array([CODE[x] for x in v.alt])
+        F, region, _ = features(v.pos0.values, r_c, a_c)
+        F = F.reindex(columns=Fb.columns)
+        okv = F.notna().all(axis=1).values
+        v, F, region, r_c, a_c = v[okv].copy(), F[okv], region[okv], r_c[okv], a_c[okv]
+        v["damage"] = final.predict_proba(F)[:, 1]
+        L_, R_ = ref.codes[(v.pos0.values - 1) % L].astype(int), ref.codes[(v.pos0.values + 1) % L].astype(int)
+        kk = key(r_c, a_c, L_, R_, region)
+        res = [pct(s, k_, k_ // 4) for s, k_ in zip(v.damage.values, kk)]
+        v["percentile"], v["bg_n"] = [r[0] for r in res], [r[1] for r in res]
+        v["region"] = np.array(["noncoding", "protein", "tRNA", "rRNA"])[region]
+        v["cons_mammal"] = F["cons_m"].values
+        v = v[v.percentile.notna()].copy()
+        n = len(v)
+        obs = v.percentile.mean()
+        rng = np.random.default_rng(0)
+        sizes_g = np.array([len(groups.get(int(k_)) if groups.get(int(k_)) is not None and len(groups[int(k_)]) >= 20 else ctx_groups[int(k_) // 4]) for k_ in kk[:n]])
+        null = np.array([((rng.integers(0, sizes_g) + 0.5) / sizes_g).mean() for _ in range(2000)])
+        p = (1 + np.sum(np.abs(null - 0.5) >= abs(obs - 0.5))) / (len(null) + 1)
+        say(f"{name}: n={n}; mean damage percentile {obs:.3f} (0.5 = same as mutation-matched random SNVs; null sd {null.std():.3f}); permutation p = {p:.4f}; "
+            f"fraction in top decile {np.mean(v.percentile >= 0.9):.2f} (null 0.10), bottom decile {np.mean(v.percentile <= 0.1):.2f}")
+        for reg in ("protein", "tRNA", "rRNA", "noncoding"):
+            s_ = v[v.region == reg]
+            if len(s_) >= 5:
+                say(f"    {reg:10s} n={len(s_):4d} mean percentile {s_.percentile.mean():.3f}")
+        if "vaf" in v and v.vaf.notna().sum() >= 10:
+            w = v.dropna(subset=["vaf"])
+            rho = spearmanr(w.percentile, w.vaf)[0]
+            units = w["sample"].values if "sample" in w else np.arange(len(w))
+            ub = np.unique(units)
+            idx = {u: np.flatnonzero(units == u) for u in ub}
+            bs = []
+            for _ in range(500):
+                ii = np.concatenate([idx[u] for u in rng.choice(ub, len(ub))])
+                bs.append(spearmanr(w.percentile.values[ii], w.vaf.values[ii])[0])
+            lo, hi = np.nanpercentile(bs, [2.5, 97.5])
+            say(f"    damage vs heteroplasmy: Spearman {rho:+.3f} [{lo:+.3f},{hi:+.3f}] over {len(w)} variants "
+                f"(negative = more damaging variants held at lower heteroplasmy, as expected under purifying selection)")
+        return v
+    rep = []
+
+    def say(*x):
+        s = " ".join(str(i) for i in x)
+        print(s, flush=True)
+        rep.append(s)
+    if a.self_test:
+        cv = pd.read_csv(wp(a, "labels", "clinvar_mt.tsv"), sep="\t")
+        cv = cv[cv.stars >= 1]
+        say("SELF-TEST on known sets (expected: ClinVar pathogenic high, benign and gnomAD-common low):")
+        run(cv[cv["class"] == "P"][["pos", "ref", "alt"]], "ClinVar pathogenic / likely pathogenic", say)
+        run(cv[cv["class"] == "B"][["pos", "ref", "alt"]], "ClinVar benign / likely benign", say)
+        run(gn[gn.AF_hom >= 1e-3][["pos", "ref", "alt"]], "gnomAD common (AF_hom >= 0.001)", say)
+        het = gn[(gn.AC_het >= 3) & (gn.AF_het > 0)].copy()
+        het["vaf"] = het.max_hl
+        run(het[["pos", "ref", "alt", "vaf"]], "gnomAD heteroplasmic variants (vaf = max heteroplasmy)", say)
+    if a.variants:
+        res = run(read_variant_table(a.variants), os.path.basename(a.variants), say)
+        outp = a.out_table or (os.path.splitext(a.variants)[0] + ".scored.tsv")
+        res.to_csv(outp, sep="\t", index=False)
+        say(f"per-variant scores written to {outp}")
+    os.makedirs(wp(a, "results"), exist_ok=True)
+    open(wp(a, "results", "report_score.txt"), "w").write("\n".join(rep) + "\n")
+
+
 def lm_scores(a, ref, size, pos0, ref_c, alt_c):
     """Zero-shot masked-marginal LLR (alt - ref) at the centre of a 512-nt circular window, forward and reverse strand averaged. Higher = more damaging."""
     torch = get_torch()
@@ -1085,7 +1258,10 @@ def stage_evaluate(a, sizes):
 # --------------------------------------------------------------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1], formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint"])
+    ap.add_argument("stage", nargs="?", default="all", choices=["all", "download", "corpus", "pretrain", "evaluate", "constraint", "score"])
+    ap.add_argument("--variants", default="", help="score stage: TSV/CSV of mtDNA SNVs (pos, ref, alt, optional sample, optional vaf/heteroplasmy)")
+    ap.add_argument("--out-table", default="", help="score stage: where to write the per-variant table (default: next to the input)")
+    ap.add_argument("--self-test", action="store_true", help="score stage: run the known-answer controls (ClinVar pathogenic/benign, gnomAD common)")
     ap.add_argument("--constraint-n", type=int, default=24000, help="variants scored in the population-constraint task (of ~49,700 possible)")
     ap.add_argument("--min-carriers", type=int, default=1, help="a variant counts as 'observed' in gnomAD if carried by at least this many individuals")
     ap.add_argument("--workdir", default=None)
@@ -1123,6 +1299,10 @@ def main():
         stage_evaluate(a, sizes)
     if a.stage in ("all", "evaluate", "constraint"):
         stage_constraint(a, sizes)
+    if a.stage == "score":
+        if not (a.variants or a.self_test):
+            sys.exit("score stage: give --variants FILE and/or --self-test")
+        stage_score(a, sizes)
 
 
 if __name__ == "__main__":
