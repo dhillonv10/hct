@@ -1,0 +1,7 @@
+Check of a candidate "heteroplasmy tolerance" label from gnomAD v3.1 chrM (max_hl = highest heteroplasmy seen among carriers). Verdict: NOT a usable benchmark label.
+* Variants with >= 3 carriers: 5th percentile of max_hl = 0.998, median 1.0 (ceiling): 94.5% of heteroplasmic-capable variants (AC_het >= 3) are also homoplasmic in someone.
+* n = 999 variants (AC_het >= 3, not artifact-prone positions). Partial Spearman of score vs max_hl, controlling for log carriers:
+    mammal conservation  -0.132 [-0.192, -0.056]
+    context n-gram control (mutation process only)  -0.080 [-0.141, -0.018]   -> a large share of the apparent signal is mutation process / sampling, not selection
+* Within regions: protein conservation -0.102 / n-gram -0.013; tRNA -0.126 / -0.186; rRNA -0.094 / -0.138; noncoding -0.134 / -0.055.
+The population-constraint task (stage `constraint`) is the usable gnomAD-based task. Produced by a scratch script; numbers copied from its output.

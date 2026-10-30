@@ -891,7 +891,7 @@ def read_variant_table(path):
     """TSV/CSV with pos/ref/alt (rCRS / GRCh38 chrM, 1-based), optional sample and vaf (heteroplasmy; percent is converted). Also accepts a
     'variant' / 'mutation' column like 'm.8993T>G' or '8993T>G'."""
     import pandas as pd
-    d = pd.read_csv(path, sep=None, engine="python")
+    d = pd.read_excel(path) if str(path).lower().endswith((".xlsx", ".xls")) else pd.read_csv(path, sep=None, engine="python")       # .xlsx needs openpyxl
     low = {c.lower().strip(): c for c in d.columns}
     out = {}
     for k, names in COLS.items():
