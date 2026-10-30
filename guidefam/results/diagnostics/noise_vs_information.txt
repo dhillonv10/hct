@@ -1,0 +1,18 @@
+599 sites with a full variant panel in genes ['AQR', 'EIF3B', 'NUP133', 'SF3B1', 'SNRNP200', 'WDR75']
+  AQR       PC1 explains 51.1% of variant-panel variance; corr(PC1, perfect-match activity) = 0.837
+  EIF3B     PC1 explains 59.3% of variant-panel variance; corr(PC1, perfect-match activity) = 0.818
+  NUP133    PC1 explains 54.1% of variant-panel variance; corr(PC1, perfect-match activity) = 0.868
+  SF3B1     PC1 explains 58.9% of variant-panel variance; corr(PC1, perfect-match activity) = 0.862
+  SNRNP200  PC1 explains 54.1% of variant-panel variance; corr(PC1, perfect-match activity) = 0.907
+  WDR75     PC1 explains 58.2% of variant-panel variance; corr(PC1, perfect-match activity) = 0.863
+
+On these sites (within-gene, Spearman): measured PM label vs model prediction, and vs the independent variant-based estimate
+  gbm           corr(prediction, PM label) 0.630    corr(prediction, variant-based estimate) 0.624
+  tiger2d_port  corr(prediction, PM label) 0.712    corr(prediction, variant-based estimate) 0.687
+  konermann     corr(prediction, PM label) 0.661    corr(prediction, variant-based estimate) 0.710
+  ens3          corr(prediction, PM label) 0.741    corr(prediction, variant-based estimate) 0.751
+  corr(PM label, variant-based estimate) 0.852
+
+Residual test: partial correlation (within gene) between the PM label and the independent estimate, controlling for the model prediction
+  controlling for gbm  : partial corr +0.752  [+0.701, +0.787]
+  controlling for ens3 : partial corr +0.656  [+0.591, +0.704]

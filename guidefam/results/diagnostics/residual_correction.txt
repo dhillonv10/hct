@@ -1,0 +1,20 @@
+screen + fit on 399 denoised sites in ['AQR', 'EIF3B', 'NUP133', 'SNRNP200']
+          feature      z         p       q
+       acc300_5p8  3.811 0.0001386 0.02004
+            g19_C -3.637 0.0002761 0.02004
+       acc150_5p8  3.591 0.0003294 0.02004
+       acc300_min  3.575 0.0003497 0.02004
+acc300_logjoint23   3.55 0.0003849 0.02004
+        acc60_5p8  3.523 0.0004265 0.02004
+     log_unpaired  3.505 0.0004569 0.02004
+       acc150_min  3.377 0.0007321  0.0281
+selected at q < 0.05: ['acc300_5p8', 'g19_C', 'acc150_5p8', 'acc300_min', 'acc300_logjoint23', 'acc60_5p8', 'log_unpaired', 'acc150_min', 'g2_C']
+accessibility-family features used: ['acc300_5p8', 'acc150_5p8', 'acc300_min', 'acc300_logjoint23', 'acc60_5p8', 'log_unpaired', 'acc150_min']
+ridge coefficients (z-score space): {'ensemble': np.float64(0.369), 'acc300_5p8': np.float64(0.056), 'acc150_5p8': np.float64(0.08), 'acc300_min': np.float64(-0.038), 'acc300_logjoint23': np.float64(0.032), 'acc60_5p8': np.float64(0.016), 'log_unpaired': np.float64(-0.012), 'acc150_min': np.float64(0.114)}
+
+Evaluation (within-gene Spearman vs the ordinary perfect-match label; none of these guides' denoised estimates were used in the fit):
+  LOCKED titration genes SF3B1 + WDR75 (all guides) base 0.6436 -> corrected 0.5974   paired -0.0462 [-0.0647,-0.0282]
+  development genes without variant panels (n=8) base 0.6205 -> corrected 0.5683   paired -0.0522 [-0.0688,-0.0347]
+  other locked genes CDC5L + POLA1             base 0.6013 -> corrected 0.5186   paired -0.0827 [-0.1157,-0.0525]
+  titration fit genes (in-sample, for reference only) base 0.6875 -> corrected 0.6346   paired -0.0528 [-0.0660,-0.0387]
+  EXTERNAL flow-cytometry (base = GBM + Tiger2D) base 0.6556 -> corrected 0.5936   paired -0.0619 [-0.0817,-0.0413]

@@ -1,3 +1,6 @@
 # build artifact: rebuild with `cd /home/user/hct && zip -r guidefam_package.zip guidefam -x "*/__pycache__/*"`
 guidefam_package.zip
 __pycache__/
+mismatch_hap_preds.csv
+residual_correction_coefs.csv
+feature_discovery.csv

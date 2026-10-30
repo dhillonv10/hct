@@ -25,6 +25,8 @@ guidefam/
   official_tiger.py                                             the authors' released TIGER weights as a PyTorch forward pass (export them yourself; licence)
   safepickle.py                                                 loads TIGER's pickles through an exact allowlist (refuses anything else)
   scripts/   run_all.sh  final_cas13d.py  final_sirna.py  m4_extend.py  sirna_plus_oligoformer.py  audit_*.py  dev_*.py  sirna_dev*.py  ...
+  scripts/noise_vs_information.py feature_discovery.py residual_correction.py mismatch_task.py    round-3 diagnostics and the mismatch-tolerance task (RESULTS.md section 9)
+  mismatch.py                                                   variant-guide features for the mismatch-tolerance task
   tests/test_basic.py                                           invariants (orientation, label conventions, hostile-pickle refusal, normalisation leakage)
   results/                                                      small raw outputs behind RESULTS.md
   PROTOCOL.md  RESULTS.md  RUN_ON_M4.md

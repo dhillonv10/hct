@@ -70,3 +70,7 @@ Same frozen model on Huesken: shuffled 5-fold (their recipe) PCC 0.668 / AUC 0.8
 ### 6.4 OligoFormer's released training script selects its checkpoint on the test dataset  (read, not measured)
 
 In `scripts/train.py` the `--datasets Hu Mix` path sets both `valid_df` and `test_df` to the second dataset (Mixset) and keeps the epoch with the best validation loss and AUC *on that set*. If Table 2 of the paper was produced this way, its Huesken -> Mixset figures are chosen on test labels. We did not run it (proprietary licence, see `RESULTS.md` section 7), so the size of any effect is unknown. Separately, its LSTMs are applied to `(batch, length, features)` tensors without `batch_first`, i.e. over the batch dimension, so a prediction can depend on which other siRNAs share its batch; again read from the source, not tested.
+
+## 7. Data caveat: the titration sites are a selected subset
+
+The ~600 HEK293T sites that carry a full mismatch/indel panel (and the HAP1 titration guides) were chosen, not sampled: 65.6 % of the HEK titration sites are active against 34 % of the other guides in the same genes. Anything learned or concluded on them (the noise-versus-information test, the feature screen, the mismatch task) should be read with that selection in mind; see `RESULTS.md` section 9.

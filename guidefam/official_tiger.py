@@ -48,20 +48,23 @@ def load(npz_path: str) -> OfficialTiger:
     return OfficialTiger({k: z[k] for k in z.files})
 
 
-def encode(d) -> tuple:
-    """Official model inputs from a frame with `5p_context`, `target_seq` (23 nt, sense) -- missing flank is padded with all-zero positions."""
+def encode(d, guide_col: str | None = None) -> tuple:
+    """Official model inputs from a frame with `5p_context`, `target_seq` (23 nt, sense) -- missing flank is padded with all-zero positions.
+    `guide_col` names a column holding the guide written as in TIGER's tables (complement of the target, in target orientation); use it to score mismatched
+    variants. By default the guide is the perfect complement."""
     tgt, gde = [], []
-    for c5, t in zip(d["5p_context"].astype(str), d["target_seq"].astype(str)):
+    explicit = d[guide_col].astype(str).tolist() if guide_col else [None] * len(d)
+    for c5, t, gv in zip(d["5p_context"].astype(str), d["target_seq"].astype(str), explicit):
         left = c5[-CTX5:].rjust(CTX5, "N")
         tgt.append(left + t)
-        comp = t.upper().translate(str.maketrans("ACGT", "TGCA"))
+        comp = gv if gv is not None else t.upper().translate(str.maketrans("ACGT", "TGCA"))
         gde.append("N" * CTX5 + comp)
     return torch.from_numpy(F.onehot(tgt, CTX5 + GUIDE_LEN)), torch.from_numpy(F.onehot(gde, CTX5 + GUIDE_LEN))
 
 
-def predict(model: OfficialTiger, d, batch: int = 2048) -> np.ndarray:
+def predict(model: OfficialTiger, d, batch: int = 2048, guide_col: str | None = None) -> np.ndarray:
     """Activity score, higher = more active (the negative of the network's LFC estimate)."""
-    t, g = encode(d)
+    t, g = encode(d, guide_col)
     out = []
     with torch.no_grad():
         for i in range(0, len(t), batch):

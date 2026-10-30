@@ -1,0 +1,28 @@
+=== DEV: leave-one-gene-out among ['AQR', 'EIF3B', 'NUP133', 'SNRNP200'] (single-mismatch variants)
+  posmean      within-gene 0.334   within-site 0.403
+  posmean+pm   within-gene 0.515   within-site 0.403
+  gbm_mm       within-gene 0.542   within-site 0.462
+  gbm_nopm     within-gene 0.507   within-site 0.454
+
+=== LOCKED HEK genes ['SF3B1', 'WDR75'] (trained on the 4 development genes)
+  posmean      within-gene 0.258   within-site 0.330
+  posmean+pm   within-gene 0.473   within-site 0.330
+  gbm_mm       within-gene 0.509   within-site 0.381
+  gbm_nopm     within-gene 0.470   within-site 0.390
+
+=== EXTERNAL HAP1 titration single mismatches (trained on all 6 HEK titration genes)
+  43263 single-mismatch guides, 1082 genes, 4328 sites
+  official         within-gene 0.540   within-site 0.608   pooled Spearman 0.475
+  posmean          within-gene 0.461   within-site 0.517   pooled Spearman 0.394
+  posmean+pm       within-gene 0.409   within-site 0.517   pooled Spearman 0.361
+  gbm_mm           within-gene 0.529   within-site 0.594   pooled Spearman 0.466
+  gbm_nopm         within-gene 0.531   within-site 0.589   pooled Spearman 0.480
+  gbm_mm+official  within-gene 0.560   within-site 0.615   pooled Spearman 0.487
+  paired within-gene gbm_mm           - official: -0.011 [-0.019,-0.004]
+  paired within-site gbm_mm           - official: -0.014 [-0.017,-0.012]
+  paired within-gene gbm_nopm         - official: -0.009 [-0.019,-0.004]
+  paired within-site gbm_nopm         - official: -0.019 [-0.022,-0.016]
+  paired within-gene posmean+pm       - official: -0.131 [-0.129,-0.110]
+  paired within-site posmean+pm       - official: -0.091 [-0.096,-0.088]
+  paired within-gene gbm_mm+official  - official: +0.020 [+0.013,+0.021]
+  paired within-site gbm_mm+official  - official: +0.007 [+0.005,+0.009]
