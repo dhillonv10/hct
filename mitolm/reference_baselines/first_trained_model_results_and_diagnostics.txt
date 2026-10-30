@@ -1,0 +1,10 @@
+First trained model (user's M4 run): 'small', 4.87M parameters, 40,000 steps (effective batch 64 x 512 nt), ~204 windows/s, validation loss 1.154 (unigram 1.394), masked-base accuracy 0.473 (unigram 0.289).
+
+ClinVar (113 P/LP vs 1,597 B/LB, >=1 star):  zero-shot AUROC 0.552 [0.485,0.623]; stacked onto annotation + conservation: -0.000 [-0.003,+0.002]  -> VERDICT: not demonstrated.
+Constraint (24k variants, strata = substitution x flanking bases): zero-shot matched AUROC 0.495 [0.477,0.515]; stacked: +0.000 [-0.002,+0.002] -> VERDICT: not demonstrated.
+
+Diagnostic (sandbox, same corpus, same held-out genera): plain context-counting models
+  masked-base accuracy on held-out genera:  2 bases each side 0.327 | 3: 0.370 | 4: 0.454 | 5: 0.584 | 6: 0.698   (transformer: 0.473)
+  zero-shot matched AUROC on the constraint task: 3: 0.484 | 4: 0.545 | 5: 0.600 | 6: 0.680 | mammal conservation 0.772 | transformer 0.495
+Reading: the useful signal in this corpus is memory of homologous sequence (which bases occur at this locus in related genomes), i.e. conservation. The transformer trained here
+has not acquired it (it behaves like a ~3-base-context model); lookup models improve steadily with context. This is evidence about THIS model at THIS scale, not proof that no learned model can help.

@@ -702,18 +702,24 @@ def ngram_scores(genomes, ref, pos0, ref_c, alt_c, k=5):
         if len(chunk) > 800:
             flush()
     flush()
-    offs = np.arange(1, k + 1)
     left = np.zeros(len(pos0), np.int64)
     right = np.zeros(len(pos0), np.int64)
+    bad = np.zeros(len(pos0), bool)                                               # a context containing the rCRS 'N' (position 3107) has no valid index
     for o in range(k, 0, -1):
-        left = left * 4 + ref.codes[(pos0 - o) % ref.L]
-    for o in offs:
-        right = right * 4 + ref.codes[(pos0 + o) % ref.L]
+        c_ = ref.codes[(pos0 - o) % ref.L].astype(np.int64)
+        bad |= c_ > 3
+        left = left * 4 + np.minimum(c_, 3)
+    for o in range(1, k + 1):
+        c_ = ref.codes[(pos0 + o) % ref.L].astype(np.int64)
+        bad |= c_ > 3
+        right = right * 4 + np.minimum(c_, 3)
     base = left * 4 ** (k + 1) + right
     cnt = np.stack([tab[base + c * 4 ** k] for c in range(4)], 1).astype(float)
     p = (cnt + 0.5) / (cnt.sum(1, keepdims=True) + 2.0)
     r = np.arange(len(pos0))
-    return -(np.log(p[r, alt_c]) - np.log(p[r, ref_c]))
+    out = -(np.log(p[r, alt_c]) - np.log(p[r, ref_c]))
+    out[bad] = 0.0                                                                # neutral score for the handful of variants next to the N
+    return out
 
 
 def get_conservation(a, ref, genomes, accs, mammal):
