@@ -30,7 +30,7 @@ ACCESS = ["site_found", "u_site", "u_site5", "u_site3", "u_min", "u_fl5", "u_fl3
 def rank_gauss_by_screen(screen: pd.Series, y: pd.Series) -> np.ndarray:
     r = y.groupby(screen).rank(method="average")
     n = y.groupby(screen).transform("size")
-    return norm.ppf((r - 0.5) / n).values
+    return np.asarray(norm.ppf((r - 0.5) / n))
 
 
 def oof(X, y, folds, target="raw", screen=None):
