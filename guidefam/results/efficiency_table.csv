@@ -1,0 +1,8 @@
+model,parameters,what is counted,cost (measured here)
+"GBM (ours, Cas13d)","17,200","6000 leaf values + 5600 splits x (feature, threshold)","1s fit, 4 cores"
+ridge (ours),146,coefficients + intercept,< 1s
+Tiger2D (our re-implementation),"236,289","PyTorch module, flank 1, 16 scalars",~4 min per fold (3 cores)
+MiniPairFormer (ours),"25,165","2 layers, d=32, 4 heads",~4 min per fold (2 cores)
+TIGER as released,"234,753",authors' weights (checkpoint),n/a
+RNA-FM (frozen encoder some pipelines add),"99,523,469",checkpoint header,n/a
+"TabDPT (pretrained tabular model, not biology)","63,040,624",checkpoint header,~2.5 min per fold (3 cores)

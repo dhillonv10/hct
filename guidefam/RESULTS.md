@@ -144,3 +144,24 @@ Individual pairs ranged from -0.012 to +0.013, i.e. seed-to-seed noise is as lar
 * **TIGER** (code, data, predictions, released weights): NYGC *academic and non-commercial research only*; for-profit entities and any commercial use must contact NYGC first. We neither redistribute nor modify it; `run_all.sh` fetches it on your machine.
 * **OligoFormer**: *proprietary* ("All Rights Reserved", Tsinghua): use "subject to payment", no modification, no redistribution, no use to develop competing products. We therefore did **not** run, port or retrain its network, and this package contains none of its code. We do read its published data tables (Huesken / Mixset / Takayuki and its thermodynamic descriptors) from its repository; whether that is permitted for your use is for you (and its licensor, ott@tsinghua.edu.cn) to settle. The original Huesken and other source datasets are published and could replace those files. The combination script `sirna_plus_oligoformer.py` only reads a predictions file you produce yourself.
 * Reading its public training script showed that, for the `--datasets Hu Mix` path, the "validation" set is the *test* dataset and the checkpoint is saved when validation loss and AUC improve on it. Whether the paper's Table 2 was produced that way we cannot tell, and we did not measure how large the effect would be; it is a reason to prefer comparisons that do not depend on that number.
+
+## 8. Three "novel angle" tests: small model, biology-aware transformer, transfer from a non-biology model
+
+Cas13d, leave-one-gene-out, 12 development genes, within-gene Spearman (`figures/params_vs_accuracy.png`, numbers in `figures/params_vs_accuracy.csv`, parameter counts from `results/efficiency_table.csv`, taken from the objects and checkpoint headers):
+
+| model | parameters | accuracy | note |
+|---|---|---|---|
+| ridge on guide + flank sequence | 130 | 0.522 | |
+| gradient-boosted trees (ours) | 17,200 | 0.607 | fits in ~5 s on 4 cores |
+| MiniPairFormer **with** RNA-structure attention bias | 25,165 | 0.585 | 2-layer, d = 32 transformer; attention biased by ViennaRNA base-pair probabilities, unpaired probability as token input |
+| MiniPairFormer **without** the structure bias | 25,165 | 0.587 | the ablation: the bias does not help |
+| 2-D CNN (TIGER-style, our re-implementation) | 236,289 | 0.617 | the released TIGER has 234,753 |
+| TabDPT (pretrained tabular foundation model, not trained on biology) | 63,040,624 | 0.590 | open weights; used as the learner on the same tabular features |
+| RNA-FM embedding of the 23-mer + ridge | 99,523,469 | 0.487 | frozen encoder |
+| rank-average of GBM + CNN + published 30-mer tool | — | **0.643** | the only thing that moves it |
+
+* **Smaller model, same performance** — supported: 17,200 parameters get 98 % of the CNN's accuracy (0.607 / 0.617; on all 16 genes 0.600 vs 0.612, a paired difference of -0.012 [-0.022, -0.002]), 14x fewer parameters, and a 100 M-parameter RNA language-model embedding is *worse* (0.487). It is not "better than TIGER with fewer parameters": the released TIGER itself is small.
+* **A transformer designed for biology** — tested, no gain: a 25k-parameter pair-aware transformer reaches 0.585-0.587; the RNA-structure attention bias adds nothing (-0.0015, noise); adding it to the three-model ensemble gives 0.640 vs 0.643. This agrees with the accessibility-profile result (section 4): local structure is not the missing information.
+* **Transfer from a non-biology model** — TabDPT on Cas13d: 0.590, no ensemble gain (0.640 vs 0.643). On siRNA (**post-hoc**: Mix and Takayuki had already been read), the same learner on the same features without flanks reaches Huesken -> Mixset AUC 0.825 [0.788, 0.858], PCC 0.599 [0.534, 0.663], nominally above OligoFormer (0.816 / 0.588) and DeepSilencer (0.820 AUC) but far inside the +-0.035 noise of 472 test siRNAs; with flank features 0.809 / 0.578; on Takayuki 0.760 / 0.537. This is consistent with the GSK report that a tabular foundation model matches specialised siRNA predictors ([arXiv 2510.02476](https://arxiv.org/html/2510.02476v2)); it is not evidence of a win.
+
+What this supports: across 146 to 63 million parameters, three architecture families and a non-biology foundation model, held-out-gene accuracy saturates near 0.6 at ~10^4 parameters. It does **not** by itself show the cause (missing information versus label noise; the replicate ceiling is ~0.89), and it does not exclude an architecture we did not try. A claim of "a new architecture beats the state of the art" is not supported by any of these runs.

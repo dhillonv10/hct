@@ -11,6 +11,8 @@ Two members share one data/evaluation harness:
 
 This is a family of *task models* sharing a protocol, not a pretrained foundation model. RNA-FM embeddings and a pretrained tabular model (TabDPT) were tested and are optional extras, not part of the headline models.
 
+![parameters vs accuracy](figures/params_vs_accuracy.png)
+
 ## Why the protocol matters here
 Guides tile each transcript one nucleotide apart, so neighbouring guides share 22 of 23 nucleotides and similar activity. Every split is by gene / target, every normalisation uses training rows only, and the headline metric (within-gene Spearman) cannot be inflated by between-gene differences. Two published evaluation recipes were audited and found to flatter scores (`PROTOCOL.md` section 6).
 
@@ -19,6 +21,7 @@ Guides tile each transcript one nucleotide apart, so neighbouring guides share 2
 guidefam/
   data.py  features.py  structure.py  lm.py  sirna.py        data loading, features (structure/lm/TabDPT are optional and did not help)
   cv.py  metrics.py  comparators.py  tiger_torch.py            leave-one-gene-out, metrics + block bootstrap, published-tool scores, Tiger2D port
+  pairformer.py                                                 MiniPairFormer: 25k-parameter transformer with an RNA-structure attention bias (ablation: no gain)
   official_tiger.py                                             the authors' released TIGER weights as a PyTorch forward pass (export them yourself; licence)
   safepickle.py                                                 loads TIGER's pickles through an exact allowlist (refuses anything else)
   scripts/   run_all.sh  final_cas13d.py  final_sirna.py  m4_extend.py  sirna_plus_oligoformer.py  audit_*.py  dev_*.py  sirna_dev*.py  ...

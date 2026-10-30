@@ -1,0 +1,8 @@
+model,parameters,family,within_gene_spearman
+"ridge, sequence only",130,classical,0.5219
+gradient-boosted trees,17200,classical,0.6069
+small transformer + structure bias,25165,scratch,0.585
+"small transformer, no structure bias",25165,scratch,0.5865
+2-D CNN (TIGER-style),236289,scratch,0.6167
+TabDPT (tabular foundation model),63040624,pretrained,0.5896
+RNA-FM embedding + ridge,99523469,pretrained,0.4868
