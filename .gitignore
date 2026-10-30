@@ -5,3 +5,4 @@ mismatch_hap_preds.csv
 residual_correction_coefs.csv
 feature_discovery.csv
 data_untrusted/
+guidefam/results/aso/*.log
