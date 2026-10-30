@@ -42,7 +42,33 @@ A task joins the family only if all four gates pass: (G1) data downloadable and 
 | ASO (RNase H gapmers) | UNVERIFIED. Search only: ASO Atlas, 188,521 ASOs, 334 genes, from USPTO patents, "freely accessible through an online web-tool"; no download link or licence seen | OligoAI (search only: Mol Ther Nucleic Acids 2026, "299 held-out test screens", reports Spearman) | gene possible if gene ids are in the table | best candidate: same feature stack applies, large n. Dies if there is no bulk download or the licence forbids it |
 | mRNA half-life | Zenodo 6326409 (18.8 GB; licence field not checked) | Saluki, code reported Apache-2.0 (search only; check LICENSE) | gene / chromosome (split not verified) | Saluki is already compact; "close to" is plausible, "beats" is unlikely |
 | 5' UTR mean ribosome load | public GEO libraries | Optimus (small CNN); UTR-LM (search only: +<=5% Spearman over it) | random-sequence libraries, low leakage risk | near saturation; low novelty |
-| BEACON suite | public (repo and licence not yet verified) | per-task baselines incl. RNA-FM, UTR-LM (search only: pretrained models beat prior SOTA on 8 of 13 tasks; ResNet/LSTM strong baselines) | task-specific; leakage of its splits not yet checked | cheapest breadth, weakest "SOTA" |
+| BEACON suite | code Apache-2.0; data on Google Drive (manual download, no data licence in the README; per-source licences in the paper's Table 22 are mixed, e.g. OpenVaccine and StructImpute "non-commercial") | 17 models x 13 tasks published (section 4a) | mostly random or unstated splits; no family-held-out split | cheapest breadth; "SOTA" is a table, not one tool |
+
+### 4a. BEACON, as read by a subagent from arXiv 2406.10391v2 and its GitHub repo (not re-checked by me; verify against the paper before quoting)
+
+13 tasks, ~967k sequences. Pretrained LMs beat the paper's literature SOTA on 8 of 13 (SSP, SSI, SPL, APA, ncRNA, Modif, MRL, PRS); the literature row is still ahead on CMP, DMP, VDP, CRI-On, CRI-Off.
+
+Three tiny supervised nets (CNN / ResNet / LSTM) are the useful comparison for our claim. From the paper's Table 3 means, gap between the best of the three and the best of all 17 models:
+
+| task (metric) | best of CNN/ResNet/LSTM | best of all 17 | gap |
+|---|---|---|---|
+| Modif (AUC) | 94.83 | 95.14 | 0.3 |
+| MRL (R2) | 83.94 | 84.98 | 1.0 |
+| CMP (P@L) | 59.59 | 61.20 | 1.6 |
+| PRS (R2) | 55.45 | 57.72 | 2.3 |
+| VDP (MCRMSE, lower better) | 0.329 | 0.313 | 0.016 |
+| CRI-Off (Spearman) | 11.50 | 11.50 | 0 |
+| SSI (R2) | 37.74 | 42.36 | 4.6 |
+| CRI-On (Spearman) | 29.69 | 34.92 | 5.2 |
+| APA (R2) | 67.03 | 72.71 | 5.7 |
+| ncRNA (ACC) | 88.78 | 96.81 | 8.0 |
+| SSP (F1) | 58.61 | 68.50 | 9.9 |
+| DMP (R2) | 44.77 | 56.82 | 12.0 |
+| SPL (ACC@K) | 36.66 | 50.55 | 13.9 |
+
+Reading: tiny nets are within ~2 points of the best foundation model on six of thirteen tasks, and a tiny net is already best on CRI-Off. On the other seven the large pretrained models are clearly ahead, and a compact model is not going to close 5 - 14 points there. Those seven stay out of the family.
+
+Limits of this table as a SOTA reference: no homology-held-out split is described for any task; the split is unstated for CMP, DMP, Modif, CRI-On and CRI-Off; the paper's own counts disagree with its Table 1 in several places; the "first place" claim for SpliceBERT-MS1024 is not supported by Table 3. CRI-On / CRI-Off are SpCas9 knockout (DeepCRISPR) data, not RNA-targeting guides, and the literature SOTA there (44.1 / 12.6) is above every model in the table, so a gap there would need information (epigenetic features) that sequence-only models do not have.
 
 ## 5. Protocol and kill criteria (fixed before running)
 
@@ -56,4 +82,5 @@ A task joins the family only if all four gates pass: (G1) data downloadable and 
 
 1. Verify ASO Atlas bulk download and licence (the bioRxiv full text was rate-limited, HTTP 429, on both attempts; retry or have the data-availability statement pasted).
 2. If G1-G3 pass, export ASO Atlas with gene ids, freeze a dev/locked split, run the G4 headroom test.
-3. In parallel, read the Saluki and BEACON repos' licences and splits (cheap), then decide whether either enters the family.
+3. BEACON breadth track (user downloads the Drive folders on the M4; the sandbox cannot be assumed to reach Google Drive): fit T0 / T1 / T2 on the six near-parity tasks (Modif, MRL, CMP, PRS, VDP, CRI-Off), dev-first on each task's own validation split, test split scored once. The realistic target there is "within noise of the best foundation model at 10^-3 of the size", and "beats" only if the ensemble gain seen on Cas13d (~+0.03 Spearman) carries over. Before quoting any BEACON number, re-check Table 3 against the paper.
+4. Saluki: read the repo LICENSE and the split definition before deciding whether it enters.
