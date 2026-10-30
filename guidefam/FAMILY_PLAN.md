@@ -84,3 +84,23 @@ Limits of this table as a SOTA reference: no homology-held-out split is describe
 2. If G1-G3 pass, export ASO Atlas with gene ids, freeze a dev/locked split, run the G4 headroom test.
 3. BEACON breadth track (user downloads the Drive folders on the M4; the sandbox cannot be assumed to reach Google Drive): fit T0 / T1 / T2 on the six near-parity tasks (Modif, MRL, CMP, PRS, VDP, CRI-Off), dev-first on each task's own validation split, test split scored once. The realistic target there is "within noise of the best foundation model at 10^-3 of the size", and "beats" only if the ensemble gain seen on Cas13d (~+0.03 Spearman) carries over. Before quoting any BEACON number, re-check Table 3 against the paper.
 4. Saluki: read the repo LICENSE and the split definition before deciding whether it enters.
+
+## 7. ASO dev results (measured; development genes only, 246 gene groups, 1,360 screens; the 81 locked groups are untouched)
+
+Within-screen Spearman, mean over screens with n >= 20, gene groups held out (5-fold), 95% CI by bootstrap over gene groups. Logs: `results/aso/aso_dev_log.txt`, `aso_dev2_log.txt`; table: `aso_dev_table.csv`.
+
+| model | rho_screen [CI] |
+|---|---|
+| LightGBM, sequence + chemistry + experiment | 0.352 [0.317, 0.378] |
+| + thermodynamics (duplex energy, ASO self-fold) | 0.375 [0.338, 0.401]  (paired +0.023 [+0.015, +0.029]) |
+| + target-site accessibility (ViennaRNA partition function on the supplied context) | 0.388 [0.352, 0.417]  (paired +0.013 [+0.004, +0.024]) |
+| same, within-screen rank-Gauss target | 0.399 [0.360, 0.427]  (not tested paired against the raw target) |
+| small CNN, 110,789 parameters | 0.346 [0.308, 0.375]  (vs LightGBM -0.042 [-0.074, -0.014]) |
+| rank ensemble LightGBM + CNN | 0.398 [0.362, 0.423]  (vs LightGBM +0.010 [-0.004, +0.021], not distinguishable from 0) |
+
+Split-type test, same model (LightGBM, all features), difference from the gene-group split: patents held out -0.000 [-0.009, +0.006]; screens held out +0.062 [+0.049, +0.077]; random rows held out +0.071 [+0.058, +0.087]. So the patent split used by OligoAI's released code does not inflate this model, while screen-level and random splits do by 0.06 - 0.07. Whether a ~650M-parameter model benefits more from shared genes than a boosted model is untested.
+
+What this does and does not show:
+* each physics-motivated feature group helps, with intervals above zero;
+* a small neural net does not beat the boosted model on this task, and ensembling them gains +0.010 here (not significant), less than on Cas13d (+0.026);
+* NO comparison with OligoAI exists yet, so there is no claim about SOTA. That needs OligoAI's predictions on the same rows (M4 job; weights licence unstated; checkpoint is a pickle, load with a restricted-class loader).

@@ -1,0 +1,14 @@
+  yt = torch.as_tensor(y, dtype=torch.float32)
+fold 0: 8 epochs, 110789 params, 87s
+fold 1: 7 epochs, 110789 params, 66s
+fold 2: 5 epochs, 110789 params, 44s
+fold 3: 12 epochs, 110789 params, 110s
+fold 4: 9 epochs, 110789 params, 240s
+
+DEV, gene groups held out (within-screen Spearman, mean over screens n>=20)
+  GBM (base+thermo+access)     rho_screen 0.388 [0.352,0.417]  rho_group 0.312
+  Net (~1e5 params)            rho_screen 0.346 [0.308,0.375]  rho_group 0.251
+  rank ensemble GBM+Net        rho_screen 0.398 [0.362,0.423]  rho_group 0.304
+  Net - GBM            -0.042 [-0.074,-0.014]
+  ensemble - GBM       +0.010 [-0.004,+0.021]
+  ensemble - Net       +0.052 [+0.035,+0.071]

@@ -1,0 +1,35 @@
+DEV only: 127804 rows, 246 gene groups, 1423 screens
+features: base 142, +thermo 2, +access 9; site found in context for 88.6% of rows
+
+1. single features, no fitting (sign chosen on the full dev set, so slightly optimistic)
+  gc           rho_screen +0.021 (sign +1)
+  dg_duplex    rho_screen +0.015 (sign -1)
+  dg_self      rho_screen +0.052 (sign +1)
+  u_site       rho_screen +0.085 (sign +1)
+  u_min        rho_screen +0.119 (sign +1)
+  frac_PS      rho_screen +0.138 (sign +1)
+  log_dose     rho_screen +nan (sign +1)
+  len          rho_screen +0.018 (sign -1)
+
+2. LightGBM, gene groups held out, feature ablation (raw inhibition target)
+  gbm:base                                   gene     rho_screen 0.352 [0.317,0.378]  rho_group 0.265  (1360 screens)
+     150s
+  gbm:base+thermo                            gene     rho_screen 0.375 [0.338,0.401]  rho_group 0.289  (1360 screens)
+     156s
+  gbm:base+thermo+access                     gene     rho_screen 0.388 [0.352,0.417]  rho_group 0.312  (1360 screens)
+     157s
+
+3. same model, three split types
+  gbm:base+thermo+access                     patent   rho_screen 0.388 [0.347,0.416]  rho_group 0.313  (1360 screens)
+  gbm:base+thermo+access                     screen   rho_screen 0.450 [0.422,0.475]  rho_group 0.328  (1360 screens)
+  gbm:base+thermo+access                     random   rho_screen 0.459 [0.432,0.483]  rho_group 0.335  (1360 screens)
+
+4. within-screen rank-Gauss target (gene held out)
+  gbm:base+thermo+access rankgauss           gene     rho_screen 0.399 [0.360,0.427]  rho_group 0.323  (1360 screens)
+
+paired differences (gene split, bootstrap over gene groups)
+  +thermo vs base                    +0.023 [+0.015,+0.029]
+  +access vs +thermo                 +0.013 [+0.004,+0.024]
+  patent-split minus gene-split      -0.000 [-0.009,+0.006]
+  screen-split minus gene-split      +0.062 [+0.049,+0.077]
+  random-split minus gene-split      +0.071 [+0.058,+0.087]
