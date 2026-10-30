@@ -47,6 +47,15 @@ def oof(X, y, folds, target="raw", screen=None):
     return p
 
 
+def cached(path, fn):
+    """Resumable: reuse a finished model's out-of-fold predictions (delete the file after changing PARAMS or the features)."""
+    if os.path.exists(path):
+        return np.load(path)
+    p = fn()
+    np.save(path, p)
+    return p
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", required=True)
@@ -87,20 +96,21 @@ def main():
     folds_rand = list(KFold(a.folds, shuffle=True, random_state=0).split(X))
 
     print("\n2. LightGBM, gene groups held out, feature ablation (raw inhibition target)")
+    ck = lambda key: os.path.join(a.cache, f"oof_{key}.npy")
     for nm, cols in sets.items():
         t = time.time()
-        d["p_" + nm] = oof(X[cols], d.y, folds_gene)
+        d["p_" + nm] = cached(ck("gene_" + nm), lambda cols=cols: oof(X[cols], d.y, folds_gene))
         record("gbm:" + nm, "p_" + nm, "gene")
         print(f"     {time.time() - t:.0f}s", flush=True)
 
     best = "base+thermo+access"
     print("\n3. same model, three split types")
     for sp, fo in (("patent", folds_patent), ("screen", folds_screen), ("random", folds_rand)):
-        d[f"p_{best}_{sp}"] = oof(X[sets[best]], d.y, fo)
+        d[f"p_{best}_{sp}"] = cached(ck(f"{sp}_{best}"), lambda fo=fo: oof(X[sets[best]], d.y, fo))
         record("gbm:" + best, f"p_{best}_{sp}", sp)
 
     print("\n4. within-screen rank-Gauss target (gene held out)")
-    d["p_rank"] = oof(X[sets[best]], d.y, folds_gene, target="rank", screen=d.screen)
+    d["p_rank"] = cached(ck("gene_rank_" + best), lambda: oof(X[sets[best]], d.y, folds_gene, target="rank", screen=d.screen))
     record("gbm:" + best + " rankgauss", "p_rank", "gene")
 
     pcols = [c for c in d if c.startswith("p_")]

@@ -44,12 +44,18 @@ def main():
     groups, y = d.group.values, d.y.values
     p = np.zeros(len(d))
     for k, (tr, te) in enumerate(folds):
+        fp = os.path.join(a.cache, f"net_s{a.seeds}_e{a.epochs}_fold{k}.npy")        # resumable per fold
+        if os.path.exists(fp):
+            p[te] = np.load(fp)
+            print(f"fold {k}: loaded", flush=True)
+            continue
         t = time.time()
         ps = []
         for s in range(a.seeds):
             m = N.ASONet(T, max_epochs=a.epochs, seed=s).fit(tr, y, groups)
             ps.append(m.predict(te))
         p[te] = np.mean(ps, 0)
+        np.save(fp, p[te])
         print(f"fold {k}: {m.epochs_} epochs, {m.n_params} params, {time.time() - t:.0f}s", flush=True)
     d["p_net"] = p
     d["r_gbm"], d["r_net"] = screen_rank(d, gbm), screen_rank(d, "p_net")
