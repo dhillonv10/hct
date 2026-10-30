@@ -65,6 +65,7 @@ WIN = 512
 PAD, N_TOK, MASK = 0, 5, 6                      # tokens: 0 pad, 1-4 = A C G T, 5 = N, 6 = [MASK]
 VOCAB = 7
 CODE = {"A": 0, "C": 1, "G": 2, "T": 3}         # array codes 0-3, 4 = N (tokens = code + 1)
+BASES = ("A", "C", "G", "T")
 LUT = np.full(256, 4, np.uint8)
 for _c, _v in CODE.items():
     LUT[ord(_c)] = _v
@@ -168,7 +169,7 @@ def prepare_clinvar(raw, out):
             if not line.startswith("MT\t"):
                 continue
             c = line.rstrip("\n").split("\t")
-            if len(c[3]) != 1 or len(c[4]) != 1:
+            if c[3] not in BASES or c[4] not in BASES:                            # single-base A/C/G/T alleles only (drops indels, '.', '*')
                 continue
             d = dict(kv.split("=", 1) for kv in c[7].split(";") if "=" in kv)
             gene = re.match(r"([^:|]+)", d.get("GENEINFO", ""))
@@ -186,7 +187,7 @@ def prepare_gnomad(raw, out):
             if line.startswith("#"):
                 continue
             c = line.rstrip("\n").split("\t")
-            if c[6] != "PASS" or len(c[3]) != 1 or len(c[4]) != 1:
+            if c[6] != "PASS" or c[3] not in BASES or c[4] not in BASES:
                 continue
             d = dict(kv.split("=", 1) for kv in c[7].split(";") if "=" in kv)
             rows.append((int(c[1]), c[3], c[4], d.get("AN", ""), d.get("AC_hom", "0"), d.get("AC_het", "0"), d.get("AF_hom", "0"), d.get("AF_het", "0"), d.get("max_hl", "")))
