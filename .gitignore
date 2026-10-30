@@ -6,3 +6,4 @@ residual_correction_coefs.csv
 feature_discovery.csv
 data_untrusted/
 guidefam/results/aso/*.log
+guidefam/results/aso/*oof*.csv
