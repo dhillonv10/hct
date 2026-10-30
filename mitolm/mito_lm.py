@@ -765,6 +765,10 @@ def stage_evaluate(a, sizes):
                       "syn": [c[1] == "syn" for c in cons_info], "mis": [c[1] == "mis" for c in cons_info],
                       "stop": [c[1] in ("stopgain", "stoploss") for c in cons_info], "blosum": [c[2] for c in cons_info],
                       "transition": [(r, al) in {(0, 2), (2, 0), (1, 3), (3, 1)} for r, al in zip(allv.ref_c, allv.alt_c)]}).astype(float)
+    for r0 in BASES:                                                              # the 12 exact substitution types: a barely trained LM score mostly encodes these
+        for t0 in BASES:
+            if r0 != t0:
+                A[f"sub_{r0}{t0}"] = ((allv.ref == r0) & (allv.alt == t0)).values.astype(float)
     # conservation baselines
     genomes, val, mammal, accs = load_corpus(a)
     cvt, cm = conservation_counts(a, ref, genomes, accs, mammal)
@@ -839,6 +843,10 @@ def stage_evaluate(a, sizes):
             diff = lambda ii, k=k: auc(y[ii], scores[k][ii]) - auc(y[ii], scores[ctrl][ii])
             lo, hi = block_boot(diff, blocks, n=a.boot)
             say(f"  KEY TEST: LM {c[3:]} minus n-gram control, both stacked on annotation + conservation: {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
+            zs_lm, zs_ng = auc(y, d[c].values), auc(y, d.ngram.values)
+            credible = lo > 0 and zs_lm > zs_ng
+            say(f"  VERDICT {c[3:]}: " + ("LM adds information beyond annotation + conservation + a trivial context model."
+                if credible else f"NOT demonstrated (needs key-test interval above 0 AND zero-shot AUROC above the n-gram control's: here {zs_lm:.3f} vs {zs_ng:.3f})."))
             diff = lambda ii, c=c: auc(y[ii], d[c].values[ii]) - auc(y[ii], d.cons_mammal.values[ii])
             lo, hi = block_boot(diff, blocks, n=a.boot)
             say(f"  zero-shot LM {c[3:]} minus mammal conservation (both zero-shot): {diff(np.arange(len(y))):+.3f} [{lo:+.3f},{hi:+.3f}]")
