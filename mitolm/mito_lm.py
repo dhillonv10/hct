@@ -1017,18 +1017,32 @@ def stage_score(a, sizes):
             if len(s_) >= 5:
                 say(f"    {reg:10s} n={len(s_):4d} mean percentile {s_.percentile.mean():.3f}")
         if "vaf" in v and v.vaf.notna().sum() >= 10:
+            from scipy.stats import rankdata
             w = v.dropna(subset=["vaf"])
-            rho = spearmanr(w.percentile, w.vaf)[0]
+
+            def partial(x, y_, z):
+                """Spearman between x and y_ after removing the linear effect of rank(z) from both ranks."""
+                rx, ry, rz = rankdata(x), rankdata(y_), rankdata(z)
+                A_ = np.c_[np.ones(len(rz)), rz]
+                ex = rx - A_ @ np.linalg.lstsq(A_, rx, rcond=None)[0]
+                ey = ry - A_ @ np.linalg.lstsq(A_, ry, rcond=None)[0]
+                return float(np.corrcoef(ex, ey)[0, 1])
+            has_cov = "covar" in w and w.covar.notna().all()
             units = w["sample"].values if "sample" in w else np.arange(len(w))
             ub = np.unique(units)
             idx = {u: np.flatnonzero(units == u) for u in ub}
-            bs = []
+            bs, bp = [], []
             for _ in range(500):
                 ii = np.concatenate([idx[u] for u in rng.choice(ub, len(ub))])
                 bs.append(spearmanr(w.percentile.values[ii], w.vaf.values[ii])[0])
+                if has_cov:
+                    bp.append(partial(w.percentile.values[ii], w.vaf.values[ii], w.covar.values[ii]))
             lo, hi = np.nanpercentile(bs, [2.5, 97.5])
-            say(f"    damage vs heteroplasmy: Spearman {rho:+.3f} [{lo:+.3f},{hi:+.3f}] over {len(w)} variants "
+            say(f"    damage vs heteroplasmy: Spearman {spearmanr(w.percentile, w.vaf)[0]:+.3f} [{lo:+.3f},{hi:+.3f}] over {len(w)} variants "
                 f"(negative = more damaging variants held at lower heteroplasmy, as expected under purifying selection)")
+            if has_cov:
+                lo, hi = np.nanpercentile(bp, [2.5, 97.5])
+                say(f"    ...controlling for the covariate (carrier count / read depth): partial Spearman {partial(w.percentile.values, w.vaf.values, w.covar.values):+.3f} [{lo:+.3f},{hi:+.3f}]")
         return v
     rep = []
 
@@ -1045,7 +1059,8 @@ def stage_score(a, sizes):
         run(gn[gn.AF_hom >= 1e-3][["pos", "ref", "alt"]], "gnomAD common (AF_hom >= 0.001)", say)
         het = gn[(gn.AC_het >= 3) & (gn.AF_het > 0)].copy()
         het["vaf"] = het.max_hl
-        run(het[["pos", "ref", "alt", "vaf"]], "gnomAD heteroplasmic variants (vaf = max heteroplasmy)", say)
+        het["covar"] = np.log10(het.AC_hom + het.AC_het)                          # max heteroplasmy rises with the number of carriers, damaging variants are rarer
+        run(het[["pos", "ref", "alt", "vaf", "covar"]], "gnomAD heteroplasmic variants (vaf = max heteroplasmy)", say)
     if a.variants:
         res = run(read_variant_table(a.variants), os.path.basename(a.variants), say)
         outp = a.out_table or (os.path.splitext(a.variants)[0] + ".scored.tsv")
