@@ -139,7 +139,7 @@ _SUG = {}                                        # parsed-chemistry cache
 def _gapmer(sugar: str):
     """(wing5, gap, wing3, {sugar name: count}) from the sugar list: wings = leading / trailing non-DNA residues, gap = DNA residues."""
     if sugar not in _SUG:
-        t = _tokens(sugar)
+        t = [x.upper() for x in _tokens(sugar)]                                   # Atlas 2.0 spells the token 'cET', Atlas 1 'CET'
         n5 = next((i for i, x in enumerate(t) if x == "DNA"), len(t))
         n3 = next((i for i, x in enumerate(t[::-1]) if x == "DNA"), len(t))
         _SUG[sugar] = (n5, t.count("DNA"), n3, Counter(t))
