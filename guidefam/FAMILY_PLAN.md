@@ -127,3 +127,14 @@ it is not at parity by our own rule, and on gene-held-out screens it is behind b
 | S2b (genes OligoAI never saw) | 0.420 | 0.440 | +0.020 [-0.000, +0.059] |
 
 The two models' within-screen rankings agree at Pearson 0.57-0.64, so they are complementary. Only S1 has an interval above zero; this is a post-hoc analysis and needs confirmation on genes neither model has seen. See compare/results/aso_ensemble_posthoc.txt.
+
+### 8c. Pre-registered replication: 5-fold ASO Atlas 2.0 with the authors' out-of-fold OligoAI predictions (compare/CONFIRMATORY_PROTOCOL.md, committed before fitting)
+
+PRIMARY (within-condition Spearman, 1,497 screens, 115 patents, 5 folds): ours 0.407 | OligoAI 0.431 | 50/50 mix 0.475 -> **MIX - OligoAI +0.044 [+0.032, +0.057]**, mix better in 5 of 5 folds (+0.029 ... +0.056). Success criterion (lower bound > 0) met.
+Descriptive: ours - OligoAI -0.024 [-0.048, -0.001]. Rows from the 102 new patents (556 screens): MIX - OligoAI +0.040 [+0.018, +0.061]. Post-hoc: on ASO sequences absent from the training folds (94.7% of rows; 1,436 screens): +0.042 [+0.029, +0.055].
+
+Results that do NOT support a broad claim (reported as pre-specified):
+* Per-table Spearman (OligoAI's own definition, which mixes doses and cell lines inside a table): ours 0.362 | OligoAI 0.574 | MIX 0.550 -> MIX - OligoAI -0.024 [-0.038, -0.011]. Our model is trained on within-condition ranks, so it carries no information about dose or cell-line level; the 50/50 mix dilutes OligoAI's better ordering there.
+* Stratum B (ASO sequence absent from the Aug-2025 table; only 23 screens, 10 patents): ours 0.182 | OligoAI 0.383 | MIX 0.341; MIX - OligoAI -0.042 [-0.137, +0.029]. Underpowered, and it points the other way.
+
+Scoped claim the data support: within a given assay condition, adding a compact physics-feature model to OligoAI improves the ranking of ASOs (consistently across folds and patents). Not shown: improvement in across-dose / across-cell-line ordering, or that the compact model alone matches OligoAI (it trails by about 0.02-0.03).

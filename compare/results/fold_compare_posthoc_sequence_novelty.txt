@@ -1,0 +1,6 @@
+POST-HOC diagnostic (not pre-registered; added after the primary result to test whether the gain depends on ASO sequences shared between train and test folds).
+Input: fold_compare_rows.csv.gz produced by compare/fold_compare.py. Screens = (table, cell line, dose) with >= 20 ASOs in the stratum; bootstrap over patents (2,000 draws).
+Share of rows whose ASO sequence also occurs in the training folds: 5.3%  (94.7% = 170,545 rows are novel sequences within the protocol)
+
+sequence ALSO in training folds (62 screens, 21 patents):   ours 0.431 | OligoAI 0.391 | MIX 0.475   MIX - OligoAI +0.084 [+0.041,+0.120] | ours - OligoAI +0.041 [-0.037,+0.105]
+sequence NOT in training folds (1,436 screens, 111 patents): ours 0.406 | OligoAI 0.434 | MIX 0.477   MIX - OligoAI +0.042 [+0.029,+0.055] | ours - OligoAI -0.028 [-0.056,-0.004]

@@ -28,6 +28,7 @@ def load_table(a):
     d["fold"] = d.helm_annotation.map(dict(zip(folds.helm_annotation, folds.fold)))
     assert d.fold.notna().all(), "some rows have no fold"
     d["fold"] = d.fold.astype(int)
+    d["fold"] = d.fold - d.fold.min()                                          # the folds file counts from 1 (or 0); the prediction files are fold0..fold4; alignment is asserted in attach_oligoai
     d["patent"] = d.custom_id.map(pat)
     d["aso"] = d.aso_sequence_5_to_3.str.upper().str.replace("U", "T")
     d["cells_per_well"] = np.nan                                               # not in this table; the feature is treated as missing for every row
