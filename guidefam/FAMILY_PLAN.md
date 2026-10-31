@@ -117,3 +117,13 @@ What this does and does not show:
 
 Reading: the compact ASO model retains about 94% of OligoAI's within-screen Spearman on its own protocol (0.451 / 0.481) with ~10^-4 of the parameters, and picks equally good top-1 ASOs on S1 (1.48 vs 1.48);
 it is not at parity by our own rule, and on gene-held-out screens it is behind by 0.03-0.07. The mtDNA comparator is a general nuclear-trained DNA model and a weak one; no mitochondria-specific tool has been compared.
+
+### 8b. Post-hoc: compact model as an add-on to OligoAI (fixed 50/50 within-screen rank average, weight not tuned)
+
+| setting | OligoAI alone | 50/50 with ours | difference |
+|---|---|---|---|
+| S1 (OligoAI's protocol, 232 screens) | 0.481 | 0.510 | +0.029 [+0.006, +0.052] |
+| S2 (locked groups, favours OligoAI) | 0.487 | 0.503 | +0.017 [-0.015, +0.043] |
+| S2b (genes OligoAI never saw) | 0.420 | 0.440 | +0.020 [-0.000, +0.059] |
+
+The two models' within-screen rankings agree at Pearson 0.57-0.64, so they are complementary. Only S1 has an interval above zero; this is a post-hoc analysis and needs confirmation on genes neither model has seen. See compare/results/aso_ensemble_posthoc.txt.

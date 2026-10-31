@@ -1,0 +1,13 @@
+POST-HOC analysis (added after the head-to-head numbers were seen; the 50/50 weight was stated in advance and not tuned). Script: compare/ensemble_posthoc.py
+Input: aso_compare_rows.csv from the Colab run (compact LightGBM + OligoAI predictions). Fixed combination: mean of within-screen rank percentiles of ours and OligoAI.
+Bootstrap over patents (S1) or gene groups (S2, S2b), 2,000 draws; screens with >= 20 ASOs.
+
+S1  OligoAI's protocol, 232 screens, 38 patents:   ours 0.451 [0.333,0.519] | OligoAI 0.481 [0.335,0.571] | 50/50 rank average 0.510 [0.368,0.584]
+    MIX - OligoAI +0.029 [+0.006,+0.052] (P(MIX better) 0.988) | MIX - ours +0.060 [+0.025,+0.075]
+S2  locked gene groups, 571 screens, 79 groups (favours OligoAI): ours 0.417 | OligoAI 0.487 | MIX 0.503   MIX - OligoAI +0.017 [-0.015,+0.043] (0.867)
+S2b groups OligoAI never saw, 47 screens, 14 groups:          ours 0.388 | OligoAI 0.420 | MIX 0.440   MIX - OligoAI +0.020 [-0.000,+0.059] (0.970)
+Agreement of the two models' within-screen rankings (Pearson of rank percentiles): 0.62 (S1), 0.57 (S2), 0.64 (S2b) -> complementary.
+Descriptive weight sweep (weight on ours): S1 0.0:0.481 0.25:0.505 0.5:0.510 0.75:0.488 1.0:0.451; S2 0.487 / 0.507 / 0.503 / 0.466 / 0.417; S2b 0.420 / 0.439 / 0.440 / 0.421 / 0.388.
+
+Reading: the compact physics-feature model adds signal that OligoAI lacks; combined, it beats OligoAI alone on its own protocol (interval above 0) and points the same way on the gene-held-out sets (intervals include 0).
+Not a claim that the compact model beats the large one, and the combination is not compact. Needs confirmation on genes neither model has seen.
