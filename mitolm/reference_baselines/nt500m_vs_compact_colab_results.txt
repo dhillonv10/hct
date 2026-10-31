@@ -1,0 +1,17 @@
+Colab run (GPU) of compare/mito_nt_compare.py + mito_lm.py evaluate --external. Numbers copied from the user's pasted console output.
+Larger model: Nucleotide Transformer v1 500M human-ref (486M parameters, zero-shot, 768-nt windows, masked 6-mer log-likelihood ratio, 6 offsets x 2 strands).
+Compact scorer: logistic regression on region / codon position / consequence / BLOSUM62 / substitution type + conservation from 7,770 vertebrate (1,633 mammal) genomes.
+
+ClinVar P/LP (113) vs B/LB (1,597), AUROC [95% block-bootstrap CI]
+  conservation (mammals)                         0.822 [0.772,0.871]
+  context n-gram control (zero-shot)             0.631 [0.568,0.683]
+  Nucleotide Transformer 500M (zero-shot)        0.380 [0.326,0.432]   (below 0.5: anti-informative; sign not flipped)
+  annotation + conservation (compact, CV)        0.902 [0.867,0.940]
+  ... + n-gram control                           0.899 ; ... + Nucleotide Transformer 0.901   (key test NT minus control +0.002 [-0.001,+0.005] -> NOT demonstrated)
+ClinVar + gnomAD common (113 vs 2,538):  conservation 0.848 | n-gram 0.648 | NT 0.376 | compact stack 0.917 [0.883,0.950] | + NT 0.916 (key test -0.001 [-0.002,+0.000])
+Population constraint (6,000 variants, matched within substitution x flanking bases):
+  conservation (mammals) 0.785 [0.754,0.811] | n-gram 0.586 [0.558,0.622] | NT 0.487 [0.461,0.517] | compact stack 0.831 [0.800,0.850] | + NT 0.831 (key test +0.001 [-0.003,+0.006])
+
+Reading: the 486M-parameter model is at chance (constraint) or anti-informative (ClinVar) zero-shot and adds nothing to the compact scorer. Caveats: NT v1 human-ref was trained on the NUCLEAR
+genome (mtDNA is out of distribution); the compact scorer uses an explicit evolutionary panel the language model does not see; ClinVar labels partly rest on conservation (the constraint task is the cleaner test);
+no mitochondria-specific published tool (APOGEE2, MitoTIP, PON-mt-tRNA) and no larger/mt-trained genomic model has been compared yet.
