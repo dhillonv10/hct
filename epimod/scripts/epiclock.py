@@ -32,6 +32,7 @@ import json
 import math
 import os
 import re
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -429,8 +430,11 @@ class Plateau:
 
 def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup=300, ema_decay=0.999, max_steps=10**9, eval_every=500,
               patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None, post_init=None, budget=None):
-    """Train until the validation score (lower = better) stops improving.  Resumable; atomic checkpoints; non-finite steps skipped."""
-    state_p, best_p, stop_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / "STOP"
+    """Train until the validation score (lower = better) stops improving.  Resumable; atomic checkpoints; non-finite steps skipped.
+    Control files in ``out``: STOP pauses the whole run (delete it and re-run to resume); NEXT ends the current phase now and moves on."""
+    state_p, best_p, stop_p, next_p, done_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / "STOP", out / "NEXT", out / f"{name}_done.json"
+    if done_p.exists():                                                  # a finished phase is never trained again on a restart
+        r = json.load(open(done_p)); log(f"[{name}] already finished ({r['reason']}, best validation {r['best']:.4f}); skipping"); return r
     nodecay = lambda n: "emb" in n or n in ("mask_emb", "cls", "lin_u", "bias")
     emb = [p for n, p in model.named_parameters() if nodecay(n)]
     rest = [p for n, p in model.named_parameters() if not nodecay(n)]
@@ -457,6 +461,8 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
     while reason is None:
         if stop_p.exists():
             reason = "stop-file"; break
+        if next_p.exists():
+            reason = "next-file"; break
         if max_hours and (time.time() - t0) / 3600 > max_hours:
             reason = "max-hours"; break
         if st["step"] >= max_steps:
@@ -511,7 +517,12 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
         if dev.type == "mps":
             torch.mps.empty_cache()
     log(f"[{name}] finished: {reason} at step {st['step']}, best validation {st['best']:.4f}")
-    return dict(reason=reason, steps=st["step"], best=st["best"], hist=st["hist"])
+    res = dict(reason=reason, steps=st["step"], best=st["best"], hist=st["hist"])
+    if reason != "stop-file" and not reason.startswith("unstable"):
+        json.dump(res, open(done_p, "w"))
+    if reason == "next-file":
+        next_p.unlink(missing_ok=True)
+    return res
 
 
 def sample_weights(meta, idx, power=0.5, age_power=0.5):
@@ -687,9 +698,14 @@ def cmd_train(a):
                     tot += float((pred - beta).abs()[ok].sum()); n += int(ok.sum())
             return tot / n
         log(f"[pretrain] baseline (predict each CpG's training mean) MAE on hidden CpGs of held-out series: {base_mae:.4f}")
+        old = out / "pretrain.json"                                                  # written by earlier versions of this script when pretraining finished
+        if old.exists() and not (out / "pretrain_done.json").exists() and json.load(open(old)).get("reason") not in (None, "stop-file"):
+            shutil.copy(old, out / "pretrain_done.json")
         r1 = run_phase("pretrain", model, ssl_step, ssl_eval, out, dev, lr, max_steps=a.ssl_steps, eval_every=a.eval_every, patience=a.patience, max_hours=a.pretrain_hours, budget=budget)
         log(f"[pretrain] reconstruction MAE {r1['best']:.4f} vs mean-baseline {base_mae:.4f} ({1 - r1['best'] / base_mae:.0%} lower)")
         json.dump(dict(r1, baseline_mae=base_mae), open(out / "pretrain.json", "w"), indent=1)
+        if r1["reason"] == "stop-file":
+            return log("paused by the STOP file. Delete it and run the same command again to resume.")
     # ---- stage 2: age
     rg = ridge_fit(c, sp, mean, std, log)
     def warm_start(m):
@@ -706,6 +722,8 @@ def cmd_train(a):
         p = t_to_age(predict_t(m, c.X[vsel], K, a.val_draws, np.random.default_rng(13))); return float(np.median(np.abs(p - age_all[vsel])))
     r2 = run_phase("finetune", model, age_step, age_eval, out, dev, lr * (0.5 if pre_best.exists() and not a.no_pretrain else 1.0), max_steps=a.ft_steps, eval_every=a.eval_every,
                    patience=a.patience, max_hours=a.finetune_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None, post_init=warm_start, budget=budget)
+    if r2["reason"] == "stop-file":
+        return log("paused by the STOP file. Delete it and run the same command again to resume.")
     best = torch.load(out / "finetune_best.pt", map_location="cpu", weights_only=False)
     model.load_state_dict(best["state"]); model = model.to(dev)
     torch.save(dict(state=best["state"], cfg=cfg, K=K, cpgs=c.cpgs, mean=mean, std=std, ctx=ctx if cfg["context"] else None), out / "model.pt")
