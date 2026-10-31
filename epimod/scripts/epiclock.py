@@ -180,8 +180,9 @@ class EpiClock(nn.Module):
         self.mask_emb = nn.Parameter(torch.randn(d) * 0.02); self.cls = nn.Parameter(torch.randn(d) * 0.02)
         self.blocks = nn.ModuleList([Block(d, cfg["heads"], cfg.get("dropout", 0.0)) for _ in range(cfg["layers"])])
         self.norm = nn.LayerNorm(d); self.age_head = nn.Linear(d, 1)
-        self.lin_w = nn.Embedding(n_cpg, 1); nn.init.zeros_(self.lin_w.weight)
+        self.lin_u = nn.Parameter(torch.zeros(n_cpg))                 # linear age term over the WHOLE row (exact; initialised from ridge)
         self.lin_on = cfg.get("linear_skip", True); self.bias = nn.Parameter(torch.zeros(()))
+        nn.init.zeros_(self.age_head.weight); nn.init.zeros_(self.age_head.bias)      # start exactly at the linear clock
         self.recon = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, 1))
 
     def context(self, idx):
@@ -207,14 +208,12 @@ class EpiClock(nn.Module):
             x = blk(x, pad)
         return self.norm(x), z
 
-    def age_t(self, idx, beta, valid, n_obs):
-        """Age in the transformed space: head on [CLS] + unbiased estimate of the full-panel linear term."""
-        valid = valid.to(self.cls.device); h, z = self.encode(idx, beta, valid)
+    def age_t(self, idx, beta, valid, fz):
+        """Age in the transformed space = [CLS] correction learned by the transformer + linear clock over the full standardized row ``fz``."""
+        valid = valid.to(self.cls.device); h, _ = self.encode(idx, beta, valid)
         mu = self.age_head(h[:, 0]).squeeze(-1) + self.bias
         if self.lin_on:
-            w = self.lin_w(idx.to(z.device)).squeeze(-1)
-            nv = valid.sum(1).clamp(min=1).float()
-            mu = mu + LIN_SCALE * (w * z * valid.float()).sum(1) * (n_obs.to(z.device).float() / nv)   # unbiased full-panel estimate; scaled so Adam's steps stay small
+            mu = mu + LIN_SCALE * (fz.to(h.device) @ self.lin_u)
         return mu
 
     def reconstruct(self, idx, beta, valid, is_mask):
@@ -240,6 +239,12 @@ def draw(X_rows, K, rng, order=None):
     return torch.as_tensor(idx, dtype=torch.long), torch.as_tensor(beta), torch.as_tensor(valid), torch.as_tensor(obs.sum(1))
 
 
+def rowz(X_rows, mean, std):
+    """Standardized full rows (missing = 0, clipped to +-6) as a float32 torch tensor."""
+    z = np.clip((X_rows.astype(np.float32) / 100.0 - mean) / std, -6, 6); z[X_rows == 255] = 0.0
+    return torch.as_tensor(z.astype(np.float32))
+
+
 def ssl_batch(X_rows, K, rng, mask_frac=0.25):
     idx, beta, valid, _ = draw(X_rows, K, rng)
     nt = int(K * mask_frac); is_mask = torch.zeros_like(valid); is_mask[:, :nt] = True
@@ -249,10 +254,11 @@ def ssl_batch(X_rows, K, rng, mask_frac=0.25):
 
 @torch.no_grad()
 def predict_t(model, X_rows, K, R, rng, batch=256):
+    mean_, std_ = model.mean.cpu().numpy(), model.std.cpu().numpy()
     """Average over R disjoint random CpG subsets of size K (all observed CpGs when R*K covers them)."""
     model.eval(); out = np.zeros(len(X_rows)); dev = model.cls.device
     for s in range(0, len(X_rows), batch):
-        rows = X_rows[s:s + batch]; obs = rows != 255
+        rows = X_rows[s:s + batch]; obs = rows != 255; fz = rowz(rows, mean_, std_)
         order = rng.random(rows.shape, dtype=np.float32); order = np.where(obs, order, 2.0)
         rank = np.argsort(order, axis=1)                       # observed CpGs first, in random order
         acc = np.zeros(len(rows)); cnt = np.zeros(len(rows))
@@ -264,7 +270,7 @@ def predict_t(model, X_rows, K, R, rng, batch=256):
             if r > 0 and not valid.any():
                 break
             beta = np.where(valid, np.take_along_axis(rows, sl, 1) / 100.0, 0.5).astype(np.float32)
-            mu = model.age_t(torch.as_tensor(sl, dtype=torch.long), torch.as_tensor(beta), torch.as_tensor(valid), torch.as_tensor(obs.sum(1))).cpu().double().numpy()
+            mu = model.age_t(torch.as_tensor(sl, dtype=torch.long), torch.as_tensor(beta), torch.as_tensor(valid), fz).cpu().double().numpy()
             w = (valid.sum(1) > K // 4).astype(float) if r > 0 else np.ones(len(rows))
             acc += mu * w; cnt += w
         out[s:s + batch] = acc / np.maximum(cnt, 1)
@@ -289,11 +295,12 @@ class Plateau:
 
 
 def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup=300, ema_decay=0.999, max_steps=10**9, eval_every=500,
-              patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None):
+              patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None, post_init=None):
     """Train until the validation score (lower = better) stops improving.  Resumable; atomic checkpoints; non-finite steps skipped."""
     state_p, best_p, stop_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / "STOP"
-    emb = [p for n, p in model.named_parameters() if "emb" in n or n in ("mask_emb", "cls")]
-    rest = [p for n, p in model.named_parameters() if not ("emb" in n or n in ("mask_emb", "cls"))]
+    nodecay = lambda n: "emb" in n or n in ("mask_emb", "cls", "lin_u", "bias")
+    emb = [p for n, p in model.named_parameters() if nodecay(n)]
+    rest = [p for n, p in model.named_parameters() if not nodecay(n)]
     opt = torch.optim.AdamW([{"params": emb, "weight_decay": 0.0}, {"params": rest, "weight_decay": wd}], lr=lr)
     ema = copy.deepcopy(model).eval()
     for p in ema.parameters():
@@ -303,6 +310,12 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
     if init_from is not None and not state_p.exists():
         sd = torch.load(init_from, map_location="cpu", weights_only=False)["state"]
         miss = model.load_state_dict(sd, strict=False); ema.load_state_dict(model.state_dict()); log(f"[{name}] initialised from {init_from} ({len(miss.missing_keys)} new tensors)")
+    if post_init is not None and not state_p.exists():
+        post_init(model); ema.load_state_dict(model.state_dict())
+    if not state_p.exists():                                           # score the starting point: the result can never be worse than it on validation
+        sc0 = eval_fn(ema); st["best"], st["best_state"] = sc0, {k: v.detach().cpu().clone() for k, v in ema.state_dict().items()}
+        torch.save({"state": st["best_state"], "cfg": model.cfg, "val": sc0}, best_p); st["hist"].append(dict(step=0, val=round(sc0, 4))); ctrl.hist = [sc0]
+        log(f"[{name}] starting point: validation {sc0:.4f}")
     if state_p.exists():
         ck = torch.load(state_p, map_location="cpu", weights_only=False)
         model.load_state_dict(ck["model"]); ema.load_state_dict(ck["ema"]); opt.load_state_dict(ck["opt"]); ctrl.hist, ctrl.drops = ck["ctrl"]
@@ -375,22 +388,30 @@ def summarize(pred, age, name, extra=None):
 
 
 def standardize(X, mean, std):
-    x = X.astype(np.float32); miss = x == 255; x = x / 100.0; x = (x - mean) / std; x[miss] = 0.0
+    x = X.astype(np.float32); miss = x == 255; x = np.clip((x / 100.0 - mean) / std, -6, 6); x[miss] = 0.0
     return x
 
 
-def linear_baselines(c, sp, data_mean, data_std, log):
-    from sklearn.linear_model import Ridge, enet_path
+def ridge_fit(c, sp, mean, std, log, alphas=(300.0, 1000.0, 3000.0, 10000.0, 30000.0, 100000.0)):
+    """Closed-form ridge path through the Gram matrix; alpha is chosen on the validation series.  -> dict(w, b, alpha, val_medae)."""
+    tr, va = sp["train"], sp["val"]; age = c.meta.Age.to_numpy(float)
+    Xtr = standardize(c.X[tr], mean, std); y = age_to_t(age[tr]); ym = float(y.mean())
+    G = (Xtr.T @ Xtr).astype(np.float64); rhs = Xtr.T.astype(np.float64) @ (y - ym); del Xtr
+    Xva = standardize(c.X[va], mean, std); best = None
+    for a in alphas:
+        w = np.linalg.solve(G + a * np.eye(len(G)), rhs); e = float(np.median(np.abs(t_to_age(Xva @ w + ym) - age[va])))
+        if best is None or e < best["val_medae"]:
+            best = dict(w=w.astype(np.float32), b=ym, alpha=a, val_medae=e)
+    log(f"[ridge] alpha {best['alpha']:g}: validation MedAE {best['val_medae']:.2f} y (this is the linear clock the transformer starts from)")
+    return best
+
+
+def linear_baselines(c, sp, data_mean, data_std, log, rg):
+    from sklearn.linear_model import enet_path
     tr, va, te = sp["train"], sp["val"], sp["test"]
     Xtr, Xva, Xte = standardize(c.X[tr], data_mean, data_std), standardize(c.X[va], data_mean, data_std), standardize(c.X[te], data_mean, data_std)
     ytr, ava = age_to_t(c.meta.Age.to_numpy()[tr]), c.meta.Age.to_numpy()[va]
-    out = {}
-    best = (1e9, None)
-    for a in (100.0, 1000.0, 10000.0, 30000.0, 100000.0):
-        m = Ridge(alpha=a).fit(Xtr, ytr); e = np.median(np.abs(t_to_age(m.predict(Xva)) - ava))
-        if e < best[0]:
-            best = (e, m, a)
-    out["ridge"] = t_to_age(best[1].predict(Xte)); log(f"[baseline] ridge alpha {best[2]} (val MedAE {best[0]:.2f})")
+    out = {"ridge": t_to_age(Xte @ rg["w"] + rg["b"])}
     alphas, coefs, _ = enet_path(Xtr, ytr - ytr.mean(), l1_ratio=0.5, n_alphas=20, eps=1e-3)
     ev = [np.median(np.abs(t_to_age(Xva @ coefs[:, k] + ytr.mean()) - ava)) for k in range(coefs.shape[1])]
     k = int(np.argmin(ev)); out["elastic net"] = t_to_age(Xte @ coefs[:, k] + ytr.mean())
@@ -452,17 +473,22 @@ def get_device(name):
 def selftest(model, c, sp, K, dev, rng):
     """The device must agree with the CPU (loss + gradients) and be able to overfit a fixed batch; otherwise stop before a long run."""
     log(f"[selftest] comparing {dev} with cpu ...")
-    rows = c.X[sp["train"][:16]]; idx, beta, valid, nobs = draw(rows, K, np.random.default_rng(1)); y = torch.as_tensor(age_to_t(c.meta.Age.to_numpy()[sp["train"][:16]]), dtype=torch.float32)
+    rows = c.X[sp["train"][:16]]; idx, beta, valid, _ = draw(rows, K, np.random.default_rng(1)); fz = rowz(rows, model.mean.cpu().numpy(), model.std.cpu().numpy())
+    y = torch.as_tensor(age_to_t(c.meta.Age.to_numpy()[sp["train"][:16]]), dtype=torch.float32)
+    base = copy.deepcopy(model).cpu(); g = torch.Generator().manual_seed(0)            # random non-zero weights in every part, identical on both devices
+    for n, p in base.named_parameters():
+        if n in ("age_head.weight", "lin_u"):
+            p.data.copy_(torch.randn(p.shape, generator=g) * (0.05 if n == "age_head.weight" else 1.0))
     res = {}
-    for name, m in (("device", model), ("cpu", copy.deepcopy(model).cpu())):
-        m.eval(); m.zero_grad(); loss = nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, nobs).cpu(), y); loss.backward()
+    for name, m in (("device", copy.deepcopy(base).to(dev)), ("cpu", copy.deepcopy(base))):
+        m.eval(); m.zero_grad(); loss = nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, fz).cpu(), y); loss.backward()
         res[name] = (float(loss), torch.cat([p.grad.flatten().cpu().double() for p in m.parameters() if p.grad is not None]))
     cos = float((res["device"][1] * res["cpu"][1]).sum() / (res["device"][1].norm() * res["cpu"][1].norm() + 1e-12)); rel = abs(res["device"][0] - res["cpu"][0]) / max(res["cpu"][0], 1e-6)
     ok = rel < 5e-3 and cos > 0.99
     log(f"[selftest] loss {res['device'][0]:.5f} vs cpu {res['cpu'][0]:.5f} (rel {rel:.1e}), gradient cosine {cos:.5f}: {'PASS' if ok else 'FAIL'}")
-    m = copy.deepcopy(model).train(); opt = torch.optim.AdamW(m.parameters(), lr=1e-3); losses = []
+    m = copy.deepcopy(base).to(dev).train(); opt = torch.optim.AdamW(m.parameters(), lr=1e-3); losses = []
     for _ in range(60):
-        loss = nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, nobs).cpu(), y); opt.zero_grad(); loss.backward(); opt.step(); losses.append(float(loss))
+        loss = nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, fz).cpu(), y); opt.zero_grad(); loss.backward(); opt.step(); losses.append(float(loss))
     ok2 = losses[-1] < 0.5 * losses[0]; log(f"[selftest] overfit one batch: {losses[0]:.4f} -> {losses[-1]:.4f}: {'PASS' if ok2 else 'FAIL'}")
     if not (ok and ok2):
         sys.exit("SELF-TEST FAILED - the device does not reproduce the CPU. Re-run with --device cpu to confirm the code, and report the lines above.")
@@ -509,16 +535,21 @@ def cmd_train(a):
         log(f"[pretrain] reconstruction MAE {r1['best']:.4f} vs mean-baseline {base_mae:.4f} ({1 - r1['best'] / base_mae:.0%} lower)")
         json.dump(dict(r1, baseline_mae=base_mae), open(out / "pretrain.json", "w"), indent=1)
     # ---- stage 2: age
+    rg = ridge_fit(c, sp, mean, std, log)
+    def warm_start(m):
+        if m.lin_on:
+            m.lin_u.data.copy_(torch.as_tensor(rg["w"] / LIN_SCALE)); m.bias.data.fill_(rg["b"]); nn.init.zeros_(m.age_head.weight); nn.init.zeros_(m.age_head.bias)
+            log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
     tr_rows = sp["train"]; w = sample_weights(c.meta, tr_rows, 0.5, 0.5)
     vsel = sp["val"][np.random.RandomState(6).choice(len(sp["val"]), min(2000, len(sp["val"])), replace=False)]
     def age_step(m):
-        sel = rng.choice(tr_rows, B, p=w); idx, beta, valid, nobs = draw(c.X[sel], K, rng)
+        sel = rng.choice(tr_rows, B, p=w); rows = c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, mean, std)
         y = torch.as_tensor(age_to_t(age_all[sel]), dtype=torch.float32, device=m.cls.device)
-        return nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, nobs), y, beta=0.05)
+        return nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, fz), y, beta=0.05)
     def age_eval(m):
         p = t_to_age(predict_t(m, c.X[vsel], K, a.val_draws, np.random.default_rng(13))); return float(np.median(np.abs(p - age_all[vsel])))
     r2 = run_phase("finetune", model, age_step, age_eval, out, dev, lr * (0.5 if pre_best.exists() and not a.no_pretrain else 1.0), max_steps=a.ft_steps, eval_every=a.eval_every,
-                   patience=a.patience, max_hours=a.max_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None)
+                   patience=a.patience, max_hours=a.max_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None, post_init=warm_start)
     best = torch.load(out / "finetune_best.pt", map_location="cpu", weights_only=False)
     model.load_state_dict(best["state"]); model = model.to(dev)
     torch.save(dict(state=best["state"], cfg=cfg, K=K, cpgs=c.cpgs, mean=mean, std=std, ctx=ctx if cfg["context"] else None), out / "model.pt")
@@ -526,7 +557,7 @@ def cmd_train(a):
     log(f"[test] predicting {len(sp['test'])} held-out healthy controls with {a.test_draws} subsets of {K} CpGs each ...")
     preds = {"EpiClock": t_to_age(predict_t(model, c.X[sp["test"]], K, a.test_draws, np.random.default_rng(17)))}
     if not a.no_baselines:
-        preds.update(linear_baselines(c, sp, mean, std, log)); preds.update(published_clocks(c, sp, log))
+        preds.update(linear_baselines(c, sp, mean, std, log, rg)); preds.update(published_clocks(c, sp, log))
     df = test_report(c, sp, preds, out)
     json.dump(dict(preset=a.preset, cfg=cfg, K=K, pretrained=not a.no_pretrain, finetune=dict(r2, hist=None), test=df.round(4).to_dict("index")), open(out / "results.json", "w"), indent=1)
     log(f"done. model: {out / 'model.pt'}; report: {out / 'test_report.md'}")
