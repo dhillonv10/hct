@@ -138,3 +138,12 @@ Results that do NOT support a broad claim (reported as pre-specified):
 * Stratum B (ASO sequence absent from the Aug-2025 table; only 23 screens, 10 patents): ours 0.182 | OligoAI 0.383 | MIX 0.341; MIX - OligoAI -0.042 [-0.137, +0.029]. Underpowered, and it points the other way.
 
 Scoped claim the data support: within a given assay condition, adding a compact physics-feature model to OligoAI improves the ranking of ASOs (consistently across folds and patents). Not shown: improvement in across-dose / across-cell-line ordering, or that the compact model alone matches OligoAI (it trails by about 0.02-0.03).
+
+### 8d. Cascade simulation (compare/CASCADE_PROTOCOL.md, committed before running): compact model in front of OligoAI
+
+Out-of-fold predictions, 1,497 screens (mean size 83), 115 patents. Quality = mean measured inhibition (percentage points) of the top-5 ASOs per screen (random pick 44.1, oracle 78.6).
+compact only 60.06 | OligoAI only 60.80 | full 50/50 mixture 62.56.
+Cascade (compact ranks everything, OligoAI scores the top f, final = 50/50 inside the called set): f=5% 60.16 | 10% 61.13 | 25% 62.32 | 50% 62.61 | 100% 62.56. Random routing at 25%: 56.45.
+At 25% of large-model calls: shortfall vs the full mixture 0.25 points (upper bound 0.58), better than OligoAI alone by +1.51 [+0.68, +2.29], better than random routing by +5.87 [+4.95, +6.69]. Both pre-registered criteria MET.
+Caveats: simulation on out-of-fold predictions (no deployed pipeline); absolute gains are small (+1.5 points on a ~60-point base); cost reported as fraction of large-model calls, not seconds. The compact pipeline's current per-ASO RNA folding (~33 ms per context on one core)
+is not optimised (a transcript-level pass would amortise it); OligoAI on the 4-core sandbox CPU took ~0.66 s per ASO; GPU timings were not measured.
