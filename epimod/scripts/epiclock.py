@@ -11,7 +11,9 @@ What it learns
   (so any array, any missing values).  Stage 1 (pre-training, no labels): hide 25% of the CpGs and reconstruct them from the
   visible ones -- the transformer must learn co-methylation, island/shore structure and the genome's layout.  Stage 2: the same
   network predicts age (Horvath-transformed) from a CpG subset; at test time predictions over several disjoint subsets are averaged.
-  A per-CpG linear term (an unbiased estimate of the full-panel sum) lets it start at least as good as a linear clock.
+  The age output is a linear clock over the whole CpG row, initialised from a ridge fit on the training data (so it starts as good
+  as a linear clock), plus a correction learned by the transformer; a step-0 evaluation guarantees the final model is never worse than
+  that start on the validation series.  `--no-linear-skip` trains the transformer alone.
 
 Honest evaluation
   Test = the ComputAge benchmark studies (never used for training or model selection), healthy controls only, compared on the same
