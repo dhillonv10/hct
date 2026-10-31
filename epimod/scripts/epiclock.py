@@ -51,6 +51,7 @@ PRESETS = {                                                          # d_model, 
     "large": dict(d=256, layers=8, heads=8, K=768, batch=128, lr=3e-4, dropout=0.1),
 }
 ADULT = 20.0
+LIN_SCALE = 0.01
 LOGF = None
 
 
@@ -213,7 +214,7 @@ class EpiClock(nn.Module):
         if self.lin_on:
             w = self.lin_w(idx.to(z.device)).squeeze(-1)
             nv = valid.sum(1).clamp(min=1).float()
-            mu = mu + (w * z * valid.float()).sum(1) * (n_obs.to(z.device).float() / nv)
+            mu = mu + LIN_SCALE * (w * z * valid.float()).sum(1) * (n_obs.to(z.device).float() / nv)   # unbiased full-panel estimate; scaled so Adam's steps stay small
         return mu
 
     def reconstruct(self, idx, beta, valid, is_mask):
