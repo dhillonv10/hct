@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """oligoai_score.py -- score ASO rows with the released OligoAI checkpoint WITHOUT running the OligoAI repository's code.
 
+Verified against the real checkpoint (OligoAI_11_09_25.ckpt): parameter names match strictly, and on 96 rows from OligoAI's own training patents the predictions
+correlate with the labels (Pearson 0.63, MAE 17.9; the authors' checkpoint name suggests a validation MAE of about 19). An earlier version that added the attention
+residual to the un-normalised input (the released block adds it to the NORMALISED input) gave Pearson 0.14 and was stopped by the --check gate.
+
 Why a re-implementation: (1) the repository's attention module imports `flash_attn` (CUDA-only, pinned to an old build) at import time, and
 (2) its inference path uses Lightning's `load_from_checkpoint`, which un-pickles the file without restrictions. Here the forward pass is re-written in
 plain PyTorch from the repository's source (Apache-2.0: rinalmo/model/*.py, train_aso.py, rinalmo/data/*), parameter names are kept identical to
 the checkpoint's, and the checkpoint is read with torch.load(weights_only=True) with ONE class allowed (the scaler). Any naming mismatch fails loudly.
 
 Faithfully reproduced quirks of the released pipeline (they matter for matching its predictions):
-  * the chemistry vocabulary has the key 'cET' but the data's sugar token is 'CET', so every cEt position is encoded as padding (index 0);
+  * the chemistry vocabulary has the key 'cET' but the data's sugar token is 'CET', so every cEt position is encoded as padding (index 0)
+    (measured on 96 training rows that all carry cEt wings: Pearson 0.545 with this encoding and 0.545 with cEt as a real token -> no measurable effect);
   * TokenDropout is applied at inference too (embeddings are rescaled by 1 - 0.15*0.8 even when nothing is masked);
   * unknown nucleotides in the target context ('<unk>') are replaced by '<mask>'; missing dosage is imputed with the table's median.
 
@@ -111,7 +116,10 @@ class Block(nn.Module):
         self.out_layer_norm = nn.LayerNorm(embed)
 
     def forward(self, x, keep):
-        x = x + self.mh_attn(self.attn_layer_norm(x), keep)
+        # Exactly as the released TransformerBlock: `x = self.attn_layer_norm(x)` OVERWRITES x, so the attention residual is taken from the
+        # NORMALISED input (not the raw one); the second residual is taken before out_layer_norm.
+        x = self.attn_layer_norm(x)
+        x = x + self.mh_attn(x, keep)
         return x + self.transition(self.out_layer_norm(x))
 
 

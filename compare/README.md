@@ -19,8 +19,9 @@ Open `compare_colab.ipynb` in Colab, upload `hct_compare.zip`, run the cells top
 ## What was and was not tested
 Tested: OligoAI re-implementation (random tiny checkpoint through the safe-load path, parameter count 651.4M for the real configuration, padding invariance); ASO evaluation (shuffled labels + random stand-in predictions);
 Nucleotide Transformer scoring (4 variants on CPU; tokenizer layout verified); external-score merging (random stand-in scores).
-NOT tested: the real OligoAI checkpoint (its parameter names are taken from the source; a mismatch fails loudly before scoring; an integrity check on 200 training rows aborts if predictions do not track labels), and any GPU run.
+Real OligoAI checkpoint: loads strictly; after fixing one bug (residual taken from the normalised input) predictions on 96 of OligoAI's own training rows correlate with labels (Pearson 0.63), and the --check gate (200 training rows, aborts below 0.3) passes. The first Colab run was stopped by that gate with the buggy version (Pearson 0.14), as designed.
+NOT tested: the full scoring run on a GPU, and OligoAI's agreement with the authors' own reported numbers.
 
 ## Found while reading OligoAI's released code (not run, not yet confirmed against the paper)
-* Chemistry vocabulary key 'cET' vs data token 'CET': every cEt position is encoded as padding. Reproduced to match its predictions.
+* Chemistry vocabulary key 'cET' vs data token 'CET': every cEt position is encoded as padding. Reproduced to match its predictions; measured to have no effect on them (Pearson 0.545 either way on 96 cEt-containing rows), so not a meaningful flaw.
 * Train/val/test split is by patent (44% of test rows share a gene group with training).
