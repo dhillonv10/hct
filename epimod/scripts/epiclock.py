@@ -31,6 +31,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -51,7 +52,20 @@ PRESETS = {                                                          # d_model, 
     "small": dict(d=128, layers=4, heads=4, K=384, batch=64, lr=5e-4, dropout=0.0),
     "base": dict(d=192, layers=6, heads=6, K=512, batch=128, lr=4e-4, dropout=0.1),
     "large": dict(d=256, layers=8, heads=8, K=768, batch=128, lr=3e-4, dropout=0.1),
+    "xl": dict(d=512, layers=12, heads=8, K=1024, batch=128, lr=2e-4, dropout=0.1),         # ~50M parameters; for a 96+ GB machine
 }
+# ---- edit these instead of passing arguments -------------------------------------------------------------------------------
+CONFIG = dict(
+    preset="auto",            # auto = the largest model the machine's memory allows (xl >= 96 GB, large >= 48 GB, base >= 24 GB, else small)
+    memory_fraction=0.60,     # never plan to use more than this fraction of the machine's memory for training
+    eval_every=500,           # steps between validations
+    patience=6,               # validations without a 0.5% gain before the learning rate is halved (stops after 3 halvings)
+    pretrain_max_hours=72.0,  # safety cap per stage; the stage normally ends earlier, when validation stops improving
+    finetune_max_hours=72.0,
+    test_draws=16,            # CpG subsets averaged per test sample
+    out_dir="runs/epiclock",  # re-running the same command resumes from here
+)
+BUNDLE_SHA256 = "b7fa7c79a99107904d9eaba2f5c21ad516fc71c40279a3603c059fdd7ffc249b"      # epimod_bundle.tar.gz (the two-part data file)
 ADULT = 20.0
 LIN_SCALE = 0.01
 LOGF = None
@@ -73,6 +87,122 @@ def age_to_t(age):
 def t_to_age(t):
     t = np.asarray(t, np.float64)
     return np.where(t <= 0, (ADULT + 1) * np.exp(np.minimum(t, 0)) - 1, (ADULT + 1) * t + ADULT)
+
+
+# ======================================================================================================== data discovery / memory
+def find_data(arg=None) -> Path:
+    """Locate the data folder; if only the bundle files (epimod_bundle.tar.gz[.part-00/.part-01]) are around, unpack them."""
+    here = Path(__file__).resolve().parent
+    for cand in (arg, os.environ.get("EPIMOD_DATA"), here / "epiclock_data/epimod_bundle/data", here / "epimod_bundle/data", Path.cwd() / "epimod_bundle/data", here / "data"):
+        if cand and (Path(cand) / "lb/lite_universe.parquet").exists():
+            return Path(cand)
+    for d in (here, Path.cwd(), Path.home() / "Downloads", Path.home() / "Desktop", Path.home() / "Documents"):
+        whole = d / "epimod_bundle.tar.gz"
+        if whole.exists():
+            return unpack_bundle([whole], here / "epiclock_data")
+        found = {}
+        for f in sorted(d.glob("epimod_bundle.tar.gz.part-*")):
+            m = re.search(r"part-(\d+)", f.name)
+            if m and int(m.group(1)) not in found:
+                found[int(m.group(1))] = f
+        if found:
+            return unpack_bundle([found[k] for k in sorted(found)], here / "epiclock_data")
+    sys.exit("Could not find the data. Put the two files epimod_bundle.tar.gz.part-00 and epimod_bundle.tar.gz.part-01 (sent earlier) in the same folder as this script "
+             "(or in ~/Downloads) and run it again. They are unpacked automatically; nothing else is needed.")
+
+
+def unpack_bundle(parts, dest: Path) -> Path:
+    import hashlib, shutil, tarfile
+    dest.mkdir(parents=True, exist_ok=True); joined = dest / "bundle.joined.tmp"; h = hashlib.sha256()
+    log(f"unpacking the data bundle from {[p.name for p in parts]} ...")
+    with open(joined, "wb") as out:
+        for p in parts:
+            with open(p, "rb") as f:
+                for blk in iter(lambda: f.read(1 << 24), b""):
+                    h.update(blk); out.write(blk)
+    if h.hexdigest() != BUNDLE_SHA256:
+        joined.unlink(missing_ok=True)
+        sys.exit(f"The bundle files are incomplete or corrupted (checksum {h.hexdigest()[:12]}..., expected {BUNDLE_SHA256[:12]}...). Re-download both part files.")
+    with tarfile.open(joined, "r:gz") as tar:
+        for m in tar:
+            if m.name.startswith("epimod_bundle/data/") and ".." not in m.name and not m.name.startswith("/"):
+                tar.extract(m, dest)
+    joined.unlink(missing_ok=True)
+    log(f"data unpacked to {dest / 'epimod_bundle/data'}")
+    return dest / "epimod_bundle/data"
+
+
+def total_mem_gb() -> float:
+    import subprocess
+    try:
+        if sys.platform == "darwin":
+            return int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True).stdout.strip()) / 2**30
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
+    except Exception:
+        return 16.0
+
+
+def is_oom(e: BaseException) -> bool:
+    t = str(e).lower()
+    return "out of memory" in t or "invalid buffer size" in t or "insufficient memory" in t
+
+
+def free_mem(dev):
+    import gc
+    gc.collect()
+    if dev.type == "mps":
+        torch.mps.empty_cache()
+    elif dev.type == "cuda":
+        torch.cuda.empty_cache()
+
+
+def used_gb(dev) -> float:
+    try:
+        if dev.type == "mps":
+            return torch.mps.driver_allocated_memory() / 2**30
+        if dev.type == "cuda":
+            return torch.cuda.max_memory_allocated() / 2**30
+    except Exception:
+        pass
+    return 0.0
+
+
+class Budget:
+    """Effective batch = micro-batch x accumulation.  The micro-batch is the largest that fits the memory budget and shrinks on any
+    out-of-memory error, so the run keeps going (with more accumulation) instead of crashing."""
+
+    def __init__(self, target, dev, limit_gb):
+        self.target, self.micro, self.dev, self.limit = target, min(target, int(os.environ.get("EPICLOCK_MAX_MICRO", target))), dev, limit_gb
+
+    @property
+    def accum(self):
+        return math.ceil(self.target / self.micro)
+
+    def fit(self, model, trial):
+        """Halve the micro-batch until one forward+backward fits the budget."""
+        while self.micro >= 1:
+            try:
+                free_mem(self.dev)
+                if self.dev.type == "cuda":
+                    torch.cuda.reset_peak_memory_stats()
+                loss = trial(model, self.micro); loss.backward(); model.zero_grad(set_to_none=True)
+                u = used_gb(self.dev)
+                if u <= self.limit:
+                    log(f"[memory] micro-batch {self.micro} x {self.accum} accumulation steps = batch {self.target}; trial used {u:.1f} GB of the {self.limit:.0f} GB budget")
+                    return
+                log(f"[memory] micro-batch {self.micro} needs {u:.1f} GB > budget {self.limit:.0f} GB: halving")
+            except RuntimeError as e:
+                if not is_oom(e):
+                    raise
+                log(f"[memory] micro-batch {self.micro}: out of memory: halving")
+            model.zero_grad(set_to_none=True); free_mem(self.dev); self.micro //= 2
+        sys.exit("Not even a micro-batch of 1 fits in memory. Close other applications or choose a smaller model (edit CONFIG['preset']).")
+
+    def shrink(self):
+        if self.micro <= 1:
+            return False
+        self.micro //= 2; free_mem(self.dev); log(f"[memory] out of memory during training: micro-batch -> {self.micro} ({self.accum} accumulation steps)")
+        return True
 
 
 # ======================================================================================================== data
@@ -255,7 +385,8 @@ def ssl_batch(X_rows, K, rng, mask_frac=0.25):
 
 
 @torch.no_grad()
-def predict_t(model, X_rows, K, R, rng, batch=256):
+def predict_t(model, X_rows, K, R, rng, batch=0):
+    batch = batch or max(8, 65536 // K)
     mean_, std_ = model.mean.cpu().numpy(), model.std.cpu().numpy()
     """Average over R disjoint random CpG subsets of size K (all observed CpGs when R*K covers them)."""
     model.eval(); out = np.zeros(len(X_rows)); dev = model.cls.device
@@ -297,7 +428,7 @@ class Plateau:
 
 
 def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup=300, ema_decay=0.999, max_steps=10**9, eval_every=500,
-              patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None, post_init=None):
+              patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None, post_init=None, budget=None):
     """Train until the validation score (lower = better) stops improving.  Resumable; atomic checkpoints; non-finite steps skipped."""
     state_p, best_p, stop_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / "STOP"
     nodecay = lambda n: "emb" in n or n in ("mask_emb", "cls", "lin_u", "bias")
@@ -333,13 +464,25 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
         st["step"] += 1; s = st["step"]
         for g in opt.param_groups:
             g["lr"] = st["lr"] * min(1.0, s / warmup)
-        model.train(); loss = step_fn(model)
-        if not torch.isfinite(loss):
+        model.train(); opt.zero_grad(set_to_none=True); loss_val, finite = 0.0, True
+        try:
+            if os.environ.get("EPICLOCK_FAKE_OOM") and st["step"] == 3 and not st.get("faked"):          # test hook for the out-of-memory back-off
+                st["faked"] = True; raise RuntimeError("MPS backend out of memory (simulated)")
+            for _ in range(budget.accum):
+                l = step_fn(model, budget.micro)
+                if not torch.isfinite(l):
+                    finite = False; break
+                (l / budget.accum).backward(); loss_val += float(l.detach()) / budget.accum
+        except RuntimeError as e:
+            if not is_oom(e) or not budget.shrink():
+                raise
+            opt.zero_grad(set_to_none=True); st["step"] -= 1; continue
+        if not finite:
             bad += 1; st["step"] -= 1; opt.zero_grad(set_to_none=True)
             if bad > 25:
                 reason = "unstable (25 non-finite losses)"; break
             continue
-        opt.zero_grad(set_to_none=True); loss.backward()
+        loss = torch.tensor(loss_val)
         gn = float(nn.utils.clip_grad_norm_(model.parameters(), 1.0))
         if not math.isfinite(gn):
             bad += 1; st["step"] -= 1; opt.zero_grad(set_to_none=True); continue
@@ -504,9 +647,15 @@ def cmd_train(a):
         torch.backends.mha.set_fastpath_enabled(False)          # the eval-mode transformer fast path has had MPS bugs
     except AttributeError:
         pass
+    dev = get_device(a.device); mem = total_mem_gb()
+    if a.preset == "auto":
+        a.preset = "small" if dev.type == "cpu" else "xl" if mem >= 96 else "large" if mem >= 48 else "base" if mem >= 24 else "small"
+    if a.smoke:
+        a.preset = "tiny"
     P = PRESETS[a.preset]; cfg = dict(d=P["d"], layers=P["layers"], heads=P["heads"], context=not a.no_context, linear_skip=not a.no_linear_skip, dropout=P["dropout"] if a.dropout < 0 else a.dropout)
-    K, B, lr = a.tokens or P["K"], a.batch or P["batch"], a.lr or P["lr"]; dev = get_device(a.device)
-    data = Path(a.data); log(f"EpiClock | preset {a.preset} {cfg} | K={K} batch={B} lr={lr} | device {dev}")
+    K, B, lr = a.tokens or P["K"], a.batch or P["batch"], a.lr or P["lr"]
+    data = find_data(a.data); limit = a.memory_fraction * mem
+    log(f"EpiClock | preset {a.preset} {cfg} | K={K} batch={B} lr={lr} | device {dev} | machine memory {mem:.0f} GB (training budget {limit:.0f} GB) | data {data}")
     c = load_corpus(data); sp = make_splits(c, a.seed); mean, std = panel_stats(c.X, sp["train"]); ctx = genome_context(data, c.cpgs)
     log(f"corpus {len(c.X)} samples x {len(c.cpgs)} CpGs | train {len(sp['train'])} | val {len(sp['val'])} ({len(sp['val_series'])} series) | pretrain pool {len(sp['ssl'])} | test (HC) {len(sp['test'])}")
     torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
@@ -515,14 +664,19 @@ def cmd_train(a):
     if dev.type != "cpu" and not a.no_selftest:
         selftest(model, c, sp, K, dev, rng)
     age_all = c.meta.Age.to_numpy(float)
+    budget = Budget(B, dev, limit)
+    def trial(m, n):                                           # one representative forward pass, used to size the micro-batch
+        sel = rng.choice(sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(c.X[sel], K, rng)
+        return m.reconstruct(idx, ib, valid, is_mask).mean()
+    model.train(); budget.fit(model, trial)
     # ---- stage 1: masked-CpG reconstruction (no labels)
     pre_best = out / "pretrain_best.pt"
     if not a.no_pretrain:
         w_ssl = sample_weights(c.meta, sp["ssl"], 0.5, 0.0)
         vrows = c.X[sp["val"][np.random.RandomState(5).choice(len(sp["val"]), min(1500, len(sp["val"])), replace=False)]]
         base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - mean)))
-        def ssl_step(m):
-            rows = c.X[rng.choice(sp["ssl"], B, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
+        def ssl_step(m, n):
+            rows = c.X[rng.choice(sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
             pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
             err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
         def ssl_eval(m):
@@ -533,7 +687,7 @@ def cmd_train(a):
                     tot += float((pred - beta).abs()[ok].sum()); n += int(ok.sum())
             return tot / n
         log(f"[pretrain] baseline (predict each CpG's training mean) MAE on hidden CpGs of held-out series: {base_mae:.4f}")
-        r1 = run_phase("pretrain", model, ssl_step, ssl_eval, out, dev, lr, max_steps=a.ssl_steps, eval_every=a.eval_every, patience=a.patience, max_hours=a.max_hours)
+        r1 = run_phase("pretrain", model, ssl_step, ssl_eval, out, dev, lr, max_steps=a.ssl_steps, eval_every=a.eval_every, patience=a.patience, max_hours=a.pretrain_hours, budget=budget)
         log(f"[pretrain] reconstruction MAE {r1['best']:.4f} vs mean-baseline {base_mae:.4f} ({1 - r1['best'] / base_mae:.0%} lower)")
         json.dump(dict(r1, baseline_mae=base_mae), open(out / "pretrain.json", "w"), indent=1)
     # ---- stage 2: age
@@ -544,14 +698,14 @@ def cmd_train(a):
             log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
     tr_rows = sp["train"]; w = sample_weights(c.meta, tr_rows, 0.5, 0.5)
     vsel = sp["val"][np.random.RandomState(6).choice(len(sp["val"]), min(2000, len(sp["val"])), replace=False)]
-    def age_step(m):
-        sel = rng.choice(tr_rows, B, p=w); rows = c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, mean, std)
+    def age_step(m, n):
+        sel = rng.choice(tr_rows, n, p=w); rows = c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, mean, std)
         y = torch.as_tensor(age_to_t(age_all[sel]), dtype=torch.float32, device=m.cls.device)
         return nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, fz), y, beta=0.05)
     def age_eval(m):
         p = t_to_age(predict_t(m, c.X[vsel], K, a.val_draws, np.random.default_rng(13))); return float(np.median(np.abs(p - age_all[vsel])))
     r2 = run_phase("finetune", model, age_step, age_eval, out, dev, lr * (0.5 if pre_best.exists() and not a.no_pretrain else 1.0), max_steps=a.ft_steps, eval_every=a.eval_every,
-                   patience=a.patience, max_hours=a.max_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None, post_init=warm_start)
+                   patience=a.patience, max_hours=a.finetune_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None, post_init=warm_start, budget=budget)
     best = torch.load(out / "finetune_best.pt", map_location="cpu", weights_only=False)
     model.load_state_dict(best["state"]); model = model.to(dev)
     torch.save(dict(state=best["state"], cfg=cfg, K=K, cpgs=c.cpgs, mean=mean, std=std, ctx=ctx if cfg["context"] else None), out / "model.pt")
@@ -621,19 +775,26 @@ def cmd_probe(a):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter); sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("train"); t.add_argument("--data", default=os.environ.get("EPIMOD_DATA")); t.add_argument("--out", required=True)
-    t.add_argument("--preset", default="small", choices=list(PRESETS)); t.add_argument("--device", default="auto"); t.add_argument("--threads", type=int, default=0)
+    t = sub.add_parser("train"); t.add_argument("--data", default=None); t.add_argument("--out", default=CONFIG["out_dir"])
+    t.add_argument("--preset", default=CONFIG["preset"], choices=["auto"] + list(PRESETS)); t.add_argument("--device", default="auto"); t.add_argument("--threads", type=int, default=0)
     t.add_argument("--tokens", type=int, default=0); t.add_argument("--batch", type=int, default=0); t.add_argument("--lr", type=float, default=0.0); t.add_argument("--dropout", type=float, default=-1.0, help="-1 = preset default")
+    t.add_argument("--memory-fraction", type=float, default=CONFIG["memory_fraction"])
     t.add_argument("--ssl-steps", type=int, default=10**9, help="maximum pre-training steps (it stops earlier when validation stops improving)")
-    t.add_argument("--ft-steps", type=int, default=10**9); t.add_argument("--eval-every", type=int, default=500); t.add_argument("--patience", type=int, default=6)
-    t.add_argument("--max-hours", type=float, default=0.0, help="per stage; 0 = until converged"); t.add_argument("--seed", type=int, default=0)
-    t.add_argument("--val-draws", type=int, default=2); t.add_argument("--test-draws", type=int, default=16)
+    t.add_argument("--ft-steps", type=int, default=10**9); t.add_argument("--eval-every", type=int, default=CONFIG["eval_every"]); t.add_argument("--patience", type=int, default=CONFIG["patience"])
+    t.add_argument("--pretrain-hours", type=float, default=CONFIG["pretrain_max_hours"]); t.add_argument("--finetune-hours", type=float, default=CONFIG["finetune_max_hours"]); t.add_argument("--seed", type=int, default=0)
+    t.add_argument("--val-draws", type=int, default=2); t.add_argument("--test-draws", type=int, default=CONFIG["test_draws"])
     t.add_argument("--no-pretrain", action="store_true"); t.add_argument("--no-context", action="store_true"); t.add_argument("--no-linear-skip", action="store_true")
-    t.add_argument("--no-baselines", action="store_true"); t.add_argument("--no-selftest", action="store_true")
+    t.add_argument("--no-baselines", action="store_true"); t.add_argument("--no-selftest", action="store_true"); t.add_argument("--smoke", action="store_true", help="30-step functional check")
     p = sub.add_parser("predict"); p.add_argument("--model", required=True); p.add_argument("--beta", required=True); p.add_argument("--out", default="epigenetic_ages.csv")
     p.add_argument("--device", default="auto"); p.add_argument("--draws", type=int, default=16)
-    q = sub.add_parser("probe"); q.add_argument("--model", required=True); q.add_argument("--data", default=os.environ.get("EPIMOD_DATA")); q.add_argument("--device", default="auto")
+    q = sub.add_parser("probe"); q.add_argument("--model", required=True); q.add_argument("--data", default=None); q.add_argument("--device", default="auto")
+    if len(sys.argv) == 1 or sys.argv[1].startswith("-") and sys.argv[1] not in ("-h", "--help"):
+        sys.argv.insert(1, "train")                                         # `python epiclock.py` alone trains with everything automatic
     a = ap.parse_args()
+    if a.cmd == "train" and a.smoke:
+        a.ssl_steps, a.ft_steps, a.eval_every, a.test_draws, a.no_baselines, a.no_selftest = 30, 30, 15, 2, True, True
+    if a.cmd == "probe":
+        a.data = str(find_data(a.data))
     {"train": cmd_train, "predict": cmd_predict, "probe": cmd_probe}[a.cmd](a)
 
 
