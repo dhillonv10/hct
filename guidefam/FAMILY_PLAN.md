@@ -104,3 +104,16 @@ What this does and does not show:
 * each physics-motivated feature group helps, with intervals above zero;
 * a small neural net does not beat the boosted model on this task, and ensembling them gains +0.010 here (not significant), less than on Cas13d (+0.026);
 * NO comparison with OligoAI exists yet, so there is no claim about SOTA. That needs OligoAI's predictions on the same rows (M4 job; weights licence unstated; checkpoint is a pickle, load with a restricted-class loader).
+
+## 8. Head-to-head results against much larger models (pre-registered rules in compare/README.md; locked groups scored once)
+
+| arm | compact model | larger model | result | rule |
+|---|---|---|---|---|
+| ASO, S1 (OligoAI's own protocol, 38 test patents) | LightGBM, 0.451 [0.341, 0.522] | OligoAI ~650M, 0.481 [0.349, 0.571] | -0.030 [-0.060, +0.017] | in the "inconclusive" band (0.02-0.03 behind) |
+| ASO, S2 (81 locked gene groups; favours OligoAI, which trained on these genes) | 0.417 | 0.487 | -0.069 [-0.130, -0.018] | biased toward OligoAI |
+| ASO, S2b (14 groups OligoAI never saw; 47 screens) | 0.388 | 0.420 | -0.033 [-0.063, +0.040] | misses the 0.03 condition by 0.003; CI includes 0 |
+| mtDNA, ClinVar (113 P/LP) | 0.902 AUROC | Nucleotide Transformer 486M, 0.380 | NT adds 0 to the compact stack | better |
+| mtDNA, population constraint (matched) | 0.831 | 0.487 | NT adds 0 | better |
+
+Reading: the compact ASO model retains about 94% of OligoAI's within-screen Spearman on its own protocol (0.451 / 0.481) with ~10^-4 of the parameters, and picks equally good top-1 ASOs on S1 (1.48 vs 1.48);
+it is not at parity by our own rule, and on gene-held-out screens it is behind by 0.03-0.07. The mtDNA comparator is a general nuclear-trained DNA model and a weak one; no mitochondria-specific tool has been compared.

@@ -1,0 +1,15 @@
+=== S1  OligoAI's protocol (patent split, seed 42); both trained on the same training patents: 23369 rows, 235 screens, 38 bootstrap units
+  ours (compact LightGBM)            within-screen Spearman 0.451 [0.341,0.522] (232 screens); median top-1 / mean target 1.48
+  OligoAI (RiNALMo-giga, ~650M)      within-screen Spearman 0.481 [0.349,0.571] (232 screens); median top-1 / mean target 1.48
+  ours (compact LightGBM) minus OligoAI (RiNALMo-giga, ~650M): -0.030 [-0.060,+0.017]
+
+=== S2  gene-held-out (our 81 LOCKED gene groups; OligoAI has seen most of these genes -> favours OligoAI): 50813 rows, 599 screens, 81 bootstrap units
+  ours (compact LightGBM)            within-screen Spearman 0.417 [0.343,0.484] (571 screens); median top-1 / mean target 1.43
+  OligoAI (RiNALMo-giga, ~650M)      within-screen Spearman 0.487 [0.448,0.523] (571 screens); median top-1 / mean target 1.58
+  ours (compact LightGBM) minus OligoAI (RiNALMo-giga, ~650M): -0.069 [-0.130,-0.018]
+
+=== S2b locked groups that do NOT occur in OligoAI's training patents (the cleanest gene-held-out subset for OligoAI): 5518 rows, 47 screens, 14 bootstrap units
+  ours (compact LightGBM)            within-screen Spearman 0.388 [0.339,0.462] (47 screens); median top-1 / mean target 1.36
+  OligoAI (RiNALMo-giga, ~650M)      within-screen Spearman 0.420 [0.321,0.459] (47 screens); median top-1 / mean target 1.45
+  ours (compact LightGBM) minus OligoAI (RiNALMo-giga, ~650M): -0.033 [-0.063,+0.040]
+(Colab GPU run by the user; OligoAI scored with compare/oligoai_score.py after the residual-connection fix. Locked groups were scored once, here.)
