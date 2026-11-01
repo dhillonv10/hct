@@ -8,3 +8,4 @@ data_untrusted/
 guidefam/results/aso/*.log
 guidefam/results/aso/*oof*.csv
 hct_compare.zip
+distill/rnakd_pilot.zip
