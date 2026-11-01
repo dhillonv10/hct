@@ -1,6 +1,7 @@
 # Distilled compact RNA backbone family: plan, prior art, pre-registered decision rule
 
 Status: PLAN ONLY. Nothing below has been run. Written 2026-11-01, before any distillation code exists, so the decision rule in section 5 is fixed before results.
+**Superseded in part by `COLAB_PLAN.md` (v2, same day):** its research questions, arms, gates and decision rules (section 6 there) replace sections 1, 4 and 5 below; prior art, licences and design choices below still stand.
 Evidence labels: **[read]** = text read directly this session; **[figure]** = read off a figure image, not a table; **[search]** = web-search snippet only; **[ours]** = measured by code in this repo; **[judgement]** = my estimate, not a result.
 
 ## 1. The claim we would be testing (and the claims we would NOT make)
