@@ -96,6 +96,18 @@ Estimated cost through Phase 4: ~15-25 A100-hours **[judgement]**. To save units
 
 Colab limits, from the Colab FAQ **[read]**: Pro+ "supports continuous code execution for up to 24 hours if you have sufficient compute units"; for other paid tiers the FAQ gives only "notebooks can run for at most 12 hours, depending on availability and your usage patterns"; limits are not published ("Colab does not publish these limits"); "background execution" appears only as a feature of "higher" Google AI plans, with no mechanism described; if units run out "you can expect to experience backend termination"; per-tier unit allotments, A100 hourly burn and disk size are NOT on the FAQ. Drive caveats: keep <10,000 items per folder; copy data to the VM as archives rather than many small reads. Consequence: do not design for a 24 h run, and do not assume the run survives closing the browser.
 
+### 7c. RiNALMo source facts that fix the teacher route (read by a subagent from raw GitHub files; nothing run, no weights downloaded)
+
+* **Route (a), the official package, is not viable as a drop-in:** `rinalmo/model/attention.py` imports `flash_attn` (and `flash_attn.layers.rotary`, `bert_padding`) unguarded, and `model.py`/`modules.py` import it transitively, so `import rinalmo.pretrained` fails without flash-attn whatever the config says; the flash path is CUDA + fp16/bf16 only. A pure-PyTorch branch exists in the source but is unreachable without editing the config dict. **Decision: route (b)**: our plain-PyTorch encoder (`compare/oligoai_score.py`; giga = 1280-d, 33 blocks, 20 heads; TokenDropout stays active at eval, as in the released model) plus the task heads re-implemented from the Apache-2.0 source.
+* **Heads are small and simple:**
+  * MRL: `Linear(1280->32)` -> 6 x ResNet1D blocks (Conv1d k=3 same, InstanceNorm1d, ELU, Conv1d, InstanceNorm1d, ELU, residual add) -> masked mean over non-pad positions -> Dropout(0.2) -> `Linear(32->1)`; padded positions of the representation are zeroed first; targets are standardised with a fitted scaler (buffers `_mean`, `_std`), predictions inverse-transformed and clamped at 0.
+  * Splice: `Linear(1280->128)` -> GELU -> `Linear(128->1)` on the `<cls>` token, BCE-with-logits.
+  * ncRNA: `Linear(1280->256)` -> GELU -> `Linear(256->88)` on `<cls>`, cross-entropy.
+* **Tokenisation:** 22-token vocabulary, specials in the order `<cls> <pad> <eos> <unk> <mask>` then `A C G T I R Y K M S W B D H V N -`; U is mapped to T; each sequence is `<cls> ... <eos>`; no maximum length defined.
+* **Expected state-dict prefixes (inferred from attribute names, NOT checked against the .pt files): MRL `lm.*`, `pred_head.*`, `scaler._mean/_std`; splice and ncRNA `rinalmo.*`, `pred_head.*`; pretrained file = bare `embedding.*`, `transformer.*`, `lm_mask_head.*`.** Phase 1 begins by loading each file with `torch.load(weights_only=True)`, printing the key set, and failing loudly on any mismatch (the OligoAI loader's strict-key check is the model for this).
+* **Fallback if the fine-tuned MRL checkpoint will not reproduce 0.860 / 0.925:** fine-tune our own teacher on MRL with the same head (est. 1-2 h on an A100, unmeasured) and report our numbers beside the published ones.
+* **Gotchas noted in the source (not run):** the pretrained weights are also hosted on Google Drive via `gdown` under the name `giga-v1` (a different host and name from the Zenodo `rinalmo_giga_pretrained.pt`; identity not checked), so Zenodo is our source; MRL/splice `--init_params` expects a bare state dict, not a Lightning `.ckpt`; `Random7600` is the validation set in their MRL code (section 7b).
+
 ## 8. Facts resolved while writing, and what is still open
 
 Resolved **[read]**:
