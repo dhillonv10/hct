@@ -16,7 +16,7 @@ Would NOT claim: "foundation model", "beats SOTA", or anything on tasks not in t
 |---|---|---|---|---|---|
 | HelixNano-mRNA (arXiv 2604.08574, ICLR 2026 MLGenX tiny-paper track) | mRNA | Evo2-1B -> ~5M hybrid Mamba-attention | embedding matching (cosine 1.0 + MSE 0.1), 2 matched layers (5th, 8th student vs 12th, 25th teacher), logit KD "unstable"; 27M RefSeq mRNAs, 4xA100, 24 h; mRNA-bench [read] | weights on HF (not opened), no code link | **[read]**. Figure: student mean z ~0.97 vs Evo2-1B ~1.4 vs Orthrus-1M ~0.76; per task the student is below the teacher on 8/9 tasks in the bar chart (half-life 0.55 vs 0.64, MRL 0.37 vs 0.43), roughly equal on 2 noisy tasks **[figure]**. The same plot shows an "Orthrus+MLM" point (no distillation, ~1M params) above the teacher **[figure, unlabeled in text]** |
 | HAD (arXiv 2505.20836) | human DNA | NTv2-500M -> 1.1M GDN+attention | MSE on visible tokens + masked reconstruction, 15% k-mer group masking; beats teacher on 12/18 NT-benchmark rows, loses all 6 promoter/splice rows (up to -12.3 pts); text overstates "consistently outperforms" [read] | no code, no weights, no compute reported | **[read]**; DNA only |
-| BIO-Distiller (ICLR 2026 MLGenX poster) | RNA, 6 tasks | multiple FMs -> supervised baselines | "well-tuned supervised baselines can still outperform foundation models"; distillation lifts them "by up to 10%" [read: abstract only] | unknown | **Paper text NOT read** (OpenReview blocked automated access). Must be read by a human before any novelty claim: https://openreview.net/forum?id=R3W8AgdZnv |
+| BIO-Distiller (ICLR 2026 MLGenX workshop paper; EPFL) | RNA, 6 BEACON tasks (NCR, APA, MRL, PRS OFF/ON/ONF) | RNA-FM, RNA-MSM, UTR-LM (MRL), UTR-LM (TE+EL), also HyenaDNA-tiny and ESM-2 t6-8M -> a **task-specific 3-layer CNN** per task | feature KD (fitnet; "eucosine" = Euclidean + cosine on penultimate layers, with a learned projection) beats logit KD; **fine-tuning the teacher on the task first helps significantly**; best distilled CNN beats the tuned CNN baseline by ~2% R2 on regression and ~10 MCC points on NCR (84.15 -> 94.64); ensembling teachers helps (EnsAvg-RNA best on APA/MRL/ON/ONF). Baseline CNN tuned with 100 ASHA configs **[read, full PDF]** | code: github.com/epfl-lts2/biod-mlgenx (stated) | **[read]**. Differences from our plan: their student is a per-task CNN, not a pretrained general backbone; no size ladder; teachers are the older ~100M models, not RiNALMo-giga; each student distils from a teacher fine-tuned on that task. Their results are the closest prior art for our loss choice and for "tuned supervised baselines are strong" |
 | RNAMergeDistill (Japanese Soc. Mol. Biol. 2025 abstract) | RNA LM | multi-teacher | title and authors only [search] | unknown | not read |
 | BEACON-B, RNAMamba-14M, BiRNA-BERT, LncRNA-BERT | RNA | none (trained directly) | small models reaching or beating larger ones on some tasks [search] | various | the real competitors at small size |
 
@@ -41,7 +41,11 @@ Our plain-PyTorch RiNALMo re-implementation (`compare/oligoai_score.py`, validat
 5. Data efficiency: clustered sampling vs random at equal token count.
 6. Teacher-size check: HAD found only the 500M teacher helped, 50M/100M did not **[read]**; we can repeat with RiNALMo micro / mega / giga as teachers.
 
-**Budget.** M4 student training measured earlier: 4.87M-parameter model, ~204 windows/s x 512 nt, i.e. ~1e5 nt/s **[ours, user's M4]**. So 1e9 training tokens is ~2.8 h for a 5M student; 20M is roughly 3-4x slower **[judgement]**. Teacher caching on Colab: **throughput of RiNALMo-giga on the Colab GPU is unmeasured** (the first step of the plan). Back-of-envelope: 0.33 TFLOP per 256-nt sequence; on a GPU delivering ~10-50 TFLOP/s that is ~30-150 sequences/s, so 0.4M sequences take ~1-4 h **[judgement]**.
+**Budget and where to run what.** Nothing below is measured for THIS model; the only measured number is an earlier M4 run of a different 4.87M model (~204 windows/s x 512 nt, ~1e5 nt/s **[ours, user's M4]**).
+* **Teacher caching: Colab A100.** 650M parameters x 256 nt is ~0.33 TFLOP per sequence forward; at an effective 60-100 TFLOP/s that is ~180-300 sequences/s, so 0.4M sequences take ~25-60 min **[judgement, measure first]**. On the M4 the same job is plausibly a day or more (assumed ~1-2 TFLOP/s effective) **[judgement]**.
+* **One student, one run:** M4 is fine: ~3 h per 1e9 tokens at 5M parameters (20M ~3-4x slower) **[judgement from the measured number]**. An A100 should be several times faster **[judgement]**.
+* **The grid is the real cost.** Pilot = 3 arms (scratch, MLM-only, distilled) x 3 seeds at 5M = 9 runs; full study = 4 sizes x ~6 arms x 3 seeds ~ 70 runs, plus fine-tuning each on every task. On the M4 that is hundreds of hours; on an A100 it is tens of hours. Colab units: A100 burn is reported anywhere from ~5 to ~13 units/h (check the Resources tab in your own session); Pro has 100 units/month, Pro+ ~500-600, and 24 h background runs need Pro+ with enough units [search: https://mccormickml.com/2024/04/23/colab-gpus-features-and-pricing/ and others, unverified against Google's page].
+* **So:** develop and debug on the M4 with tiny runs; cache targets and run the grids on Colab (resumable, checkpoints to Drive, one notebook plus one zip as before); reproduce the single headline student on the M4 so the "laptop" claim is true.
 
 ## 4. Evaluation
 
@@ -63,7 +67,7 @@ Two lessons from the RiNALMo paper (arXiv v2, read) set the protocol:
 * **bpRNA TS0 secondary structure (F1 with +-1 nt tolerance).** Needs a pair head (RiNALMo fine-tunes a 2D head; head compute is the cost). Optional in v1; treat as stretch.
 * **NoncodingRNAFamily and Modification (BEACON).** Established second source; a new encoder needs its own model class and tokenizer in the BEACON repo (Apache-2.0 code, data on Google Drive, no data licence stated) **[read]**. BEACON's own numbers exclude RiNALMo/ERNIE-RNA, so "SOTA" there is the BEACON table, not RiNALMo.
 
-**Negative-control task: MRL (Sample et al. 2019).** BEACON's table shows tiny nets within 1.0 of the best model on MRL (83.94 vs 84.98 R2), so I expect NO distillation headroom here. Report it anyway as the case where a compact supervised model already suffices; it keeps the paper honest about where the idea does not help **[judgement]**.
+**MRL (Sample et al. 2019): headroom depends on the baseline, so no pre-labelling.** BEACON's table (not re-checked) has tiny nets within 1.0 of the best model (83.94 vs 84.98 R2), but BIO-Distiller's tuned 3-layer CNN gets R2 74.80 vs 82.94 for the best fine-tuned FM on the same BEACON task **[read]**. MRL therefore goes through the inclusion rule in section 5 like every other task; whichever table it lands in is reported.
 
 **Secondary (frozen probe, LncBench):** `loc_clf`, `rbp_K562`, `rbp_HepG2`, `coding_clf`, where frozen RiNALMo-micro beats k-mers with a paired CI above 0 on dev **[ours, results/v2/paired_comparisons.md]**. Task inclusion for the giga teacher is decided on dev BEFORE any student is trained.
 
@@ -82,7 +86,7 @@ Retention R = (S - B) / (T - B) per task and metric, with T = published RiNALMo-
 
 ## 6. Risks (what could make this unpublishable)
 
-1. **Novelty.** BIO-Distiller text unread; HelixNano/HAD show the method exists. Our edge is the ncRNA ladder + leak controls + ablation + released code, which is a tiny-paper-level contribution at best **[judgement]**.
+1. **Novelty.** HelixNano, HAD and BIO-Distiller show the method exists, and BIO-Distiller (code released) already shows distillation helps tuned CNNs on BEACON tasks. Our edge is a general-purpose ncRNA backbone ladder from RiNALMo-giga + leak controls + ablation + released code, a tiny-paper-level contribution at best **[judgement]**. A second design risk from BIO-Distiller: **a teacher fine-tuned on the task helped significantly**, which a task-agnostic backbone distilled once cannot use; our results may therefore trail per-task distillation.
 2. **Retention on tiny students may be poor.** In the mRNA case the 5M student sits between the 1M specialist and the 1B teacher; per-task gaps to the teacher were 0.02-0.10 in score **[figure]**. At <= 1M expect worse. **[judgement]**
 3. **Probe protocol vs fine-tuning.** Teacher advantage under frozen probes can differ from fine-tuning; our lncRNA tasks are noisy (intervals about +-0.03 to +-0.08) **[ours]**, so R may be unmeasurable on some tasks.
 4. **Inherited contamination.** Teacher saw RNAcentral-like data; students do too. Reported, not removable.
@@ -91,7 +95,7 @@ Retention R = (S - B) / (T - B) per task and metric, with T = published RiNALMo-
 
 ## 7. Steps, each with a stop
 
-0. Human reads the BIO-Distiller PDF (OpenReview) and reports overlap. Stop if it already does a general ncRNA ladder with released code.
+0. DONE: BIO-Distiller PDF read (see section 2). It does per-task CNN students from older teachers; it does not do a general backbone ladder from RiNALMo-giga. Overlap is partial; the loss choices (feature KD with eucosine, fine-tuned teacher) are borrowed from it and must be cited.
 1. Measure RiNALMo-giga forward throughput on the user's Colab GPU at 128/256/512 nt; check the Zenodo checkpoint format and licence field.
 2. Build B (from-scratch same-architecture students) on splice-site (GS_1) and the LncBench tasks; apply the inclusion rule of section 5 using the published 650M numbers; fix the included task list BEFORE any distilled student exists. Check GS_1 size and licence.
 3. Build corpus, leak filter, compressed targets (Colab, one pass).
