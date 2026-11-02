@@ -379,10 +379,13 @@ def stage_report(work, out=None):
         iid=(IID + "_r2", "mean"), iid_sd=(IID + "_r2", "std"),
         ood=(OOD + "_r2", "mean"), ood_sd=(OOD + "_r2", "std"),
         clean=("iid_test_r2", "mean")).reset_index()
-    base_cells = agg[agg.arm == "scratch"]
-    spread = float(np.nanmax([base_cells.iid_sd.max(), base_cells.ood_sd.max()]))   # noise of the BASELINE arm, so a
-    allmax = float(np.nanmax([agg.iid_sd.max(), agg.ood_sd.max()]))                 # collapsing KD arm cannot inflate the bar
-    say(f"\nseed spread, max sd over the scratch cells: {spread:.4f}   [max over every cell: {allmax:.4f}]")
+    # The yardstick is the noise of the BASELINE arm, so a collapsing KD arm cannot inflate the bar. It must also come from
+    # the SAME train fraction as the comparisons it gates (every gate below is on frac 1.0): a cell trained on 5% of the
+    # labels is far noisier, and pooling it in would silently raise the bar for the full-data comparison.
+    base_cells = agg[(agg.arm == "scratch") & (agg.frac == 1.0)]
+    spread = float(np.nanmax([base_cells.iid_sd.max(), base_cells.ood_sd.max()]))
+    allmax = float(np.nanmax([agg.iid_sd.max(), agg.ood_sd.max()]))
+    say(f"\nseed spread, max sd over the scratch cells at frac 1.0: {spread:.4f}   [max over every cell, any frac: {allmax:.4f}]")
     say("a margin counts as real only above the first number")
 
     order = [p for p in PRESETS if p in set(agg.preset)]
