@@ -2,7 +2,10 @@
 
 | file | what it is |
 |---|---|
-| `PILOT_PROTOCOL.md` | the pre-registered pilot: question, splits, arms, controls and the five gates. Committed before the pilot ran |
+| `RESULTS.md` | what the first Colab run measured: the teacher reproduces exactly, a 2.6M CNN lands within 0.037 R2 of it, distillation adds nothing |
+| `PILOT_PROTOCOL.md` | the pre-registered pilot (mean ribosome load): question, splits, arms, controls and the five gates |
+| `CLINICAL_PROTOCOL.md` | the pre-registered clinical benchmark (ClinVar variants in non-coding RNA genes) and its gates |
+| `clinical_colab.ipynb` | the notebook that runs the clinical benchmark on Colab |
 | `COLAB_PLAN.md` | the wider project: prior art, how it differs from BIO-Distiller, staged Colab plan, pivots if a gate fails |
 | `PLAN.md` | the first draft of the plan; partly superseded by `COLAB_PLAN.md`, kept for the prior-art and licence notes |
 | `pilot_colab.ipynb` | the notebook that runs the pilot on Colab |
@@ -17,9 +20,28 @@ question the prior art has not: does the student keep the teacher's advantage **
 in distribution? Controls (permuted teacher targets, untrained teacher) decide whether any gain is transferred knowledge or
 regularisation.
 
+## Two benchmarks
+
+**`rnakd.pilot` -- mean ribosome load.** Trained on random synthetic 5'UTRs, tested on real human ones, so a
+distribution shift is built in and RiNALMo publishes a number on both. Supervised regression; the teacher is a
+released fine-tuned checkpoint.
+
+**`rnakd.clinical` -- ClinVar variants in non-coding RNA genes.** The only clinical endpoint a sequence model can be
+put on directly. Zero-shot masked log-odds, no labels and no fine-tuning, so a 650M model and a ~1M student are
+scored by exactly the same rule. The students are distilled from the teacher on human non-coding transcripts with the
+panel's genes removed, against an honest baseline arm that trains the same small model on the same sequences with no
+teacher at all.
+
 ## Run it
 
 ```bash
+python -m rnakd.clinical selftest                    # clinical path, synthetic, no network, no GPU
+python -m rnakd.clinical panel    --work W           # ClinVar + GENCODE -> the labelled panel
+python -m rnakd.clinical score    --work W --ckpt-lm rinalmo_<size>_pretrained.pt --cfg <size>
+python -m rnakd.clinical transfer --work W --ckpt-lm rinalmo_giga_pretrained.pt --cfg giga
+python -m rnakd.clinical distil   --work W --presets s1,s5 --seeds 0,1,2
+python -m rnakd.clinical report   --work W
+
 python -m rnakd.pilot selftest                       # whole path on synthetic data, no network, no GPU, ~5 min
 python -m rnakd.pilot dumpkeys --ckpt-ft <file.pt>   # look at a checkpoint before trusting it
 python -m rnakd.pilot data      --work W

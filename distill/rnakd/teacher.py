@@ -100,10 +100,15 @@ class Transformer(nn.Module):
         return self.final_layer_norm(x), hid
 
 
-class MaskHead(nn.Module):                                                      # unused here; kept so the checkpoint loads strictly
+class MaskHead(nn.Module):
+    """rinalmo/model/modules.py MaskedLanguageModelHead, verbatim order: linear1 -> gelu -> layer_norm -> linear2."""
+
     def __init__(self, embed, alphabet):
         super().__init__()
         self.linear1, self.layer_norm, self.linear2 = nn.Linear(embed, embed), nn.LayerNorm(embed), nn.Linear(embed, alphabet)
+
+    def forward(self, x):
+        return self.linear2(self.layer_norm(F.gelu(self.linear1(x))))
 
 
 class RiNALMo(nn.Module):
@@ -122,6 +127,11 @@ class RiNALMo(nn.Module):
         obs = (tokens == MASK).sum(-1) / src_lens                               # TokenDropout: active at inference in the released model
         x = x * (1 - self.mask_ratio_train) / (1 - obs[..., None, None])
         return self.transformer(x, ~pad, want)
+
+    def logits(self, tokens):
+        """Per-position scores over the 22-token alphabet, the quantity a zero-shot variant score is built from."""
+        rep, _ = self.forward(tokens)
+        return self.lm_mask_head(rep)
 
 
 # ------------------------------------------------------------------------------------------------------------------------ MRL head
