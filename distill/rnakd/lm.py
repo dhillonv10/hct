@@ -137,8 +137,18 @@ class Student(nn.Module):
 
 
 def kd_loss(student_logits, teacher_logprobs, true_ids, arm, temperature=1.0):
-    """Targets at the masked positions. `mlm` uses the real base, `kd` the teacher's distribution, `mlm_kd` both."""
+    """Targets at the masked positions. `mlm` uses the real base, `kd` the teacher's distribution, `mlm_kd` both.
+
+    `teacher_logprobs` may be None for `mlm`, which is what lets an arm mask fresh positions every step instead of
+    being tied to the positions the teacher was cached at."""
+    if arm == "mlm":
+        return F.cross_entropy(student_logits, true_ids)
+    if teacher_logprobs is None:
+        raise ValueError(f"arm {arm!r} needs teacher targets")
     lp = F.log_softmax(student_logits / temperature, dim=-1)
-    ce = F.nll_loss(F.log_softmax(student_logits, dim=-1), true_ids)
     kl = F.kl_div(lp, teacher_logprobs.exp(), reduction="batchmean") * temperature ** 2
-    return {"mlm": ce, "kd": kl, "mlm_kd": ce + kl}[arm]
+    if arm == "kd":
+        return kl
+    if arm == "mlm_kd":
+        return F.cross_entropy(student_logits, true_ids) + kl
+    raise ValueError(arm)

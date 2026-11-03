@@ -277,3 +277,73 @@ def transfer_sequences(fa_path, exclude_genes, width=256, max_n=None, seed=0):
         out = out[:max_n]
     print(f"  transfer set: {len(out)} windows of <= {width} nt ({dropped} transcripts of panel genes excluded)")
     return out
+
+
+RFAM_SEED_URL = "https://ftp.ebi.ac.uk/pub/databases/Rfam/CURRENT/Rfam.seed.gz"
+
+# Rfam accessions of the families the panel's genes belong to. Best effort, NOT verified against Rfam -- used only
+# when --exclude-families is passed. The default is to KEEP them, because the teacher was pretrained on RNAcentral,
+# which contains these families: removing them from the student's data would compare a model that has seen the
+# family against one that has not, which is not the comparison we want to make.
+PANEL_FAMILIES = {"RNU4-2": "RF00015", "RNU4ATAC": "RF00618", "RNU12": "RF00007", "RNU2-2": "RF00004",
+                  "RNU7-1": "RF00066", "RMRP": "RF00030", "SNORD118": "RF00137"}
+MT_TRNA_FAMILY = "RF00005"
+
+
+def rfam_sequences(workdir, width=256, max_n=None, exclude_acc=(), seed=0, min_len=32):
+    """Seed sequences of every Rfam family, gaps removed. ~4,200 families of structured ncRNA.
+
+    This exists because GENCODE's non-coding set is overwhelmingly lncRNA, while the clinical panel is snRNA,
+    snoRNA, ribozyme and mitochondrial tRNA. A student trained on GENCODE alone never meets the families it is
+    tested on, which is the most likely reason the first run's students scored near chance. Rfam seeds are small,
+    curated and span the families directly.
+    """
+    path = fetch(RFAM_SEED_URL, os.path.join(workdir, "Rfam.seed.gz"))
+    out, acc, kept_fams, skipped = [], None, set(), 0
+    with gzip.open(path, "rt", encoding="latin-1") as fh:
+        for line in fh:
+            line = line.rstrip("\n")
+            if line.startswith("#=GF AC"):
+                acc = line.split()[-1].split(".")[0]
+            elif line.startswith("//"):
+                acc = None
+            elif line and not line.startswith("#"):
+                if acc in exclude_acc:
+                    skipped += 1
+                    continue
+                parts = line.split()
+                if len(parts) != 2:
+                    continue
+                s = parts[1].upper().replace("U", "T").replace(".", "").replace("-", "").replace("~", "")
+                if len(s) >= min_len and set(s) <= set("ACGT"):
+                    kept_fams.add(acc)
+                    out.append(s[:width])
+    rs = np.random.default_rng(seed)
+    rs.shuffle(out)
+    if max_n:
+        out = out[:max_n]
+    print(f"  Rfam seeds: {len(out)} sequences from {len(kept_fams)} families"
+          + (f" ({skipped} rows skipped from excluded families)" if skipped else ""))
+    return out
+
+
+def gencode_composition(fa_path, exclude_genes, width=256):
+    """Windows per gene_type in the GENCODE transfer set. Prints the thing the first run did not check."""
+    counts = {}
+    with gzip.open(fa_path, "rt") as fh:
+        gtype, gene, n = None, "", 0
+        for line in fh:
+            if line[0] == ">":
+                if gtype in NC_TYPES and gene not in exclude_genes and n:
+                    counts[gtype] = counts.get(gtype, 0) + max(1, n // width)
+                f = line[1:].rstrip().split("|")
+                gene, gtype, n = (f[5] if len(f) > 5 else ""), (f[7] if len(f) > 7 else ""), 0
+            else:
+                n += len(line.strip())
+        if gtype in NC_TYPES and gene not in exclude_genes and n:
+            counts[gtype] = counts.get(gtype, 0) + max(1, n // width)
+    tot = sum(counts.values()) or 1
+    print("  GENCODE transfer-set composition by gene type (windows):")
+    for t, c in sorted(counts.items(), key=lambda kv: -kv[1]):
+        print(f"    {t:12s} {c:8,d}  {100 * c / tot:5.1f}%")
+    return counts

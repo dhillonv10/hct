@@ -163,6 +163,8 @@ def stage_score(work, ckpt=None, cfg="giga", device="auto", bs=16, width=512, se
     rate = len(panel) / max(time.time() - t0, 1e-9)
     led = Ledger(os.path.join(work, "scores.csv"))
     col = f"lm_{cfg}"
+    led.rows = [r for r in led.rows if r.get("key") != col]                     # re-running a size replaces its row
+    led.done.discard(col)
     panel[col] = s
     panel.to_csv(os.path.join(work, "panel.csv.gz"), index=False)
     v, per = within_gene(panel, col)
@@ -175,18 +177,38 @@ def stage_score(work, ckpt=None, cfg="giga", device="auto", bs=16, width=512, se
 
 
 def stage_transfer(work, ckpt=None, cfg="giga", device="auto", bs=32, width=256, max_n=60000,
-                   mask_frac=0.15, selftest=False, release=clinvar.GENCODE_RELEASE):
-    """Build the free transfer set and cache the teacher's distribution at a FIXED set of masked positions.
+                   mask_frac=0.15, selftest=False, release=clinvar.GENCODE_RELEASE, source="both",
+                   exclude_families=False):
+    """Build the free transfer set and cache the teacher's distribution at a fixed set of masked positions.
 
-    Fixing the mask pattern makes every student arm see identical inputs and identical positions, so the only thing
-    that differs between `mlm`, `kd` and `mlm_kd` is the target. It costs masking diversity; that is the trade."""
+    `source` decides what the student ever gets to read:
+      gencode  human non-coding transcripts. Overwhelmingly lncRNA, so a student trained on it alone never meets
+               the snRNA / snoRNA / ribozyme / mitochondrial-tRNA families the clinical panel is made of. The first
+               run used this and its students scored near chance with masked-base recovery barely above 0.25.
+      rfam     seed sequences of every Rfam family: structured ncRNA, the families the panel is drawn from.
+      both     the two concatenated (the default).
+
+    Family homologs are KEPT by default. The teacher was pretrained on RNAcentral, which contains these families,
+    so removing them from the student's corpus would compare a model that has seen the family against one that has
+    not. `--exclude-families` gives the stricter variant; the exact human panel transcripts are always excluded.
+    """
     panel = load_panel(work)
     if selftest:
         rs = np.random.default_rng(0)
         seqs = ["".join(rs.choice(list("ACGT"), int(rs.integers(64, width)))) for _ in range(400)]
     else:
-        fa = os.path.join(work, f"gencode.v{release}.tx.fa.gz")
-        seqs = clinvar.transfer_sequences(fa, set(panel.gene), width=width, max_n=max_n)
+        seqs = []
+        if source in ("gencode", "both"):
+            fa = os.path.join(work, f"gencode.v{release}.tx.fa.gz")
+            clinvar.gencode_composition(fa, set(panel.gene), width=width)
+            seqs += clinvar.transfer_sequences(fa, set(panel.gene), width=width,
+                                               max_n=max_n // 2 if source == "both" else max_n)
+        if source in ("rfam", "both"):
+            ex = set(clinvar.PANEL_FAMILIES.values()) | {clinvar.MT_TRNA_FAMILY} if exclude_families else set()
+            seqs += clinvar.rfam_sequences(work, width=width, exclude_acc=ex,
+                                           max_n=max_n // 2 if source == "both" else max_n)
+        np.random.default_rng(0).shuffle(seqs)
+        print(f"  transfer corpus: {len(seqs)} sequences, {sum(map(len, seqs)) / 1e6:.1f} Mnt, source={source}")
     dev = device_of(device)
     model = RiNALMo(**LM_CONFIGS[cfg])
     if not selftest:
@@ -217,6 +239,16 @@ def stage_transfer(work, ckpt=None, cfg="giga", device="auto", bs=32, width=256,
     print(f"  cached {len(seqs)} windows x {k} masked positions")
 
 
+def random_mask(toks, k, rs, dev):
+    """Fresh masked positions each step, for the arms that need no teacher target."""
+    valid = (toks > 4)                                                          # nucleotides only, not <cls>/<pad>/<eos>
+    out = np.zeros((len(toks), k), dtype=np.int64)
+    for i in range(len(toks)):
+        v = np.flatnonzero(valid[i])
+        out[i] = rs.choice(v, k, replace=len(v) < k) if len(v) else 1
+    return torch.from_numpy(out).to(dev)
+
+
 def fit_student(work, preset, arm, seed, dev, epochs=3, bs=32, lr=3e-4, verbose=False):
     z = np.load(os.path.join(work, "transfer.npz"))
     toks, pos, lp, truth = z["toks"], z["pos"], z["lp"], z["truth"]
@@ -236,12 +268,18 @@ def fit_student(work, preset, arm, seed, dev, epochs=3, bs=32, lr=3e-4, verbose=
         for i in range(0, n_tr, bs):
             j = order[i:i + bs]
             t = torch.from_numpy(toks[j]).to(dev)
-            p = torch.from_numpy(pos[j]).to(dev)
+            if arm == "mlm_free":                                               # fresh positions, no teacher target
+                p = random_mask(toks[j], pos.shape[1], rs, dev)
+                tgt = torch.gather(t, 1, p).reshape(-1)
+                tl = None
+            else:
+                p = torch.from_numpy(pos[j]).to(dev)
+                tgt = torch.from_numpy(truth[j]).to(dev).reshape(-1)
+                tl = torch.from_numpy(lp[j].astype(np.float32)).to(dev).reshape(-1, 22)
             t = t.clone().scatter_(1, p, MASK)
             g = model.logits(t)
             sel = torch.gather(g, 1, p[..., None].expand(-1, -1, 22)).reshape(-1, 22)
-            loss = lm.kd_loss(sel, torch.from_numpy(lp[j].astype(np.float32)).to(dev).reshape(-1, 22),
-                              torch.from_numpy(truth[j]).to(dev).reshape(-1), arm)
+            loss = lm.kd_loss(sel, tl, tgt, "mlm" if arm == "mlm_free" else arm)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
@@ -374,6 +412,9 @@ def main():
     ap.add_argument("--epochs", type=int, default=3)
     ap.add_argument("--max-n", type=int, default=60000)
     ap.add_argument("--release", default=clinvar.GENCODE_RELEASE)
+    ap.add_argument("--source", default="both", choices=["gencode", "rfam", "both"])
+    ap.add_argument("--exclude-families", action="store_true")
+    ap.add_argument("--arms", default="mlm,kd,mlm_kd")
     ap.add_argument("--presets", default="s1,s5")
     ap.add_argument("--seeds", default="0,1,2")
     a = ap.parse_args()
@@ -384,7 +425,8 @@ def main():
         stage_panel(w, synthetic=True)
         stage_score(w, cfg="selftest", device=a.device, bs=8, width=256, selftest=True)
         stage_transfer(w, cfg="selftest", device=a.device, bs=16, width=128, selftest=True)
-        stage_distil(w, presets=("s1",), seeds=(0, 1), device=a.device, epochs=1, bs=16, width=256)
+        stage_distil(w, presets=("s1",), arms=("mlm", "kd", "mlm_kd", "mlm_free"), seeds=(0, 1),
+                     device=a.device, epochs=1, bs=16, width=256)
         stage_report(w)
         print("\nselftest finished: every stage ran and the report applied the gates.")
     elif a.stage == "panel":
@@ -392,10 +434,11 @@ def main():
     elif a.stage == "score":
         stage_score(a.work, a.ckpt_lm, a.cfg, a.device, a.bs, a.width)
     elif a.stage == "transfer":
-        stage_transfer(a.work, a.ckpt_lm, a.cfg, a.device, max(a.bs, 32), max_n=a.max_n, release=a.release)
+        stage_transfer(a.work, a.ckpt_lm, a.cfg, a.device, max(a.bs, 32), max_n=a.max_n, release=a.release,
+                       source=a.source, exclude_families=a.exclude_families)
     elif a.stage == "distil":
-        stage_distil(a.work, tuple(a.presets.split(",")), device=a.device, epochs=a.epochs,
-                     seeds=tuple(int(s) for s in a.seeds.split(",")), width=a.width)
+        stage_distil(a.work, tuple(a.presets.split(",")), tuple(a.arms.split(",")), device=a.device,
+                     epochs=a.epochs, seeds=tuple(int(s) for s in a.seeds.split(",")), width=a.width)
     elif a.stage == "report":
         stage_report(a.work)
 
