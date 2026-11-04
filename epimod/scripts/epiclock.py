@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-"""EpiClock - a genome-aware transformer epigenetic clock, in one file.
+"""EpiClock - a genome-aware transformer epigenetic clock, plus the experiments that show what the transformer is worth.  One file.
 
-  python epiclock.py train   --data <bundle>/data --out runs/clock1 --preset base      # pretrain -> fine-tune -> test report
-  python epiclock.py predict --model runs/clock1/model.pt --beta my_betas.csv --out ages.csv
-  python epiclock.py probe   --model runs/clock1/model.pt --data <bundle>/data         # second-level tasks on the learned model
+  python epiclock.py                  # the whole study (resumable; results appear after every model): comparators, controls, a family of models,
+                                      # error bars, probes of what was learned, report.md, release package
+  python epiclock.py report           # rebuild report.md / probes / release package from whatever has finished (no training)
+  python epiclock.py predict --model runs/epiclock/release/EpiClock-B/model.pt --beta my_betas.csv [--meta meta.csv --age-col age --group-col status --control Control]
+  python epiclock.py --smoke --out /tmp/smoke      # 30-step functional check of every code path (tiny models)
 
-What it learns
-  Every CpG is a token: learned identity + genome context (chromosome, position at several scales, CpG-island / shore / shelf /
-  open sea, gene region, regulatory flags) + its measured methylation (beta).  A sample is a random subset of its observed CpGs
-  (so any array, any missing values).  Stage 1 (pre-training, no labels): hide 25% of the CpGs and reconstruct them from the
-  visible ones -- the transformer must learn co-methylation, island/shore structure and the genome's layout.  Stage 2: the same
-  network predicts age (Horvath-transformed) from a CpG subset; at test time predictions over several disjoint subsets are averaged.
-  The age output is a linear clock over the whole CpG row, initialised from a ridge fit on the training data (so it starts as good
-  as a linear clock), plus a correction learned by the transformer; a step-0 evaluation guarantees the final model is never worse than
-  that start on the validation series.  `--no-linear-skip` trains the transformer alone.
+Model
+  Every CpG is a token: learned identity + genome context (chromosome, position at several scales, CpG-island / shore / shelf / open sea, gene region,
+  regulatory flags) + its measured methylation (beta).  A sample is a random subset of its observed CpGs (any array, any missing values).
+  Pre-training (no labels): hide 25% of the CpGs and reconstruct them from the visible ones.  Fine-tuning: predict age (Horvath-transformed) from a CpG subset;
+  at test time predictions over several disjoint subsets are averaged.  The age output = a linear clock over the whole CpG row (initialised from ridge)
+  + a correction learned by the transformer; a step-0 evaluation guarantees the result is never worse than that start on the validation series.
 
-Honest evaluation
-  Test = the ComputAge benchmark studies (never used for training or model selection), healthy controls only, compared on the same
-  samples with ridge and elastic-net trained on the same data and, if `pip install computage --no-deps` is available, with the
-  published Horvath V1/V2, Hannum and Lin clocks (fully covered by the panel).  Early stopping uses held-out *series*.
+What the study answers (see report.md)
+  * How much does the transformer add?  'linear-tuned' trains the linear core alone with the same recipe; '<size>-pre' vs it, '<size>-pre' vs '<size>-pre
+    [linear part only]' (the same model with the transformer's correction removed), pre-training vs none, genome-context inputs vs none, seed-to-seed noise.
+  * Error bars: paired bootstrap over samples and over whole studies (the honest one).
+  * Comparators: ridge, elastic net (same data), Horvath V1/V2, Hannum, Lin (computage), Vidal-Bralo, PhenoAge, Ying clocks (biolearn); missing packages are installed.
+  * The public ComputAge Bench score (healthy-control error + disease age-acceleration tests on 65 studies), applied to every model.
+  * Does the CpG embedding know islands / regulatory class / chromosome?  Linear probes against SVD / methylation-statistics baselines; the '-noctx' model is the
+    clean test because it is never shown the annotations.
+  * A model family (EpiClock-T/S/B/L/XL) with model cards, and an ensemble row.
 
-Device: --device auto uses the Apple GPU (MPS) when present.  On a non-CPU device a self-test first compares the device with the CPU
-(loss, gradients, a 60-step overfit) and stops if they disagree.  Training stops by itself when validation stops improving."""
+Control while it runs (in the output folder): `touch STOP` pauses (delete it and re-run to resume); `touch NEXT` ends the current training stage early.
+Device: --device auto uses the Apple GPU (MPS) when present; a self-test compares it with the CPU first.  Every stage stops by itself when validation stops improving."""
 from __future__ import annotations
 
 import argparse
@@ -48,28 +52,28 @@ from torch import nn
 
 warnings.filterwarnings("ignore")
 
-PRESETS = {                                                          # d_model, layers, heads, tokens per sample, batch, lr
-    "tiny": dict(d=96, layers=3, heads=4, K=256, batch=64, lr=6e-4, dropout=0.0),
-    "small": dict(d=128, layers=4, heads=4, K=384, batch=64, lr=5e-4, dropout=0.0),
-    "base": dict(d=192, layers=6, heads=6, K=512, batch=128, lr=4e-4, dropout=0.1),
-    "large": dict(d=256, layers=8, heads=8, K=768, batch=128, lr=3e-4, dropout=0.1),
-    "xl": dict(d=512, layers=12, heads=8, K=1024, batch=128, lr=2e-4, dropout=0.1),         # ~50M parameters; for a 96+ GB machine
+PRESETS = {                                                          # d_model, layers, heads, tokens per sample, batch, lr, time caps (hours) for pre-training / fine-tuning
+    "tiny": dict(d=96, layers=3, heads=4, K=256, batch=64, lr=6e-4, dropout=0.0, pre_h=3.0, ft_h=3.0),
+    "small": dict(d=128, layers=4, heads=4, K=384, batch=64, lr=5e-4, dropout=0.0, pre_h=6.0, ft_h=6.0),
+    "base": dict(d=192, layers=6, heads=6, K=512, batch=128, lr=4e-4, dropout=0.1, pre_h=12.0, ft_h=8.0),
+    "large": dict(d=256, layers=8, heads=8, K=768, batch=128, lr=3e-4, dropout=0.1, pre_h=24.0, ft_h=12.0),
+    "xl": dict(d=512, layers=12, heads=8, K=1024, batch=128, lr=2e-4, dropout=0.1, pre_h=72.0, ft_h=24.0),         # ~48M parameters; for a 96+ GB machine
 }
 # ---- edit these instead of passing arguments -------------------------------------------------------------------------------
 CONFIG = dict(
-    preset="auto",            # auto = the largest model the machine's memory allows (xl >= 96 GB, large >= 48 GB, base >= 24 GB, else small)
     memory_fraction=0.60,     # never plan to use more than this fraction of the machine's memory for training
     eval_every=500,           # steps between validations
     patience=6,               # validations without a 0.5% gain before the learning rate is halved (stops after 3 halvings)
-    pretrain_max_hours=72.0,  # safety cap per stage; the stage normally ends earlier, when validation stops improving
-    finetune_max_hours=72.0,
     test_draws=16,            # CpG subsets averaged per test sample
+    val_draws=4,              # ... and per validation sample
+    boot=1000,                # bootstrap draws for the error bars
     out_dir="runs/epiclock",  # re-running the same command resumes from here
 )
 BUNDLE_SHA256 = "b7fa7c79a99107904d9eaba2f5c21ad516fc71c40279a3603c059fdd7ffc249b"      # epimod_bundle.tar.gz (the two-part data file)
 ADULT = 20.0
 LIN_SCALE = 0.01
 LOGF = None
+CTRL = None                                                          # study folder: a STOP / NEXT file here applies to whatever stage is running
 
 
 def log(*a):
@@ -78,6 +82,13 @@ def log(*a):
     if LOGF is not None:
         with open(LOGF, "a") as f:
             f.write(line + "\n")
+
+
+def ctl_file(out, name):
+    for d_ in (out, CTRL):
+        if d_ is not None and (Path(d_) / name).exists():
+            return Path(d_) / name
+    return None
 
 
 def age_to_t(age):
@@ -431,8 +442,8 @@ class Plateau:
 def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup=300, ema_decay=0.999, max_steps=10**9, eval_every=500,
               patience=6, min_rel=0.005, max_drops=3, max_hours=0.0, init_from=None, post_init=None, budget=None):
     """Train until the validation score (lower = better) stops improving.  Resumable; atomic checkpoints; non-finite steps skipped.
-    Control files in ``out``: STOP pauses the whole run (delete it and re-run to resume); NEXT ends the current phase now and moves on."""
-    state_p, best_p, stop_p, next_p, done_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / "STOP", out / "NEXT", out / f"{name}_done.json"
+    Control files in ``out`` or the study folder: STOP pauses the whole run (delete it and re-run to resume); NEXT ends the current phase now and moves on."""
+    state_p, best_p, done_p = out / f"{name}_state.pt", out / f"{name}_best.pt", out / f"{name}_done.json"
     if done_p.exists():                                                  # a finished phase is never trained again on a restart
         r = json.load(open(done_p)); log(f"[{name}] already finished ({r['reason']}, best validation {r['best']:.4f}); skipping"); return r
     nodecay = lambda n: "emb" in n or n in ("mask_emb", "cls", "lin_u", "bias")
@@ -459,9 +470,9 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
         st.update(step=ck["step"], lr=ck["lr"], best=ck["best"], best_state=ck["best_state"], hist=ck["hist"]); log(f"[{name}] resumed at step {st['step']} (best {st['best']:.4f})")
     t0, bad, reason = time.time(), 0, None
     while reason is None:
-        if stop_p.exists():
+        if ctl_file(out, "STOP"):
             reason = "stop-file"; break
-        if next_p.exists():
+        if ctl_file(out, "NEXT"):
             reason = "next-file"; break
         if max_hours and (time.time() - t0) / 3600 > max_hours:
             reason = "max-hours"; break
@@ -521,7 +532,7 @@ def run_phase(name, model, step_fn, eval_fn, out: Path, dev, lr, wd=0.05, warmup
     if reason != "stop-file" and not reason.startswith("unstable"):
         json.dump(res, open(done_p, "w"))
     if reason == "next-file":
-        next_p.unlink(missing_ok=True)
+        ctl_file(out, "NEXT").unlink()
     return res
 
 
@@ -562,64 +573,219 @@ def ridge_fit(c, sp, mean, std, log, alphas=(300.0, 1000.0, 3000.0, 10000.0, 300
     return best
 
 
-def linear_baselines(c, sp, data_mean, data_std, log, rg):
+# ======================================================================================================== comparators
+def ensure_pkg(mod, pip_args, why):
+    """Import check; if the package is missing, pip-install it once (set EPICLOCK_NO_INSTALL=1 to forbid)."""
+    if importlib.util.find_spec(mod) is not None:
+        return True
+    if os.environ.get("EPICLOCK_NO_INSTALL"):
+        return False
+    import subprocess
+    log(f"[setup] pip install {' '.join(pip_args)}   ({why})")
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", *pip_args], capture_output=True, text=True)
+    importlib.invalidate_caches()
+    if importlib.util.find_spec(mod) is None:
+        log(f"[setup] could not install {pip_args[0]} ({r.stderr.strip()[-200:]}); continuing without it")
+        return False
+    return True
+
+
+def get_ridge(e):
+    f = e.out / "ridge.npz"
+    if f.exists():
+        z = np.load(f); return dict(w=z["w"], b=float(z["b"]), alpha=float(z["alpha"]), val_medae=float(z["val_medae"]))
+    rg = ridge_fit(e.c, e.sp, e.mean, e.std, log); np.savez(f, **rg); return rg
+
+
+def enet_predict(e, X_rows):
     from sklearn.linear_model import enet_path
-    tr, va, te = sp["train"], sp["val"], sp["test"]
-    Xtr, Xva, Xte = standardize(c.X[tr], data_mean, data_std), standardize(c.X[va], data_mean, data_std), standardize(c.X[te], data_mean, data_std)
-    ytr, ava = age_to_t(c.meta.Age.to_numpy()[tr]), c.meta.Age.to_numpy()[va]
-    out = {"ridge": t_to_age(Xte @ rg["w"] + rg["b"])}
-    alphas, coefs, _ = enet_path(Xtr, ytr - ytr.mean(), l1_ratio=0.5, n_alphas=20, eps=1e-3)
+    c, sp = e.c, e.sp; tr, va = sp["train"], sp["val"]
+    Xtr, Xva = standardize(c.X[tr], e.mean, e.std), standardize(c.X[va], e.mean, e.std)
+    ytr, ava = age_to_t(e.age[tr]), e.age[va]
+    alphas, coefs, _ = enet_path(Xtr, ytr - ytr.mean(), l1_ratio=0.5, n_alphas=5 if e.a.smoke else 20, eps=1e-3)
     ev = [np.median(np.abs(t_to_age(Xva @ coefs[:, k] + ytr.mean()) - ava)) for k in range(coefs.shape[1])]
-    k = int(np.argmin(ev)); out["elastic net"] = t_to_age(Xte @ coefs[:, k] + ytr.mean())
+    k = int(np.argmin(ev))
     log(f"[baseline] elastic net alpha {alphas[k]:.2e} (val MedAE {ev[k]:.2f}, {int((coefs[:, k] != 0).sum())} non-zero CpGs)")
-    return out
+    return t_to_age(standardize(X_rows, e.mean, e.std) @ coefs[:, k] + ytr.mean())
 
 
-def published_clocks(c, sp, log):
+def published_clocks(c, X, log):
+    """Horvath V1/V2, Hannum, Lin from the `computage` package (coefficients read from its files; SeSAMe-median imputation of missing CpGs)."""
+    if not ensure_pkg("computage", ["computage", "--no-deps"], "Horvath / Hannum / Lin coefficients and the official benchmark list"):
+        return {}
     spec = importlib.util.find_spec("computage")
-    if spec is None or not spec.submodule_search_locations:
-        log("[published] `pip install computage --no-deps` to add Horvath/Hannum/Lin to the comparison"); return {}
     cd = Path(list(spec.submodule_search_locations)[0]) / "models_library" / "clocks"
     table = {"Horvath V1": ("Horvath1.csv", lambda s: t_to_age(s + 0.696)), "Horvath V2": ("Horvath2.csv", lambda s: t_to_age(s - 0.447119319)),
              "Hannum": ("Hannum.csv", lambda s: s), "Lin": ("Lin.csv", lambda s: s + 12.2169841)}
-    med = pd.read_csv(cd / "sesame_450k_median.csv", index_col=0)["median"]; pos = {x: i for i, x in enumerate(c.cpgs)}
-    Xt = c.X[sp["test"]]; out = {}
+    med = pd.read_csv(cd / "sesame_450k_median.csv", index_col=0)["median"]; pos = {x: i for i, x in enumerate(c.cpgs)}; out = {}
     for name, (fn, tf) in table.items():
         coef = pd.read_csv(cd / fn, index_col=0)["CoefficientTraining"]; coef = coef[coef.index.str.startswith("cg")]
         cov = np.mean([x in pos for x in coef.index])
         if cov < 1.0:
             log(f"[published] {name}: only {cov:.0%} of its CpGs are in the panel - skipped"); continue
-        s = np.zeros(len(Xt))
+        s = np.zeros(len(X))
         for cg, w in coef.items():
-            v = Xt[:, pos[cg]].astype(np.float64) / 100.0; v = np.where(Xt[:, pos[cg]] == 255, med.get(cg, 0.5), v); s += w * v
+            v = X[:, pos[cg]].astype(np.float64) / 100.0; v = np.where(X[:, pos[cg]] == 255, med.get(cg, 0.5), v); s += w * v
         out[name] = tf(s)
     return out
 
 
+BL_CLOCKS = {"Horvathv1": "Horvath V1", "Horvathv2": "Horvath V2", "Hannum": "Hannum", "Lin": "Lin", "VidalBralo": "Vidal-Bralo",
+             "PhenoAge": "PhenoAge (83% of CpGs in panel)", "YingCausAge": "Ying CausAge", "YingDamAge": "Ying DamAge", "YingAdaptAge": "Ying AdaptAge"}
+
+
+def biolearn_clocks(c, X, log):
+    """More published clocks through the `biolearn` package (its own coefficient files and SeSAMe-style imputation)."""
+    if not ensure_pkg("biolearn", ["biolearn"], "extra published clocks: Vidal-Bralo, PhenoAge, Ying CausAge/DamAge/AdaptAge"):
+        return {}
+    try:
+        from biolearn.data_library import GeoData
+        from biolearn.model_gallery import ModelGallery
+    except Exception as ex:
+        log(f"[biolearn] installed but cannot be imported ({type(ex).__name__}: {str(ex)[:150]}); skipping it"); return {}
+    dn = pd.DataFrame(np.where(X == 255, np.nan, X / 100.0).T, index=c.cpgs, columns=[f"s{i}" for i in range(len(X))])
+    gd, gal, out = GeoData(pd.DataFrame(index=dn.columns), dn), ModelGallery(), {}
+    for nm, pretty in BL_CLOCKS.items():
+        try:
+            p = gal.get(nm).predict(gd); p = p.iloc[:, 0] if getattr(p, "ndim", 1) == 2 else p
+            out[pretty] = np.asarray(p, float)
+        except Exception as ex:
+            log(f"[biolearn] {nm}: {type(ex).__name__}: {str(ex)[:120]} - skipped")
+    return out
+
+
+def get_comparators(e):
+    """Predictions of every comparator on all ComputAge benchmark samples (cached)."""
+    f = e.out / "comparators.npz"
+    if f.exists():
+        z = np.load(f); return {k: z[k] for k in z.files}
+    rg = get_ridge(e); X = e.c.X[e.sp["test_all"]]
+    out = {"ridge": t_to_age(standardize(X, e.mean, e.std) @ rg["w"] + rg["b"]), "elastic net": enet_predict(e, X)}
+    out.update(published_clocks(e.c, X, log))
+    for pretty, p in biolearn_clocks(e.c, X, log).items():
+        out[pretty if pretty not in out else "biolearn " + pretty] = p
+    hc = np.searchsorted(e.sp["test_all"], e.sp["test"]); age = e.age[e.sp["test"]]
+    for k in ("Horvath V1", "Horvath V2", "Hannum", "Lin"):
+        if k in out and "biolearn " + k in out:
+            log(f"[comparators] {k}: MedAE {np.median(np.abs(out[k][hc] - age)):.2f} (computage) vs {np.median(np.abs(out['biolearn ' + k][hc] - age)):.2f} (biolearn) - two independent implementations")
+    np.savez(f, **out); return out
+
+
+# ======================================================================================================== statistics
+class Boot:
+    """Shared bootstrap draws so every comparison is paired.  'samples' resamples individual samples; 'studies' resamples whole studies
+    (the honest one: samples within a study share batch effects, so the study is the unit that generalises)."""
+
+    def __init__(self, groups, B=1000, seed=0):
+        rng = np.random.default_rng(seed); n = len(groups); self.B = B
+        self.samp = rng.integers(0, n, (B, n)); _, inv = np.unique(np.asarray(groups).astype(str), return_inverse=True)
+        by = [np.flatnonzero(inv == k) for k in range(inv.max() + 1)]
+        self.clus = [np.concatenate([by[k] for k in rng.integers(0, len(by), len(by))]) for _ in range(B)]
+
+    def med(self, x, mode):
+        return np.median(x[self.samp], axis=1) if mode == "samples" else np.array([np.median(x[i]) for i in self.clus])
+
+
+def ci(v, digits=2, signed=False):
+    lo, hi = np.percentile(v, [2.5, 97.5]); f = f"{{:+.{digits}f}}" if signed else f"{{:.{digits}f}}"
+    return "[" + f.format(lo) + ", " + f.format(hi) + "]"
+
+
+# ======================================================================================================== the official ComputAge Bench score
+def official_config():
+    spec = importlib.util.find_spec("computage")
+    if spec is None or not spec.submodule_search_locations:
+        return None
+    p = Path(list(spec.submodule_search_locations)[0]) / "configs" / "datasets_bench_config.py"
+    if not p.exists():
+        return None
+    s = importlib.util.spec_from_file_location("computage_bench_cfg", p); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+    return m.datasets_config_main
+
+
+def bh(p):
+    p = np.where(np.isfinite(p), p, 1.0); n = len(p); o = np.argsort(p); q = np.minimum.accumulate((p[o] * n / np.arange(1, n + 1))[::-1])[::-1]
+    out = np.empty(n); out[o] = np.minimum(q, 1.0); return out
+
+
+def official_scores(e, P):
+    """The ComputAge Bench scoring (same list of studies, tests, FDR and total-score formula as the `computage` package), applied to our
+    predictions: AA2 = age acceleration higher in disease than in healthy controls of the same study; AA1 = positive age acceleration in
+    disease; plus median error / bias on healthy controls.  Needs `computage` installed for the study list."""
+    cfg = official_config()
+    if cfg is None:
+        return None
+    from scipy.stats import ttest_1samp, ttest_ind
+    meta = e.c.meta.iloc[e.sp["test_all"]]; ds, cond, cls = meta.DatasetID.to_numpy(), meta.Condition.astype(str).to_numpy(), meta.Class.astype(str).to_numpy()
+    age = meta.Age.to_numpy(float); keep = meta.Tissue.isin(["Blood", "Saliva", "Buccal"]).to_numpy() & np.isfinite(age)
+    names = list(P); p2 = {n: [] for n in names}; p1 = {n: [] for n in names}
+    for gse, conf in cfg.items():
+        base = keep & (ds == gse)
+        for cd in conf["conditions"]:
+            sel = base & (cond == cd); klass = cls[sel][0] if sel.any() else None
+            ok = base if klass == "PGS" else base & (age >= 18) & (age <= 90)
+            d_idx, h_idx = np.flatnonzero(ok & (cond == cd)), np.flatnonzero(ok & (cond == "HC"))
+            if len(d_idx) == 0 or (conf["test"] == "AA2" and len(h_idx) == 0):
+                continue
+            for n in names:
+                dd = P[n][d_idx] - age[d_idx]
+                if conf["test"] == "AA2":
+                    p2[n].append(ttest_ind(dd, P[n][h_idx] - age[h_idx], equal_var=False, alternative="greater")[1])
+                else:
+                    p1[n].append(ttest_1samp(dd, 0.0, alternative="greater")[1])
+    hc = keep & np.isin(ds, list(cfg)) & (cond == "HC"); rows = []
+    for n in names:
+        s2 = int((bh(np.array(p2[n])) < 0.05).sum()); s1 = int((bh(np.array(p1[n])) < 0.05).sum()); err = P[n][hc] - age[hc]
+        mad, mede = float(np.median(np.abs(err))), float(np.median(err))
+        rows.append(dict(model=n, AA2=f"{s2}/{len(p2[n])}", AA1=f"{s1}/{len(p1[n])}", HC_MedAE=mad, HC_MedE=mede, score=round(s2 + s1 * (1 - max(0.0, mede) / mad), 1)))
+    return pd.DataFrame(rows).set_index("model").sort_values("score", ascending=False)
+
+
+# ======================================================================================================== disease age acceleration (for your own cohorts)
+def age_acceleration(pred, age, grp, control, B=2000, seed=0):
+    """Age acceleration = predicted age minus the value expected from chronological age in the control group (a straight line fitted on controls).
+    For every other group: mean AA difference to controls and the AUC of AA for separating the group from controls, with bootstrap 95% CIs."""
+    from scipy.stats import mannwhitneyu
+    pred, age, grp = np.asarray(pred, float), np.asarray(age, float), np.asarray(grp).astype(str); ok = np.isfinite(pred) & np.isfinite(age)
+    ctl = ok & (grp == str(control)); A = np.stack([np.ones(ctl.sum()), age[ctl]], 1); b = np.linalg.lstsq(A, pred[ctl], rcond=None)[0]
+    aa = pred - (b[0] + b[1] * age); rng = np.random.default_rng(seed); rows = []
+    auc = lambda x, y: (np.mean(x[:, None] > y[None, :]) + 0.5 * np.mean(x[:, None] == y[None, :]))
+    for g in sorted(set(grp[ok]) - {str(control)}):
+        x, y = aa[ok & (grp == g)], aa[ctl]
+        if len(x) < 3:
+            continue
+        d, u = [], []
+        for _ in range(B if len(x) * len(y) < 4e6 else 300):
+            xs, ys = rng.choice(x, len(x)), rng.choice(y, len(y)); d.append(xs.mean() - ys.mean()); u.append(auc(xs[:400], ys[:400]))
+        rows.append(dict(group=g, n=len(x), n_control=len(y), AA_diff_years=x.mean() - y.mean(), AA_diff_CI=ci(d, 2, True), AUC=auc(x[:2000], y[:2000]), AUC_CI=ci(u, 3),
+                         p_two_sided=mannwhitneyu(x, y).pvalue))
+    return pd.DataFrame(rows).set_index("group")
+
+
+# ======================================================================================================== deviation from the healthy methylome (second-level task)
+@torch.no_grad()
+def recon_error(model, X_rows, K, R, rng, batch=0):
+    """Per-sample mean absolute error when 25% of the K visible CpGs are hidden and reconstructed (mean of R random draws).  A sample whose
+    methylation does not follow the co-methylation structure learned from healthy data is reconstructed worse: a deviation score."""
+    batch = batch or max(8, 65536 // K); model.eval(); out = np.zeros(len(X_rows))
+    for s in range(0, len(X_rows), batch):
+        acc = np.zeros(len(X_rows[s:s + batch]))
+        for _ in range(R):
+            idx, ib, valid, is_mask, beta = ssl_batch(X_rows[s:s + batch], K, rng)
+            pred = model.reconstruct(idx, ib, valid, is_mask).cpu(); ok = (is_mask & valid).float()
+            acc += ((pred - beta).abs() * ok).sum(1).numpy() / np.maximum(ok.sum(1).numpy(), 1)
+        out[s:s + batch] = acc / R
+    return out
+
+
+# ======================================================================================================== device / self-test / loading
 def sibling_set(meta, sp):
     num = lambda g: int("".join(ch for ch in g if ch.isdigit()) or 0)
     tr = {num(g) for g in meta.iloc[np.r_[sp["train"], sp["val"]]].DatasetID.unique()}
     return {g for g in meta.iloc[sp["test"]].DatasetID.unique() if any(abs(num(g) - t) <= 3 for t in tr)}
 
 
-def test_report(c, sp, preds: dict, out: Path):
-    meta = c.meta.iloc[sp["test"]]; age = meta.Age.to_numpy(float); sib = sibling_set(c.meta, sp)
-    blood = meta.Tissue.astype(str).str.contains("blood", case=False).to_numpy(); adult = (age >= 18) & (age <= 90); nosib = ~meta.DatasetID.isin(sib).to_numpy()
-    rows = []
-    for name, p in preds.items():
-        base = summarize(p, age, name)
-        per = pd.Series(np.abs(p - age)).groupby(meta.DatasetID.to_numpy()).median()
-        rows.append(dict(model=name, MedAE_all=base["MedAE"], MedAE_18_90=float(np.median(np.abs(p - age)[adult])), MedAE_blood=float(np.median(np.abs(p - age)[blood])),
-                         MedAE_no_sibling_studies=float(np.median(np.abs(p - age)[nosib])), MAE=base["MAE"], MedE=base["MedE"], r=base["r"],
-                         mean_study_MedAE=float(per.mean())))
-    df = pd.DataFrame(rows).set_index("model").sort_values("MedAE_all")
-    hdr = f"Test: {len(meta)} healthy-control samples from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; {len(sib)} studies adjacent to training series)"
-    (out / "test_report.md").write_text(hdr + "\n\n```\n" + df.round(3).to_string() + "\n```\n"); df.to_csv(out / "test_report.csv")
-    log(hdr + "\n" + df.round(2).to_string())
-    return df
 
-
-# ======================================================================================================== commands
 def get_device(name):
     if name == "auto":
         name = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
@@ -650,175 +816,626 @@ def selftest(model, c, sp, K, dev, rng):
         sys.exit("SELF-TEST FAILED - the device does not reproduce the CPU. Re-run with --device cpu to confirm the code, and report the lines above.")
 
 
-def cmd_train(a):
-    global LOGF
-    out = Path(a.out); out.mkdir(parents=True, exist_ok=True); LOGF = out / "train.log"
-    torch.set_num_threads(a.threads or max(1, (os.cpu_count() or 4) // 2))
-    try:
-        torch.backends.mha.set_fastpath_enabled(False)          # the eval-mode transformer fast path has had MPS bugs
-    except AttributeError:
-        pass
-    dev = get_device(a.device); mem = total_mem_gb()
-    if a.preset == "auto":
-        a.preset = "small" if dev.type == "cpu" else "xl" if mem >= 96 else "large" if mem >= 48 else "base" if mem >= 24 else "small"
-    if a.smoke:
-        a.preset = "tiny"
-    P = PRESETS[a.preset]; cfg = dict(d=P["d"], layers=P["layers"], heads=P["heads"], context=not a.no_context, linear_skip=not a.no_linear_skip, dropout=P["dropout"] if a.dropout < 0 else a.dropout)
-    K, B, lr = a.tokens or P["K"], a.batch or P["batch"], a.lr or P["lr"]
-    data = find_data(a.data); limit = a.memory_fraction * mem
-    log(f"EpiClock | preset {a.preset} {cfg} | K={K} batch={B} lr={lr} | device {dev} | machine memory {mem:.0f} GB (training budget {limit:.0f} GB) | data {data}")
-    c = load_corpus(data); sp = make_splits(c, a.seed); mean, std = panel_stats(c.X, sp["train"]); ctx = genome_context(data, c.cpgs)
-    log(f"corpus {len(c.X)} samples x {len(c.cpgs)} CpGs | train {len(sp['train'])} | val {len(sp['val'])} ({len(sp['val_series'])} series) | pretrain pool {len(sp['ssl'])} | test (HC) {len(sp['test'])}")
-    torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
-    model = EpiClock(len(c.cpgs), mean, std, ctx, cfg).to(dev)
-    log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
-    if dev.type != "cpu" and not a.no_selftest:
-        selftest(model, c, sp, K, dev, rng)
-    age_all = c.meta.Age.to_numpy(float)
-    budget = Budget(B, dev, limit)
-    def trial(m, n):                                           # one representative forward pass, used to size the micro-batch
-        sel = rng.choice(sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(c.X[sel], K, rng)
-        return m.reconstruct(idx, ib, valid, is_mask).mean()
-    model.train(); budget.fit(model, trial)
-    # ---- stage 1: masked-CpG reconstruction (no labels)
-    pre_best = out / "pretrain_best.pt"
-    if not a.no_pretrain:
-        w_ssl = sample_weights(c.meta, sp["ssl"], 0.5, 0.0)
-        vrows = c.X[sp["val"][np.random.RandomState(5).choice(len(sp["val"]), min(1500, len(sp["val"])), replace=False)]]
-        base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - mean)))
-        def ssl_step(m, n):
-            rows = c.X[rng.choice(sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
-            pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
-            err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
-        def ssl_eval(m):
-            r = np.random.default_rng(11); tot, n = 0.0, 0; m.eval()
-            with torch.no_grad():
-                for s in range(0, len(vrows), 128):
-                    idx, ib, valid, is_mask, beta = ssl_batch(vrows[s:s + 128], K, r); pred = m.reconstruct(idx, ib, valid, is_mask).cpu(); ok = is_mask & valid
-                    tot += float((pred - beta).abs()[ok].sum()); n += int(ok.sum())
-            return tot / n
-        log(f"[pretrain] baseline (predict each CpG's training mean) MAE on hidden CpGs of held-out series: {base_mae:.4f}")
-        old = out / "pretrain.json"                                                  # written by earlier versions of this script when pretraining finished
-        if old.exists() and not (out / "pretrain_done.json").exists() and json.load(open(old)).get("reason") not in (None, "stop-file"):
-            shutil.copy(old, out / "pretrain_done.json")
-        r1 = run_phase("pretrain", model, ssl_step, ssl_eval, out, dev, lr, max_steps=a.ssl_steps, eval_every=a.eval_every, patience=a.patience, max_hours=a.pretrain_hours, budget=budget)
-        log(f"[pretrain] reconstruction MAE {r1['best']:.4f} vs mean-baseline {base_mae:.4f} ({1 - r1['best'] / base_mae:.0%} lower)")
-        json.dump(dict(r1, baseline_mae=base_mae), open(out / "pretrain.json", "w"), indent=1)
-        if r1["reason"] == "stop-file":
-            return log("paused by the STOP file. Delete it and run the same command again to resume.")
-    # ---- stage 2: age
-    rg = ridge_fit(c, sp, mean, std, log)
-    def warm_start(m):
-        if m.lin_on:
-            m.lin_u.data.copy_(torch.as_tensor(rg["w"] / LIN_SCALE)); m.bias.data.fill_(rg["b"]); nn.init.zeros_(m.age_head.weight); nn.init.zeros_(m.age_head.bias)
-            log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
-    old = out / "results.json"                                                       # written by earlier versions of this script when the run finished
-    if old.exists() and not (out / "finetune_done.json").exists():
-        ft = json.load(open(old)).get("finetune") or {}
-        if ft.get("reason") not in (None, "stop-file"):
-            json.dump(ft, open(out / "finetune_done.json", "w"))
-    tr_rows = sp["train"]; w = sample_weights(c.meta, tr_rows, 0.5, 0.5)
-    vsel = sp["val"][np.random.RandomState(6).choice(len(sp["val"]), min(2000, len(sp["val"])), replace=False)]
-    def age_step(m, n):
-        sel = rng.choice(tr_rows, n, p=w); rows = c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, mean, std)
-        y = torch.as_tensor(age_to_t(age_all[sel]), dtype=torch.float32, device=m.cls.device)
-        return nn.functional.smooth_l1_loss(m.age_t(idx, beta, valid, fz), y, beta=0.05)
-    def age_eval(m):
-        p = t_to_age(predict_t(m, c.X[vsel], K, a.val_draws, np.random.default_rng(13))); return float(np.median(np.abs(p - age_all[vsel])))
-    r2 = run_phase("finetune", model, age_step, age_eval, out, dev, lr * (0.5 if pre_best.exists() and not a.no_pretrain else 1.0), max_steps=a.ft_steps, eval_every=a.eval_every,
-                   patience=a.patience, max_hours=a.finetune_hours, init_from=pre_best if (pre_best.exists() and not a.no_pretrain) else None, post_init=warm_start, budget=budget)
-    if r2["reason"] == "stop-file":
-        return log("paused by the STOP file. Delete it and run the same command again to resume.")
-    best = torch.load(out / "finetune_best.pt", map_location="cpu", weights_only=False)
-    model.load_state_dict(best["state"]); model = model.to(dev)
-    torch.save(dict(state=best["state"], cfg=cfg, K=K, cpgs=c.cpgs, mean=mean, std=std, ctx=ctx if cfg["context"] else None), out / "model.pt")
-    # ---- test
-    log(f"[test] predicting {len(sp['test'])} held-out healthy controls with {a.test_draws} subsets of {K} CpGs each ...")
-    preds = {"EpiClock": t_to_age(predict_t(model, c.X[sp["test"]], K, a.test_draws, np.random.default_rng(17)))}
-    if not a.no_baselines:
-        preds.update(linear_baselines(c, sp, mean, std, log, rg)); preds.update(published_clocks(c, sp, log))
-    df = test_report(c, sp, preds, out)
-    json.dump(dict(preset=a.preset, cfg=cfg, K=K, pretrained=not a.no_pretrain, finetune=dict(r2, hist=None), test=df.round(4).to_dict("index")), open(out / "results.json", "w"), indent=1)
-    log(f"done. model: {out / 'model.pt'}; report: {out / 'test_report.md'}")
-
 
 def load_model(path, dev):
     ck = torch.load(path, map_location="cpu", weights_only=False); cfg = ck["cfg"]
     m = EpiClock(len(ck["cpgs"]), ck["mean"], ck["std"], ck["ctx"], cfg); m.load_state_dict(ck["state"]); return m.to(dev).eval(), ck
 
 
-def cmd_predict(a):
-    dev = get_device(a.device); m, ck = load_model(a.model, dev)
-    B = pd.read_csv(a.beta, sep="\t" if a.beta.endswith((".tsv", ".txt")) else ",", index_col=0)
-    if B.index.astype(str).str.startswith("cg").mean() > 0.5:
-        B = B.T
+
+# ======================================================================================================== the study: shared state, arms, stages
+class Paused(Exception):
+    pass
+
+
+class Env:
+    """What every stage shares: data, splits, standardisation, device and memory budget."""
+
+
+SIZE_NAMES = {"tiny": "EpiClock-T", "small": "EpiClock-S", "base": "EpiClock-B", "large": "EpiClock-L", "xl": "EpiClock-XL"}
+KINDS = {"pre": "pre-trained transformer + linear core (the main model)", "scratch": "the same network without pre-training",
+         "noctx": "pre-trained, but the genome-context inputs (island, chromosome, regulatory class, position) are removed",
+         "pure": "transformer alone: no linear core, no pre-training", "cons": "pre-trained, fine-tuned with a two-view consistency penalty"}
+DEFAULT_QUEUE = ["linear-tuned", "xl-pre", "tiny-pre", "small-scratch", "small-pre", "small-pure", "base-scratch", "base-pre", "base-noctx",
+                 "base-pre-s1", "base-pre-s2", "base-cons", "large-pre"]
+SMOKE_QUEUE = ["linear-tuned", "tiny-pre", "tiny-scratch", "tiny-noctx", "tiny-pure", "tiny-cons", "tiny-pre-s1"]
+CONS_LAMBDA = 0.5
+
+
+def make_env(a):
+    global LOGF, CTRL
+    e = Env(); e.a = a; e.out = Path(a.out); e.out.mkdir(parents=True, exist_ok=True); LOGF = e.out / "study.log"; CTRL = e.out
+    torch.set_num_threads(a.threads or max(1, (os.cpu_count() or 4) // 2))
+    try:
+        torch.backends.mha.set_fastpath_enabled(False)          # the eval-mode transformer fast path has had MPS bugs
+    except AttributeError:
+        pass
+    e.dev = get_device(a.device); e.mem = total_mem_gb(); e.limit = a.memory_fraction * e.mem; e.selftested = False
+    e.data = find_data(a.data); e.c = load_corpus(e.data); e.sp = make_splits(e.c, a.seed); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
+    e.ctx = genome_context(e.data, e.c.cpgs); e.age = e.c.meta.Age.to_numpy(float); e.rng = np.random.default_rng(a.seed); torch.manual_seed(a.seed)
+    sp = e.sp
+    log(f"EpiClock study | device {e.dev} | machine memory {e.mem:.0f} GB (training budget {e.limit:.0f} GB) | data {e.data}\n"
+        f"corpus {len(e.c.X)} samples x {len(e.c.cpgs)} CpGs | train {len(sp['train'])} | val {len(sp['val'])} ({len(sp['val_series'])} series) | "
+        f"pretrain pool {len(sp['ssl'])} | test: {len(sp['test'])} healthy controls of {e.c.meta.iloc[sp['test']].DatasetID.nunique()} held-out studies "
+        f"(+{len(sp['test_all']) - len(sp['test'])} disease samples for the age-acceleration benchmark)")
+    return e
+
+
+def preset(e, size):
+    return PRESETS["tiny" if e.a.smoke else size]
+
+
+def parse_arm(name):
+    p = name.split("-")
+    if name == "linear-tuned":
+        return dict(name=name, size="-", kind="linear", seed=0, context=False, linear=True, pretrain=False)
+    if len(p) < 2 or p[0] not in PRESETS or p[1] not in KINDS or (len(p) > 2 and not re.fullmatch(r"s\d+", p[2])):
+        sys.exit(f"Unknown arm '{name}'. Arms are <size>-<kind>[-s<seed>] with size in {list(PRESETS)} and kind in {list(KINDS)}, or 'linear-tuned'.")
+    k = p[1]
+    return dict(name=name, size=p[0], kind=k, seed=int(p[2][1:]) if len(p) > 2 else 0, context=k != "noctx", linear=k != "pure", pretrain=k in ("pre", "noctx", "cons"))
+
+
+def legacy_preset(e):
+    """Runs made by the first version of this script keep their files directly in the output folder."""
+    try:
+        return json.load(open(e.out / "results.json"))["preset"] if (e.out / "model.pt").exists() else None
+    except Exception:
+        return None
+
+
+def arm_dir(e, ar):
+    return e.out if (ar["kind"] == "pre" and ar["seed"] == 0 and legacy_preset(e) == ar["size"]) else e.out / "arms" / ar["name"]
+
+
+def pre_dir(e, size, ctx):
+    return e.out if (ctx and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists()) else e.out / "pre" / (size if ctx else size + "-noctx")
+
+
+def mark_done_from_old_files(d):
+    """A folder written by the first version holds pretrain.json / results.json instead of the *_done.json markers."""
+    for src, key, dst in (("pretrain.json", None, "pretrain_done.json"), ("results.json", "finetune", "finetune_done.json")):
+        f = d / src
+        if f.exists() and not (d / dst).exists():
+            r = json.load(open(f)); r = r.get(key) if key else r
+            if r and r.get("reason") not in (None, "stop-file"):
+                json.dump(r, open(d / dst, "w"))
+
+
+def sanity_check_device(e, model, K):
+    if e.dev.type != "cpu" and not e.a.no_selftest and not e.selftested:
+        selftest(model, e.c, e.sp, K, e.dev, e.rng)
+    e.selftested = True
+
+
+def make_cfg(e, ar):
+    P = preset(e, ar["size"]); return dict(d=P["d"], layers=P["layers"], heads=P["heads"], context=ar["context"], linear_skip=ar["linear"], dropout=P["dropout"])
+
+
+def ensure_pretrained(e, size, ctx):
+    """Masked-CpG reconstruction on the label-free pool (shared by every arm of the same size and context setting)."""
+    d = pre_dir(e, size, ctx); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
+    if (d / "pretrain_done.json").exists():
+        return d / "pretrain_best.pt"
+    P = preset(e, size); K = P["K"]; cfg = make_cfg(e, dict(size=size, context=ctx, linear=True))
+    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
+    model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
+    sanity_check_device(e, model, K)
+    budget = Budget(P["batch"], e.dev, e.limit); rng = np.random.default_rng(e.a.seed + 3)
+    def trial(m, n):
+        sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
+        return m.reconstruct(idx, ib, valid, is_mask).mean()
+    model.train(); budget.fit(model, trial)
+    w_ssl = sample_weights(e.c.meta, e.sp["ssl"], 0.5, 0.0)
+    vrows = e.c.X[e.sp["val"][np.random.RandomState(5).choice(len(e.sp["val"]), min(1500, len(e.sp["val"])), replace=False)]]
+    base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - e.mean)))
+    def ssl_step(m, n):
+        rows = e.c.X[rng.choice(e.sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
+        pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
+        err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
+    def ssl_eval(m):
+        r = np.random.default_rng(11); tot, n = 0.0, 0; m.eval()
+        with torch.no_grad():
+            for s in range(0, len(vrows), 128):
+                idx, ib, valid, is_mask, beta = ssl_batch(vrows[s:s + 128], K, r); pred = m.reconstruct(idx, ib, valid, is_mask).cpu(); ok = is_mask & valid
+                tot += float((pred - beta).abs()[ok].sum()); n += int(ok.sum())
+        return tot / n
+    log(f"[pretrain] baseline (predict each CpG's training mean) MAE on hidden CpGs of held-out series: {base_mae:.4f}")
+    r1 = run_phase("pretrain", model, ssl_step, ssl_eval, d, e.dev, P["lr"], max_steps=e.a.ssl_steps, eval_every=e.a.eval_every, patience=e.a.patience, max_hours=P["pre_h"], budget=budget)
+    json.dump(dict(r1, baseline_mae=base_mae), open(d / "pretrain.json", "w"), indent=1)
+    if r1["reason"] == "stop-file":
+        raise Paused()
+    log(f"[pretrain] reconstruction MAE {r1['best']:.4f} vs mean-baseline {base_mae:.4f} ({1 - r1['best'] / base_mae:.0%} lower)")
+    del model; free_mem(e.dev)
+    return d / "pretrain_best.pt"
+
+
+def age_fns(e, K, rng, cons):
+    tr_rows = e.sp["train"]; w = sample_weights(e.c.meta, tr_rows, 0.5, 0.5); vsel = e.sp["val"]; sl1 = nn.functional.smooth_l1_loss
+    def step(m, n):
+        if cons and n >= 2:                         # two independent CpG subsets of the same people: both fit the age, and they must agree
+            sel = rng.choice(tr_rows, n // 2, p=w); rows = e.c.X[sel]; fz = rowz(rows, e.mean, e.std)
+            y = torch.as_tensor(age_to_t(e.age[sel]), dtype=torch.float32, device=m.cls.device)
+            i1, b1, v1, _ = draw(rows, K, rng); i2, b2, v2, _ = draw(rows, K, rng); p1, p2 = m.age_t(i1, b1, v1, fz), m.age_t(i2, b2, v2, fz)
+            return 0.5 * (sl1(p1, y, beta=0.05) + sl1(p2, y, beta=0.05)) + CONS_LAMBDA * sl1(p1, p2, beta=0.05)
+        sel = rng.choice(tr_rows, n, p=w); rows = e.c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, e.mean, e.std)
+        y = torch.as_tensor(age_to_t(e.age[sel]), dtype=torch.float32, device=m.cls.device)
+        return sl1(m.age_t(idx, beta, valid, fz), y, beta=0.05)
+    def ev(m):
+        p = t_to_age(predict_t(m, e.c.X[vsel], K, e.a.val_draws, np.random.default_rng(13))); return float(np.median(np.abs(p - e.age[vsel])))
+    return step, ev
+
+
+def train_arm(e, ar, d):
+    """Fine-tune on age (Horvath-transformed) from the ridge-initialised linear core; -> path of model.pt"""
+    mp = d / "model.pt"; mark_done_from_old_files(d)
+    if mp.exists() and (d / "finetune_done.json").exists():
+        return mp
+    P = preset(e, ar["size"]); K = P["K"]; cfg = make_cfg(e, ar); pre = ensure_pretrained(e, ar["size"], ar["context"]) if ar["pretrain"] else None
+    log(f"=== fine-tuning {ar['name']}: {KINDS[ar['kind']]}  (seed {ar['seed']})")
+    torch.manual_seed(e.a.seed + 101 * ar["seed"]); rng = np.random.default_rng(e.a.seed + 101 * ar["seed"] + 7)
+    model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
+    sanity_check_device(e, model, K)
+    budget = Budget(P["batch"], e.dev, e.limit)
+    def trial(m, n):
+        sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
+        return m.reconstruct(idx, ib, valid, is_mask).mean()
+    model.train(); budget.fit(model, trial); rg = get_ridge(e)
+    def warm_start(m):
+        m.bias.data.fill_(rg["b"])
+        if m.lin_on:
+            m.lin_u.data.copy_(torch.as_tensor(rg["w"] / LIN_SCALE)); nn.init.zeros_(m.age_head.weight); nn.init.zeros_(m.age_head.bias)
+            log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
+    step, ev = age_fns(e, K, rng, ar["kind"] == "cons")
+    r2 = run_phase("finetune", model, step, ev, d, e.dev, P["lr"] * (0.5 if pre else 1.0), max_steps=e.a.ft_steps, eval_every=e.a.eval_every, patience=e.a.patience,
+                   max_hours=P["ft_h"], init_from=pre, post_init=warm_start, budget=budget)
+    if r2["reason"] == "stop-file":
+        raise Paused()
+    best = torch.load(d / "finetune_best.pt", map_location="cpu", weights_only=False)
+    torch.save(dict(state=best["state"], cfg=cfg, K=K, cpgs=e.c.cpgs, mean=e.mean, std=e.std, ctx=e.ctx if cfg["context"] else None, arm=ar["name"], pretrained=pre is not None), mp)
+    del model; free_mem(e.dev)
+    return mp
+
+
+class LinearClock(nn.Module):
+    """The linear core on its own: same parameters, loss and training recipe as the fine-tuning stage, but no transformer.  It is the control
+    that separates 'the transformer helps' from 'training the linear weights a bit more helps'."""
+
+    def __init__(self, rg):
+        super().__init__(); self.cfg = {}
+        self.lin_u = nn.Parameter(torch.as_tensor(rg["w"] / LIN_SCALE)); self.bias = nn.Parameter(torch.tensor(float(rg["b"])))
+
+    def forward(self, fz):
+        return self.bias + LIN_SCALE * (fz @ self.lin_u)
+
+
+class FixedBudget:
+    def __init__(self, n):
+        self.micro, self.accum = n, 1
+
+    def shrink(self):
+        return False
+
+
+def fit_linear_tuned(e, d):
+    log("=== linear-tuned control: the linear core trained with the fine-tuning recipe, no transformer")
+    rg = get_ridge(e); rng = np.random.default_rng(e.a.seed + 5); tr = e.sp["train"]; w = sample_weights(e.c.meta, tr, 0.5, 0.5); vsel = e.sp["val"]
+    def step(m, n):
+        sel = rng.choice(tr, n, p=w); y = torch.as_tensor(age_to_t(e.age[sel]), dtype=torch.float32)
+        return nn.functional.smooth_l1_loss(m(rowz(e.c.X[sel], e.mean, e.std)), y, beta=0.05)
+    def ev(m):
+        with torch.no_grad():
+            p = t_to_age(m(rowz(e.c.X[vsel], e.mean, e.std)).double().numpy())
+        return float(np.median(np.abs(p - e.age[vsel])))
+    m = LinearClock(rg); cpu = torch.device("cpu")
+    r = run_phase("linear", m, step, ev, d, cpu, 1e-4, max_hours=0.5, budget=FixedBudget(128))
+    m.load_state_dict(torch.load(d / "linear_best.pt", map_location="cpu", weights_only=False)["state"]); out = []
+    with torch.no_grad():
+        for s in range(0, len(e.sp["test_all"]), 2000):
+            out.append(t_to_age(m(rowz(e.c.X[e.sp["test_all"][s:s + 2000]], e.mean, e.std)).double().numpy()))
+    np.savez(d / "preds.npz", pred=np.concatenate(out))
+    if r["reason"] == "stop-file":
+        raise Paused()
+
+
+def predict_arm(e, ar, mp, d):
+    model, ck = load_model(mp, e.dev); K = ck["K"]; rows = e.c.X[e.sp["test_all"]]
+    log(f"[predict] {ar['name']}: {len(rows)} benchmark samples x {e.a.test_draws} CpG subsets of {K}")
+    out = dict(pred=t_to_age(predict_t(model, rows, K, e.a.test_draws, np.random.default_rng(17))))
+    if model.lin_on:                                          # decomposition: what the trained linear part alone predicts (no transformer correction)
+        lin = []
+        with torch.no_grad():
+            for s in range(0, len(rows), 2000):
+                fz = rowz(rows[s:s + 2000], ck["mean"], ck["std"]).to(e.dev); lin.append(t_to_age((model.bias + LIN_SCALE * (fz @ model.lin_u)).detach().cpu().double().numpy()))
+        out["lin"] = np.concatenate(lin)
+    if ar["pretrain"]:                                        # the reconstruction head only means something after pre-training
+        out["recon"] = recon_error(model, rows, K, 2, np.random.default_rng(19))
+    np.savez(d / "preds.npz", **out); del model; free_mem(e.dev)
+
+
+def run_arm(e, name):
+    ar = parse_arm(name); d = arm_dir(e, ar); d.mkdir(parents=True, exist_ok=True)
+    if (d / "preds.npz").exists():
+        return
+    if ar["kind"] == "linear":
+        fit_linear_tuned(e, d); return
+    mp = train_arm(e, ar, d); predict_arm(e, ar, mp, d)
+
+
+# ======================================================================================================== report
+def finished_arms(e):
+    names = set(); arms = e.out / "arms"
+    if arms.exists():
+        names |= {p.name for p in arms.iterdir() if (p / "preds.npz").exists()}
+    lp = legacy_preset(e)
+    if lp and (e.out / "preds.npz").exists():
+        names.add(f"{lp}-pre")
+    order = {s: i for i, s in enumerate(["linear-tuned"] + list(PRESETS))}
+    return sorted(names, key=lambda n: (order.get(n.split("-")[0], 99) if n != "linear-tuned" else -1, n))
+
+
+def load_arm_preds(e, name):
+    z = np.load(arm_dir(e, parse_arm(name)) / "preds.npz"); return {k: z[k] for k in z.files}
+
+
+def param_count(e, size):
+    cfg = make_cfg(e, dict(size=size, context=True, linear=True))
+    return sum(p.numel() for p in EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).parameters())
+
+
+PAIRS = [("{s}-pre", "linear-tuned", "transformer (pre-trained) vs the linear core alone"),
+         ("{s}-scratch", "linear-tuned", "transformer (no pre-training) vs the linear core alone"),
+         ("{s}-pre", "{s}-pre [linear part only]", "the transformer's correction itself (same model, correction removed)"),
+         ("{s}-pre", "{s}-scratch", "value of pre-training"),
+         ("{s}-pre", "{s}-noctx", "value of the genome-context inputs"),
+         ("{s}-scratch", "{s}-pure", "value of the ridge-initialised linear core"),
+         ("{s}-cons", "{s}-pre", "consistency fine-tuning"),
+         ("{s}-pre-s1", "{s}-pre", "seed 1 vs seed 0 (training noise)"), ("{s}-pre-s2", "{s}-pre", "seed 2 vs seed 0 (training noise)")]
+
+
+def disease_table(e, scores):
+    """Within every (study, condition) with >= 10 patients and >= 10 healthy controls of the same study: remove the age trend of the score (line fitted on
+    that study's controls), then the AUC for patients vs controls (0.5 = no signal).  Reported per disease class with a bootstrap over (study, condition) units."""
+    from scipy.stats import rankdata
+    meta = e.c.meta.iloc[e.sp["test_all"]]; ds, cond, cls = meta.DatasetID.to_numpy(), meta.Condition.astype(str).to_numpy(), meta.Class.astype(str).to_numpy()
+    age = meta.Age.to_numpy(float); ok = meta.Tissue.isin(["Blood", "Saliva", "Buccal"]).to_numpy() & np.isfinite(age) & (age >= 18) & (age <= 90)
+    rows = []
+    for gse, cd in sorted({(g, c_) for g, c_ in zip(ds[ok], cond[ok]) if c_ != "HC"}):
+        d_idx, h_idx = np.flatnonzero(ok & (ds == gse) & (cond == cd)), np.flatnonzero(ok & (ds == gse) & (cond == "HC"))
+        if len(d_idx) < 10 or len(h_idx) < 10 or np.ptp(age[h_idx]) < 5:
+            continue
+        r = dict(study=gse, condition=cd, cls=cls[d_idx[0]], n_disease=len(d_idx), n_control=len(h_idx)); A_ = np.stack([np.ones(len(h_idx)), age[h_idx]], 1)
+        for n, v in scores.items():
+            b = np.linalg.lstsq(A_, v[h_idx], rcond=None)[0]; res_d, res_h = v[d_idx] - (b[0] + b[1] * age[d_idx]), v[h_idx] - (b[0] + b[1] * age[h_idx])
+            rk = rankdata(np.concatenate([res_d, res_h])); r[n] = (rk[:len(d_idx)].sum() - len(d_idx) * (len(d_idx) + 1) / 2) / (len(d_idx) * len(h_idx))
+        rows.append(r)
+    if not rows:
+        return None
+    U = pd.DataFrame(rows); rng = np.random.default_rng(0); out = {}
+    for n in scores:
+        bs = [U[n].to_numpy()[rng.integers(0, len(U), len(U))].mean() for _ in range(1000)]
+        out[n] = {**{c_: f"{U.loc[U.cls == c_, n].mean():.2f} (n={int((U.cls == c_).sum())})" for c_ in sorted(U.cls.unique())}, "all units": f"{U[n].mean():.3f} {ci(bs, 3)}"}
+    return pd.DataFrame(out).T, len(U)
+
+
+def build_report(e):
+    comp = get_comparators(e); arms = finished_arms(e); P = dict(comp); ours = []
+    for n in arms:
+        d = load_arm_preds(e, n); P[n] = d["pred"]; ours.append(n)
+        if "lin" in d:
+            P[f"{n} [linear part only]"] = d["lin"]; ours.append(f"{n} [linear part only]")
+    RC = {n: load_arm_preds(e, n)["recon"] for n in arms if "recon" in load_arm_preds(e, n)}
+    members = [n for n in arms if n != "linear-tuned" and parse_arm(n)["kind"] == "pre" and parse_arm(n)["seed"] == 0]
+    if len(members) >= 2:
+        ens = "ensemble of " + "+".join(parse_arm(n)["size"] for n in members); P[ens] = np.mean([P[n] for n in members], 0); ours.append(ens)
+    te_all = e.sp["test_all"]; hc = np.searchsorted(te_all, e.sp["test"]); meta = e.c.meta.iloc[e.sp["test"]]; age = meta.Age.to_numpy(float); grp = meta.DatasetID.to_numpy()
+    blood = meta.Tissue.astype(str).str.contains("blood", case=False).to_numpy(); adult = (age >= 18) & (age <= 90); sib = sibling_set(e.c.meta, e.sp)
+    nosib = ~meta.DatasetID.isin(sib).to_numpy(); boot = Boot(grp, e.a.boot, 0)
+    A = {n: np.abs(P[n][hc] - age) for n in P}; S = {n: P[n][hc] - age for n in P}
+    Ms = {n: boot.med(A[n], "samples") for n in P}; Mc = {n: boot.med(A[n], "studies") for n in P}
+    rows = []
+    for n in P:
+        d = Mc[n] - Mc["ridge"]
+        rows.append(dict(model=n, MedAE=np.median(A[n]), CI_samples=ci(Ms[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1],
+                         MedAE_blood=np.median(A[n][blood]), MedAE_18_90=np.median(A[n][adult]), MedAE_no_sibling=np.median(A[n][nosib]),
+                         study_avg_MedAE=pd.Series(A[n]).groupby(grp).median().mean(), vs_ridge=(f"{np.median(A[n]) - np.median(A['ridge']):+.2f} {ci(d, 2, True)}" if n != "ridge" else ""),
+                         P_beats_ridge=float((d < 0).mean()) if n != "ridge" else np.nan, ours=n in ours))
+    main = pd.DataFrame(rows).set_index("model").sort_values("MedAE")
+    pr = []
+    for s in list(PRESETS):
+        for a_, b_, why in PAIRS:
+            a_, b_ = a_.format(s=s), b_.format(s=s)
+            if a_ in P and b_ in P and a_ != b_:
+                d_s, d_c = Ms[a_] - Ms[b_], Mc[a_] - Mc[b_]
+                pr.append(dict(comparison=f"{a_}  minus  {b_}", meaning=why, delta_MedAE=np.median(A[a_]) - np.median(A[b_]), CI_samples=ci(d_s, 2, True), CI_studies=ci(d_c, 2, True), P_first_better_studies=float((d_c < 0).mean())))
+    pairs = pd.DataFrame(pr)
+    sc = []
+    for n in members:
+        sz = parse_arm(n)["size"]; sc.append(dict(model=SIZE_NAMES[sz], arm=n, parameters=f"{param_count(e, sz):,}", MedAE=np.median(A[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1]))
+    scaling = pd.DataFrame(sc)
+    off = official_scores(e, P)
+    lines = [f"# EpiClock study report", "", f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
+             f"{len(sib)} studies adjacent to training series). None of these studies was used for training, model selection or early stopping.", ""]
+    best = [n for n in main.index if main.loc[n, "ours"] and "[linear part only]" not in n and n != "linear-tuned"]
+    if best:
+        b = best[0]; d = Mc[b] - Mc["ridge"]
+        lines += ["## Headline", f"- Best EpiClock result: **{b}**, median absolute error **{main.loc[b, 'MedAE']:.2f} y** (95% CI over studies {main.loc[b, 'CI_studies']}) versus ridge "
+                  f"{main.loc['ridge', 'MedAE']:.2f} y {main.loc['ridge', 'CI_studies']}. Paired difference {main.loc[b, 'vs_ridge']}; it beats ridge in {float((d < 0).mean()):.0%} of study-level bootstrap draws."]
+        if "linear-tuned" in P and b != "linear-tuned":
+            d2 = Mc[b] - Mc["linear-tuned"]; lo, hi = np.percentile(d2, [2.5, 97.5])
+            lines += [f"- Against the linear core retrained with the same recipe (the right control for 'is it the transformer?'): {np.median(A[b]) - np.median(A['linear-tuned']):+.2f} y, "
+                      f"study-level 95% CI [{lo:+.2f}, {hi:+.2f}] - " + ("the interval excludes zero." if hi < 0 or lo > 0 else "the interval includes zero: not distinguishable at the study level (the sample-level interval is narrower).")]
+        lines += [""]
+    lines += ["## All models on the same test samples (median absolute error in years; lower is better)", "```", main.drop(columns="ours").round(3).to_string(), "```",
+              "CI_samples resamples individual samples; CI_studies resamples whole studies (the honest one: samples within a study share batch effects). vs_ridge is the paired "
+              "difference in MedAE (negative = better than ridge) with its study-level interval. `[linear part only]` rows show what the trained linear weights predict with the transformer correction removed.", ""]
+    if len(pairs):
+        lines += ["## What does each ingredient add? (paired, same test samples; negative = the first model is better)", "```", pairs.round(3).to_string(index=False), "```", ""]
+    if len(scaling):
+        lines += ["## Model family", "```", scaling.round(3).to_string(index=False), "```", ""]
+    if off is not None:
+        lines += ["## ComputAge Bench official-style score (all 65 benchmark studies incl. disease cohorts)",
+                  "AA2: significant age acceleration in disease vs the same study's healthy controls; AA1: significant positive acceleration in disease (both FDR-corrected); "
+                  "score = AA2 + AA1 x (1 - positive median bias / MedAE). Same study list, tests and formula as the `computage` package, applied to our predictions. "
+                  "Scores differ by whole tests, so differences of 1-2 points are not meaningful.", "```", off.round(2).to_string(), "```", ""]
+    if RC:
+        big = max(RC, key=lambda n: (list(PRESETS).index(parse_arm(n)["size"]), n)); sc_ = {"ridge: age acceleration": P["ridge"]}
+        if "Horvath V2" in P:
+            sc_["Horvath V2: age acceleration"] = P["Horvath V2"]
+        best_ = [n for n in main.index if n in arms and n != "linear-tuned"][0]; sc_[f"EpiClock {best_}: age acceleration"] = P[best_]; sc_[f"EpiClock {big}: deviation (masked-CpG reconstruction error)"] = RC[big]
+        dt = disease_table(e, sc_)
+        if dt is not None:
+            lines += ["## Disease signal across the benchmark studies (AUC patients vs same-study healthy controls, age trend removed; 0.5 = none)",
+                      f"{dt[1]} (study, condition) units with >= 10 patients and >= 10 controls. Classes: ISD immune/inflammatory, NDD neurodegenerative, CVD cardiovascular, MSD metabolic, MBD, RSD, PGS progeroid. "
+                      "The deviation score needs no age label and no disease label: it asks how badly the pre-trained model reconstructs the sample's hidden CpGs.", "```", dt[0].to_string(), "```", ""]
+    pj = sorted((e.out / "probes").glob("*.json")) if (e.out / "probes").exists() else []
+    for f in pj:
+        r = json.load(open(f))
+        if "results" not in r:
+            continue
+        tab = pd.DataFrame({fs: {t: f"{v['score']:.3f}" for t, v in res.items()} for fs, res in r["results"].items()})
+        chance = {t: v["chance"] for t, v in next(iter(r["results"].values())).items()}; tab.insert(0, "chance", {t: f"{c:.3f}" for t, c in chance.items()})
+        lines += [f"## Does the CpG identity embedding know the genome? - {f.stem}" + ("  (the model was GIVEN these annotations as input, so this is not evidence of discovery)" if r["context_input"] else "  (no annotation input: anything above the baselines was learned from methylation alone)"),
+                  "Linear probe, 5-fold cross-validation over CpGs; balanced accuracy for multi-class targets, AUC for yes/no targets.", "```", tab.to_string(), "```", ""]
+    for f in sorted((e.out / "probes").glob("*_sex.json")) if (e.out / "probes").exists() else []:
+        lines += [f"## Second-level task: sex from the frozen sample embedding - {f.stem}", "```", json.dumps(json.load(open(f)), indent=1), "```", ""]
+    lines += ["## Notes", "- Rows starting with 'biolearn' are the same published clock run through the biolearn package; they differ from the computage versions only in how missing CpGs are imputed.",
+              "- The score table follows the `computage` source code but was not cross-checked against the authors' published table; it rewards clocks that show acceleration in disease, which is not the same as being accurate in healthy people.",
+              "- The panel has 9,098 CpGs; clocks that need other CpGs (PhenoAge: 83% covered) are imputed with SeSAMe reference medians, so they are handicapped.",
+              "- EpiClock and ridge/elastic net were trained on this data mix and the published clocks were not: ridge is the fair opponent, the published clocks give context.",
+              "- Bootstrap intervals describe test-set sampling uncertainty. Training-run noise is shown by the -s1/-s2 seed arms.",
+              "- Chronological-age accuracy is not the same as usefulness as a biomarker: see the disease age-acceleration score above and use `predict --meta ...` on your own cohorts."]
+    (e.out / "report.md").write_text("\n".join(lines) + "\n"); main.to_csv(e.out / "report_main.csv"); pairs.to_csv(e.out / "report_pairs.csv", index=False)
+    rep = dict(main={n: dict(MedAE=float(main.loc[n, "MedAE"]), CI_studies=main.loc[n, "CI_studies"], MAE=float(main.loc[n, "MAE"]), r=float(main.loc[n, "r"])) for n in main.index},
+               official=None if off is None else off.round(2).to_dict("index"), n_test=int(len(hc)), n_studies=int(meta.DatasetID.nunique()))
+    json.dump(rep, open(e.out / "report.json", "w"), indent=1)
+    log(f"report written: {e.out / 'report.md'}\n" + "\n".join(lines[:12])); return rep
+
+
+# ======================================================================================================== probes of what the model learned about the genome
+def probe_scores(F, targets, seed=0):
+    from sklearn.linear_model import RidgeClassifier
+    from sklearn.metrics import balanced_accuracy_score, roc_auc_score
+    from sklearn.model_selection import StratifiedKFold, cross_val_predict
+    from sklearn.preprocessing import StandardScaler
+    X = StandardScaler().fit_transform(np.nan_to_num(F)); out = {}; cv = StratifiedKFold(5, shuffle=True, random_state=seed)
+    for name, (kind, y) in targets.items():
+        y = np.asarray(y)
+        if kind == "multi":
+            cnt = pd.Series(y).value_counts(); keep = np.isin(y, cnt[cnt >= 10].index)
+            if keep.sum() < 100 or len(cnt[cnt >= 10]) < 2:
+                continue
+            p = cross_val_predict(RidgeClassifier(alpha=100.0), X[keep], y[keep], cv=cv)
+            out[name] = dict(score=float(balanced_accuracy_score(y[keep], p)), chance=float(1 / len(np.unique(y[keep]))))
+        else:
+            yb = y.astype(int)
+            if yb.sum() < 20 or (1 - yb).sum() < 20:
+                continue
+            dfn = cross_val_predict(RidgeClassifier(alpha=100.0), X, yb, cv=cv, method="decision_function")
+            out[name] = dict(score=float(roc_auc_score(yb, dfn)), chance=0.5)
+    return out
+
+
+def probe_architecture(e):
+    """Does the free per-CpG embedding (the model's learned 'identity' for each CpG) encode CpG-island relation, regulatory class, chromosome ...?
+    Compared with what plain methylation statistics and an SVD embedding of the same size already give, and with random vectors."""
+    pdir = e.out / "probes"; pdir.mkdir(exist_ok=True); ann = pd.read_parquet(e.data / "annot/annotation_450k.parquet").reindex(e.c.cpgs)
+    g = lambda col: ann[col].fillna(0).astype(int).to_numpy() if col in ann else np.zeros(len(ann), int)
+    prom = ((g("gene_TSS200") + g("gene_TSS1500")) > 0).astype(int)
+    targets = {"CpG-island relation": ("multi", g("island")), "regulatory class": ("multi", g("reg")), "chromosome": ("multi", g("chrom")), "chromosome X": ("bin", (g("chrom") == 23).astype(int)),
+               "enhancer": ("bin", (g("enhancer") > 0).astype(int)), "DNase-hypersensitive": ("bin", (g("dhs") > 0).astype(int)), "promoter (TSS200/TSS1500)": ("bin", prom),
+               "gene body": ("bin", (g("gene_Body") > 0).astype(int)), "probe design II (a technical feature)": ("bin", (g("design2") > 0).astype(int))}
+    tr = e.sp["train"]; sub = e.c.X[tr[np.random.RandomState(0).choice(len(tr), min(4000, len(tr)), replace=False)]]; Z = standardize(sub, e.mean, e.std)
+    xs = np.where(sub == 255, np.nan, sub / 100.0)
+    stats = np.stack([np.nan_to_num(np.nanmean(xs, 0), nan=0.5), np.nan_to_num(np.nanstd(xs, 0))], 1)
+    Sv, Vt = None, None; base_cache = {}; done = []
+    for n in finished_arms(e):
+        ar = parse_arm(n)
+        if ar["kind"] not in ("pre", "noctx") or ar["seed"] != 0:
+            continue
+        f = pdir / f"{n}.json"
+        if f.exists():
+            continue
+        ck = torch.load(arm_dir(e, ar) / "model.pt", map_location="cpu", weights_only=False); E = ck["state"]["id_emb.weight"].numpy(); d = E.shape[1]
+        if d not in base_cache:
+            if Vt is None:
+                _, Sv, Vt = np.linalg.svd(Z, full_matrices=False)
+            k = min(d, len(Sv)); base_cache[d] = dict(
+                svd=probe_scores((Vt[:k].T * Sv[:k]).astype(np.float32), targets), rand=probe_scores(np.random.default_rng(0).standard_normal((len(e.c.cpgs), d)).astype(np.float32), targets),
+                stats=probe_scores(stats, targets))
+        res = {"learned id embedding": probe_scores(E, targets), "SVD of methylation matrix, same size": base_cache[d]["svd"], "mean+sd of beta": base_cache[d]["stats"], "random vectors": base_cache[d]["rand"]}
+        json.dump(dict(context_input=bool(ck["cfg"].get("context", True)), dim=int(d), results=res), open(f, "w"), indent=1); done.append(n)
+    if done:
+        log(f"[probe] CpG-architecture probes written for {done}")
+
+
+def probe_sex(e, name):
+    """Second-level task on the frozen model: sex from the sample embedding (vs the same classifier on PCA of the raw betas)."""
+    from sklearn.decomposition import PCA
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.metrics import roc_auc_score
+    from sklearn.preprocessing import StandardScaler
+    pdir = e.out / "probes"; pdir.mkdir(exist_ok=True); f = pdir / f"{name}_sex.json"
+    if f.exists():
+        return
+    ar = parse_arm(name); m, ck = load_model(arm_dir(e, ar) / "model.pt", e.dev); K = ck["K"]; c = e.c
+    sex = c.meta.Gender.astype(str).to_numpy(); lab = np.isin(sex, ["M", "F"]); sp = e.sp
+    tr = sp["train"][lab[sp["train"]]][:4000]; te = sp["test_all"][lab[sp["test_all"]]][:2000]
+    if len(tr) < 200 or len(te) < 100:
+        return
+    def emb(rows):
+        r = np.random.default_rng(3); out = []
+        with torch.no_grad():
+            for s in range(0, len(rows), 64):
+                idx, beta, valid, _ = draw(c.X[rows[s:s + 64]], K, r); out.append(m.embed(idx, beta, valid).cpu().numpy())
+        return np.concatenate(out)
+    Etr, Ete = emb(tr), emb(te); ytr, yte = (sex[tr] == "F").astype(int), (sex[te] == "F").astype(int)
+    def fit(Ftr, Fte):
+        sc = StandardScaler().fit(Ftr); p = LogisticRegression(C=0.1, max_iter=500).fit(sc.transform(Ftr), ytr).predict_proba(sc.transform(Fte))[:, 1]
+        return dict(accuracy=round(float(((p > .5) == yte).mean()), 4), auc=round(float(roc_auc_score(yte, p)), 4))
+    pca = PCA(min(64, len(tr) - 1), random_state=0).fit(standardize(c.X[tr], e.mean, e.std))
+    res = {"frozen embedding": fit(Etr, Ete), "PCA-64 of raw betas": fit(pca.transform(standardize(c.X[tr], e.mean, e.std)), pca.transform(standardize(c.X[te], e.mean, e.std)))}
+    json.dump(res, open(f, "w"), indent=1); del m; free_mem(e.dev)
+
+
+# ======================================================================================================== release
+def release(e, rep):
+    rel = e.out / "release"; rel.mkdir(exist_ok=True); members = []
+    for n in finished_arms(e):
+        ar = parse_arm(n)
+        if n != "linear-tuned" and ar["kind"] == "pre" and ar["seed"] == 0 and (arm_dir(e, ar) / "model.pt").exists():
+            members.append((n, ar))
+    if not members:
+        return
+    fam = ["# EpiClock model family", "", "| model | parameters | tokens per sample | MedAE (y) [95% CI over studies] | MAE (y) | r |", "|---|---|---|---|---|---|"]
+    for n, ar in members:
+        nm = SIZE_NAMES[ar["size"]]; d = rel / nm; d.mkdir(exist_ok=True); shutil.copy(arm_dir(e, ar) / "model.pt", d / "model.pt"); P = preset(e, ar["size"]); r = rep["main"].get(n, {})
+        npar = param_count(e, ar["size"]); cfg = make_cfg(e, ar)
+        json.dump(dict(name=nm, parameters=npar, panel_cpgs=len(e.c.cpgs), tokens_per_sample=P["K"], config=cfg, age_transform=f"Horvath-style, adult age {ADULT}", test=r), open(d / "config.json", "w"), indent=1)
+        (d / "MODEL_CARD.md").write_text(f"""# {nm}
+
+Genome-aware transformer epigenetic clock ({npar:,} parameters). Input: beta values at up to {len(e.c.cpgs):,} CpGs (any subset; missing values allowed). Output: epigenetic age in years.
+
+**How it works.** Each CpG is a token (learned identity + chromosome, CpG-island relation, regulatory class, position, gene-region flags + its beta). A sample is a random subset of {P['K']} observed CpGs;
+predictions over several disjoint subsets are averaged. The model is pre-trained without labels by hiding 25% of CpGs and reconstructing them, then fine-tuned on chronological age.
+The age output is a linear clock over the whole CpG row (initialised from ridge) plus a correction learned by the transformer.
+
+**Evaluation** (healthy controls of {rep['n_studies']} held-out ComputAge benchmark studies, n={rep['n_test']}): median absolute error {r.get('MedAE', float('nan')):.2f} y
+(95% CI over studies {r.get('CI_studies', '')}), mean absolute error {r.get('MAE', float('nan')):.2f} y, r = {r.get('r', float('nan')):.3f}. See report.md for comparators and paired differences.
+
+**Training data.** Public ComputAge Bench training studies and public GEO methylation series restricted to a {len(e.c.cpgs):,}-CpG panel; leukaemia/AML/MDS series were excluded from all training.
+
+**Intended use.** Research on chronological/biological-age estimation and age acceleration. Not a medical device; not validated for clinical decisions.
+**Limitations.** Panel-restricted (9,098 CpGs); mostly blood; adult ages dominate; chronological-age accuracy does not imply mortality prediction; 450K/EPIC-style betas expected.
+**Licence / provenance.** Check the terms of the source datasets (ComputAge Bench on Hugging Face; each GEO series) before redistributing weights or training data.
+""")
+        fam.append(f"| {nm} | {npar:,} | {P['K']} | {r.get('MedAE', float('nan')):.2f} {r.get('CI_studies', '')} | {r.get('MAE', float('nan')):.2f} | {r.get('r', float('nan')):.3f} |")
+    fam += ["", "Ensemble (mean of the family) is reported in report.md.", "", "## Use", "```python", "# put epiclock.py next to the weights", "from epiclock import epiclock_predict",
+            "res = epiclock_predict('EpiClock-B/model.pt', betas_dataframe)   # rows = samples, columns = CpG ids (cg...), values = beta in [0, 1]", "ages = res['epigenetic_age']; deviation = res['deviation']", "```"]
+    (rel / "FAMILY.md").write_text("\n".join(fam) + "\n"); shutil.copy(e.out / "report.md", rel / "report.md")
+    log(f"[release] family package written to {rel}")
+
+
+# ======================================================================================================== commands
+def default_queue(e):
+    if e.a.smoke:
+        return list(SMOKE_QUEUE)
+    q = list(DEFAULT_QUEUE)
+    if legacy_preset(e) != "xl":                       # no finished xl model on this machine: train it last, not first
+        q.remove("xl-pre"); q.append("xl-pre")
+    return q
+
+
+def finish(e):
+    rep = build_report(e)
+    probe_architecture(e)
+    for n in finished_arms(e):
+        ar = parse_arm(n)
+        if n != "linear-tuned" and ar["kind"] == "pre" and ar["seed"] == 0:
+            probe_sex(e, n)
+    rep = build_report(e); release(e, rep)
+    log(f"done. Read {e.out / 'report.md'}; the model family is in {e.out / 'release'}")
+
+
+def cmd_study(a):
+    e = make_env(a); queue = [x for x in a.arms.split(",") if x] or default_queue(e)
+    log(f"queue: {queue}. Results are written after every model; Ctrl-C or `touch {e.out / 'STOP'}` pauses, the same command resumes. `touch {e.out / 'NEXT'}` ends the current training stage early.")
+    try:
+        get_comparators(e)
+        for name in queue:
+            log(f"##### {name}")
+            run_arm(e, name); build_report(e)
+        finish(e)
+    except Paused:
+        log("paused by the STOP file. Delete it and run the same command again to resume.")
+
+
+def cmd_report(a):
+    e = make_env(a)
+    try:
+        finish(e)
+    except Paused:
+        pass
+
+
+def epiclock_predict(model_path, betas, device="auto", draws=16):
+    """Ages for a DataFrame of beta values (rows = samples, columns = CpG ids; rows may also be CpGs, it is detected).
+    -> DataFrame with `epigenetic_age` and, for pre-trained models, `deviation` (masked-CpG reconstruction error: how unlike healthy methylation the sample is)."""
+    dev = get_device(device); m, ck = load_model(model_path, dev)
+    B = betas.T if pd.Index(betas.index.astype(str)).str.startswith("cg").mean() > 0.5 else betas
     pos = pd.Index(ck["cpgs"]).get_indexer(B.columns.astype(str)); keep = pos >= 0
     X = np.full((len(B), len(ck["cpgs"])), 255, np.uint8); v = B.to_numpy(np.float64)[:, keep]
     X[:, pos[keep]] = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
     log(f"{len(B)} samples; {keep.sum()} of your {len(keep)} CpGs are in the model's panel ({keep.sum() / len(ck['cpgs']):.0%} of the panel)")
-    age = t_to_age(predict_t(m, X, ck["K"], a.draws, np.random.default_rng(0)))
-    pd.DataFrame({"sample": B.index, "epigenetic_age": age}).to_csv(a.out, index=False); log(f"wrote {a.out}")
+    out = pd.DataFrame({"epigenetic_age": t_to_age(predict_t(m, X, ck["K"], draws, np.random.default_rng(0)))}, index=B.index)
+    if ck.get("pretrained", True):
+        out["deviation"] = recon_error(m, X, ck["K"], 4, np.random.default_rng(1))
+    return out
+
+
+def cmd_predict(a):
+    B = pd.read_csv(a.beta, sep="\t" if a.beta.endswith((".tsv", ".txt")) else ",", index_col=0)
+    res = epiclock_predict(a.model, B, a.device, a.draws); out = res.reset_index().rename(columns={res.index.name or "index": "sample"})
+    if a.meta:
+        M = pd.read_csv(a.meta, sep="\t" if a.meta.endswith((".tsv", ".txt")) else ",", index_col=0).reindex(age.index)
+        out["age"] = M[a.age_col].to_numpy(float); out["age_acceleration_raw"] = out.epigenetic_age - out.age
+        if a.group_col and a.control:
+            grp = M[a.group_col].astype(str).to_numpy(); tab = age_acceleration(out.epigenetic_age.to_numpy(), out.age.to_numpy(), grp, a.control)
+            log("age acceleration versus the control group (AA = predicted age minus the control-group fit on chronological age):\n" + tab.round(4).to_string())
+            tab.to_csv(Path(a.out).with_suffix(".aa.csv"))
+            if "deviation" in out:
+                tab2 = age_acceleration(out.deviation.to_numpy(), out.age.to_numpy(), grp, a.control)
+                log("deviation score (masked-CpG reconstruction error, age trend removed) versus the control group:\n" + tab2.round(4).to_string()); tab2.to_csv(Path(a.out).with_suffix(".deviation.csv"))
+    out.to_csv(a.out, index=False); log(f"wrote {a.out}")
 
 
 def cmd_probe(a):
-    """Second-level tasks on the learned model: (1) sex from frozen sample embeddings, (2) does the CpG identity embedding know the genome context?"""
-    from sklearn.decomposition import PCA
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.metrics import roc_auc_score
-    from sklearn.model_selection import cross_val_score
-    from sklearn.preprocessing import StandardScaler
-    dev = get_device(a.device); m, ck = load_model(a.model, dev); data = Path(a.data); c = load_corpus(data); sp = make_splits(c, 0); K = ck["K"]
-    sex = c.meta.Gender.astype(str).to_numpy(); lab = np.isin(sex, ["M", "F"])
-    tr = sp["train"][lab[sp["train"]]][:6000]; te = sp["test_all"][lab[sp["test_all"]]][:3000]
-    def emb(rows):
-        r = np.random.default_rng(3); out = []
-        with torch.no_grad():
-            for s in range(0, len(rows), 128):
-                idx, beta, valid, _ = draw(c.X[rows[s:s + 128]], K, r); out.append(m.embed(idx, beta, valid).cpu().numpy())
-        return np.concatenate(out)
-    Etr, Ete = emb(tr), emb(te); ytr, yte = (sex[tr] == "F").astype(int), (sex[te] == "F").astype(int)
-    sc = StandardScaler().fit(Etr); lr = LogisticRegression(C=0.1, max_iter=500).fit(sc.transform(Etr), ytr); p = lr.predict_proba(sc.transform(Ete))[:, 1]
-    mean, std = ck["mean"], ck["std"]; pca = PCA(64, random_state=0).fit(standardize(c.X[tr], mean, std)); Ptr, Pte = pca.transform(standardize(c.X[tr], mean, std)), pca.transform(standardize(c.X[te], mean, std))
-    sc2 = StandardScaler().fit(Ptr); lr2 = LogisticRegression(C=0.1, max_iter=500).fit(sc2.transform(Ptr), ytr); p2 = lr2.predict_proba(sc2.transform(Pte))[:, 1]
-    res = {"sex_from_frozen_embedding": dict(acc=float(((p > .5) == yte).mean()), auc=float(roc_auc_score(yte, p))),
-           "sex_from_PCA64_of_raw_betas": dict(acc=float(((p2 > .5) == yte).mean()), auc=float(roc_auc_score(yte, p2)))}
-    log("second-level task - sex prediction on held-out cohorts (linear probe on frozen features):\n" + json.dumps(res, indent=1))
-    ann = pd.read_parquet(data / "annot/annotation_450k.parquet").reindex(c.cpgs); E = m.id_emb.weight.detach().cpu().numpy()
-    tm = np.nanmean(np.where(c.X[sp["train"][:4000]] == 255, np.nan, c.X[sp["train"][:4000]] / 100.0), 0); ts = np.nanstd(np.where(c.X[sp["train"][:4000]] == 255, np.nan, c.X[sp["train"][:4000]] / 100.0), 0)
-    simple = np.stack([np.nan_to_num(tm, nan=0.5), np.nan_to_num(ts)], 1)
-    for lbl, y in (("CpG island relation (6 classes)", ann.island.fillna(0).astype(int).to_numpy()), ("regulatory feature class", ann.reg.fillna(0).astype(int).to_numpy()), ("chromosome (24 classes)", ann.chrom.fillna(0).astype(int).to_numpy())):
-        r = {"chance (majority class)": float(np.bincount(y).max() / len(y))}
-        for nm, F in (("mean+sd of beta", simple), ("learned CpG embedding", E), ("embedding + mean/sd", np.concatenate([E, simple], 1))):
-            r[nm] = float(cross_val_score(LogisticRegression(C=0.5, max_iter=300), StandardScaler().fit_transform(F), y, cv=4).mean())
-        res["context: " + lbl] = r; log(f"context probe - {lbl}: " + json.dumps({k: round(v, 3) for k, v in r.items()}))
-    if ck["cfg"].get("context", True):
-        log("NOTE: this model was given the genome context as input, so the probe above is trivially easy; train with --no-context to ask whether the identity embeddings learn it from methylation alone.")
-    json.dump(res, open(Path(a.model).parent / "probe.json", "w"), indent=1)
+    a.arms = ""; e = make_env(a); probe_architecture(e)
+    for n in finished_arms(e):
+        if n != "linear-tuned" and parse_arm(n)["kind"] == "pre" and parse_arm(n)["seed"] == 0:
+            probe_sex(e, n)
+    build_report(e)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter); sub = ap.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("train"); t.add_argument("--data", default=None); t.add_argument("--out", default=CONFIG["out_dir"])
-    t.add_argument("--preset", default=CONFIG["preset"], choices=["auto"] + list(PRESETS)); t.add_argument("--device", default="auto"); t.add_argument("--threads", type=int, default=0)
-    t.add_argument("--tokens", type=int, default=0); t.add_argument("--batch", type=int, default=0); t.add_argument("--lr", type=float, default=0.0); t.add_argument("--dropout", type=float, default=-1.0, help="-1 = preset default")
-    t.add_argument("--memory-fraction", type=float, default=CONFIG["memory_fraction"])
-    t.add_argument("--ssl-steps", type=int, default=10**9, help="maximum pre-training steps (it stops earlier when validation stops improving)")
-    t.add_argument("--ft-steps", type=int, default=10**9); t.add_argument("--eval-every", type=int, default=CONFIG["eval_every"]); t.add_argument("--patience", type=int, default=CONFIG["patience"])
-    t.add_argument("--pretrain-hours", type=float, default=CONFIG["pretrain_max_hours"]); t.add_argument("--finetune-hours", type=float, default=CONFIG["finetune_max_hours"]); t.add_argument("--seed", type=int, default=0)
-    t.add_argument("--val-draws", type=int, default=2); t.add_argument("--test-draws", type=int, default=CONFIG["test_draws"])
-    t.add_argument("--no-pretrain", action="store_true"); t.add_argument("--no-context", action="store_true"); t.add_argument("--no-linear-skip", action="store_true")
-    t.add_argument("--no-baselines", action="store_true"); t.add_argument("--no-selftest", action="store_true"); t.add_argument("--smoke", action="store_true", help="30-step functional check")
+    def common(p):
+        p.add_argument("--data", default=None); p.add_argument("--out", default=CONFIG["out_dir"]); p.add_argument("--device", default="auto"); p.add_argument("--threads", type=int, default=0)
+        p.add_argument("--memory-fraction", type=float, default=CONFIG["memory_fraction"]); p.add_argument("--seed", type=int, default=0)
+        p.add_argument("--eval-every", type=int, default=CONFIG["eval_every"]); p.add_argument("--patience", type=int, default=CONFIG["patience"])
+        p.add_argument("--ssl-steps", type=int, default=10**9); p.add_argument("--ft-steps", type=int, default=10**9)
+        p.add_argument("--val-draws", type=int, default=CONFIG["val_draws"]); p.add_argument("--test-draws", type=int, default=CONFIG["test_draws"]); p.add_argument("--boot", type=int, default=CONFIG["boot"])
+        p.add_argument("--no-selftest", action="store_true"); p.add_argument("--smoke", action="store_true", help="30-step functional check of every code path (tiny models)")
+        p.add_argument("--arms", default="", help="comma list overriding the default queue, e.g. base-pre,base-scratch")
+    common(sub.add_parser("study")); common(sub.add_parser("report")); common(sub.add_parser("probe"))
     p = sub.add_parser("predict"); p.add_argument("--model", required=True); p.add_argument("--beta", required=True); p.add_argument("--out", default="epigenetic_ages.csv")
-    p.add_argument("--device", default="auto"); p.add_argument("--draws", type=int, default=16)
-    q = sub.add_parser("probe"); q.add_argument("--model", required=True); q.add_argument("--data", default=None); q.add_argument("--device", default="auto")
-    if len(sys.argv) == 1 or sys.argv[1].startswith("-") and sys.argv[1] not in ("-h", "--help"):
-        sys.argv.insert(1, "train")                                         # `python epiclock.py` alone trains with everything automatic
+    p.add_argument("--device", default="auto"); p.add_argument("--draws", type=int, default=16); p.add_argument("--meta", default=None, help="csv/tsv indexed by sample id")
+    p.add_argument("--age-col", default="age"); p.add_argument("--group-col", default=None); p.add_argument("--control", default=None, help="value of --group-col that marks the controls")
+    if len(sys.argv) == 1 or (sys.argv[1].startswith("-") and sys.argv[1] not in ("-h", "--help")):
+        sys.argv.insert(1, "study")                                         # `python epiclock.py` alone runs the whole study with everything automatic
     a = ap.parse_args()
-    if a.cmd == "train" and a.smoke:
-        a.ssl_steps, a.ft_steps, a.eval_every, a.test_draws, a.no_baselines, a.no_selftest = 30, 30, 15, 2, True, True
-    if a.cmd == "probe":
-        a.data = str(find_data(a.data))
-    {"train": cmd_train, "predict": cmd_predict, "probe": cmd_probe}[a.cmd](a)
+    if a.cmd != "predict" and a.smoke:
+        a.ssl_steps, a.ft_steps, a.eval_every, a.test_draws, a.val_draws, a.boot, a.no_selftest = 30, 30, 15, 2, 1, 200, True
+    {"study": cmd_study, "report": cmd_report, "probe": cmd_probe, "predict": cmd_predict}[a.cmd](a)
 
 
 if __name__ == "__main__":
