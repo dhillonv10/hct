@@ -6,6 +6,9 @@
   python epiclock.py report           # rebuild report.md / probes / release package from whatever has finished (no training)
   python epiclock.py predict --model runs/epiclock/release/EpiClock-B/model.pt --beta my_betas.csv [--meta meta.csv --age-col age --group-col status --control Control]
   python epiclock.py --smoke --out /tmp/smoke      # 30-step functional check of every code path (tiny models)
+  python epiclock.py ingest           # add the MethylGPT / EWAS Data Hub profiles (about 23 GB, resumable) as extra label-free pre-training data; the study does this by itself
+                                      # when it reaches the first '-ext' model (--no-external forbids it)
+  python epiclock.py survival --model M --beta B.csv --meta M.csv --time-col T --event-col E --age-col age   # mortality validation: Cox hazard ratios + concordance gain
 
 Model
   Every CpG is a token: learned identity + genome context (chromosome, position at several scales, CpG-island / shore / shelf / open sea, gene region,
@@ -23,6 +26,7 @@ What the study answers (see report.md)
   * Does the CpG embedding know islands / regulatory class / chromosome?  Linear probes against SVD / methylation-statistics baselines; the '-noctx' model is the
     clean test because it is never shown the annotations.
   * A model family (EpiClock-T/S/B/L/XL) with model cards, and an ensemble row.
+  * More data ('-ext' models), cross-study robustness training ('-rob' models), an external cohort (GEO GSE246337: 500 EPICv2 blood samples), mortality validation.
 
 Control while it runs (in the output folder): `touch STOP` pauses (delete it and re-run to resume); `touch NEXT` ends the current training stage early.
 Device: --device auto uses the Apple GPU (MPS) when present; a self-test compares it with the CPU first.  Every stage stops by itself when validation stops improving."""
@@ -597,7 +601,10 @@ def get_ridge(e):
     rg = ridge_fit(e.c, e.sp, e.mean, e.std, log); np.savez(f, **rg); return rg
 
 
-def enet_predict(e, X_rows):
+def enet_model(e):
+    f = e.out / "enet.npz"
+    if f.exists():
+        z = np.load(f); return z["coef"], float(z["b"])
     from sklearn.linear_model import enet_path
     c, sp = e.c, e.sp; tr, va = sp["train"], sp["val"]
     Xtr, Xva = standardize(c.X[tr], e.mean, e.std), standardize(c.X[va], e.mean, e.std)
@@ -606,7 +613,7 @@ def enet_predict(e, X_rows):
     ev = [np.median(np.abs(t_to_age(Xva @ coefs[:, k] + ytr.mean()) - ava)) for k in range(coefs.shape[1])]
     k = int(np.argmin(ev))
     log(f"[baseline] elastic net alpha {alphas[k]:.2e} (val MedAE {ev[k]:.2f}, {int((coefs[:, k] != 0).sum())} non-zero CpGs)")
-    return t_to_age(standardize(X_rows, e.mean, e.std) @ coefs[:, k] + ytr.mean())
+    np.savez(f, coef=coefs[:, k], b=float(ytr.mean())); return coefs[:, k], float(ytr.mean())
 
 
 def published_clocks(c, X, log):
@@ -654,21 +661,30 @@ def biolearn_clocks(c, X, log):
     return out
 
 
+def comparators_on(e, X, cache):
+    """Predictions of ridge, elastic net and the published clocks on the rows X (cached under `cache`)."""
+    f = e.out / cache
+    if f.exists():
+        z = np.load(f); return {k: z[k] for k in z.files}
+    rg = get_ridge(e); coef, b = enet_model(e); Z = standardize(X, e.mean, e.std)
+    out = {"ridge": t_to_age(Z @ rg["w"] + rg["b"]), "elastic net": t_to_age(Z @ coef + b)}
+    out.update(published_clocks(e.c, X, log))
+    for pretty, p in biolearn_clocks(e.c, X, log).items():
+        out[pretty if pretty not in out else "biolearn " + pretty] = p
+    np.savez(f, **out); return out
+
+
 def get_comparators(e):
     """Predictions of every comparator on all ComputAge benchmark samples (cached)."""
     f = e.out / "comparators.npz"
     if f.exists():
         z = np.load(f); return {k: z[k] for k in z.files}
-    rg = get_ridge(e); X = e.c.X[e.sp["test_all"]]
-    out = {"ridge": t_to_age(standardize(X, e.mean, e.std) @ rg["w"] + rg["b"]), "elastic net": enet_predict(e, X)}
-    out.update(published_clocks(e.c, X, log))
-    for pretty, p in biolearn_clocks(e.c, X, log).items():
-        out[pretty if pretty not in out else "biolearn " + pretty] = p
+    out = comparators_on(e, e.c.X[e.sp["test_all"]], "comparators.npz")
     hc = np.searchsorted(e.sp["test_all"], e.sp["test"]); age = e.age[e.sp["test"]]
     for k in ("Horvath V1", "Horvath V2", "Hannum", "Lin"):
         if k in out and "biolearn " + k in out:
             log(f"[comparators] {k}: MedAE {np.median(np.abs(out[k][hc] - age)):.2f} (computage) vs {np.median(np.abs(out['biolearn ' + k][hc] - age)):.2f} (biolearn) - two independent implementations")
-    np.savez(f, **out); return out
+    return out
 
 
 # ======================================================================================================== statistics
@@ -834,12 +850,15 @@ class Env:
 
 SIZE_NAMES = {"tiny": "EpiClock-T", "small": "EpiClock-S", "base": "EpiClock-B", "large": "EpiClock-L", "xl": "EpiClock-XL"}
 KINDS = {"pre": "pre-trained transformer + linear core (the main model)", "scratch": "the same network without pre-training",
+         "ext": "pre-trained with the extra MethylGPT / EWAS Data Hub profiles added to the label-free pool",
+         "rob": "pre-trained, fine-tuned with a cross-study robustness penalty (variance of the per-study mean error)",
          "noctx": "pre-trained, but the genome-context inputs (island, chromosome, regulatory class, position) are removed",
          "pure": "transformer alone: no linear core, no pre-training", "cons": "pre-trained, fine-tuned with a two-view consistency penalty"}
 DEFAULT_QUEUE = ["linear-tuned", "xl-pre", "tiny-pre", "small-scratch", "small-pre", "small-pure", "base-scratch", "base-pre", "base-noctx",
-                 "base-pre-s1", "base-pre-s2", "base-cons", "large-pre"]
-SMOKE_QUEUE = ["linear-tuned", "tiny-pre", "tiny-scratch", "tiny-noctx", "tiny-pure", "tiny-cons", "tiny-pre-s1"]
+                 "base-pre-s1", "base-pre-s2", "base-cons", "base-rob", "base-ext", "large-pre", "large-ext"]
+SMOKE_QUEUE = ["linear-tuned", "tiny-pre", "tiny-scratch", "tiny-noctx", "tiny-pure", "tiny-cons", "tiny-rob", "tiny-ext", "tiny-pre-s1"]
 CONS_LAMBDA = 0.5
+ROB_LAMBDA = 5.0
 
 
 def make_env(a):
@@ -853,6 +872,7 @@ def make_env(a):
     e.dev = get_device(a.device); e.mem = total_mem_gb(); e.limit = a.memory_fraction * e.mem; e.selftested = False
     e.data = find_data(a.data); e.c = load_corpus(e.data); e.sp = make_splits(e.c, a.seed); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
     e.ctx = genome_context(e.data, e.c.cpgs); e.age = e.c.meta.Age.to_numpy(float); e.rng = np.random.default_rng(a.seed); torch.manual_seed(a.seed)
+    attach_external(e)
     sp = e.sp
     log(f"EpiClock study | device {e.dev} | machine memory {e.mem:.0f} GB (training budget {e.limit:.0f} GB) | data {e.data}\n"
         f"corpus {len(e.c.X)} samples x {len(e.c.cpgs)} CpGs | train {len(sp['train'])} | val {len(sp['val'])} ({len(sp['val_series'])} series) | "
@@ -868,11 +888,11 @@ def preset(e, size):
 def parse_arm(name):
     p = name.split("-")
     if name == "linear-tuned":
-        return dict(name=name, size="-", kind="linear", seed=0, context=False, linear=True, pretrain=False)
+        return dict(name=name, size="-", kind="linear", seed=0, context=False, linear=True, pretrain=False, ext=False)
     if len(p) < 2 or p[0] not in PRESETS or p[1] not in KINDS or (len(p) > 2 and not re.fullmatch(r"s\d+", p[2])):
         sys.exit(f"Unknown arm '{name}'. Arms are <size>-<kind>[-s<seed>] with size in {list(PRESETS)} and kind in {list(KINDS)}, or 'linear-tuned'.")
     k = p[1]
-    return dict(name=name, size=p[0], kind=k, seed=int(p[2][1:]) if len(p) > 2 else 0, context=k != "noctx", linear=k != "pure", pretrain=k in ("pre", "noctx", "cons"))
+    return dict(name=name, size=p[0], kind=k, seed=int(p[2][1:]) if len(p) > 2 else 0, context=k != "noctx", linear=k != "pure", pretrain=k in ("pre", "noctx", "cons", "ext", "rob"), ext=k == "ext")
 
 
 def legacy_preset(e):
@@ -887,8 +907,10 @@ def arm_dir(e, ar):
     return e.out if (ar["kind"] == "pre" and ar["seed"] == 0 and legacy_preset(e) == ar["size"]) else e.out / "arms" / ar["name"]
 
 
-def pre_dir(e, size, ctx):
-    return e.out if (ctx and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists()) else e.out / "pre" / (size if ctx else size + "-noctx")
+def pre_dir(e, size, ctx, ext=False):
+    if ctx and not ext and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists():
+        return e.out
+    return e.out / "pre" / (size + ("" if ctx else "-noctx") + ("-ext" if ext else ""))
 
 
 def mark_done_from_old_files(d):
@@ -911,13 +933,13 @@ def make_cfg(e, ar):
     P = preset(e, ar["size"]); return dict(d=P["d"], layers=P["layers"], heads=P["heads"], context=ar["context"], linear_skip=ar["linear"], dropout=P["dropout"])
 
 
-def ensure_pretrained(e, size, ctx):
+def ensure_pretrained(e, size, ctx, ext=False):
     """Masked-CpG reconstruction on the label-free pool (shared by every arm of the same size and context setting)."""
-    d = pre_dir(e, size, ctx); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
+    d = pre_dir(e, size, ctx, ext); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
     if (d / "pretrain_done.json").exists():
         return d / "pretrain_best.pt"
     P = preset(e, size); K = P["K"]; cfg = make_cfg(e, dict(size=size, context=ctx, linear=True))
-    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
+    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}{' + extra MethylGPT profiles' if ext else ''}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
     model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
     sanity_check_device(e, model, K)
     budget = Budget(P["batch"], e.dev, e.limit); rng = np.random.default_rng(e.a.seed + 3)
@@ -925,11 +947,11 @@ def ensure_pretrained(e, size, ctx):
         sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
         return m.reconstruct(idx, ib, valid, is_mask).mean()
     model.train(); budget.fit(model, trial)
-    w_ssl = sample_weights(e.c.meta, e.sp["ssl"], 0.5, 0.0)
+    pool, w_ssl = ssl_pool(e, ext)
     vrows = e.c.X[e.sp["val"][np.random.RandomState(5).choice(len(e.sp["val"]), min(1500, len(e.sp["val"])), replace=False)]]
     base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - e.mean)))
     def ssl_step(m, n):
-        rows = e.c.X[rng.choice(e.sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
+        rows = e.c.X[rng.choice(pool, n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
         pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
         err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
     def ssl_eval(m):
@@ -949,9 +971,18 @@ def ensure_pretrained(e, size, ctx):
     return d / "pretrain_best.pt"
 
 
-def age_fns(e, K, rng, cons):
+def age_fns(e, K, rng, kind):
+    cons, rob = kind == "cons", kind == "rob"
     tr_rows = e.sp["train"]; w = sample_weights(e.c.meta, tr_rows, 0.5, 0.5); vsel = e.sp["val"]; sl1 = nn.functional.smooth_l1_loss
+    ust, inv = np.unique(e.c.meta.DatasetID.to_numpy()[tr_rows].astype(str), return_inverse=True); by_study = [tr_rows[inv == k] for k in range(len(ust))]
+    p_study = np.sqrt([len(r) for r in by_study]); p_study /= p_study.sum()
     def step(m, n):
+        if rob and n >= 8:                          # G studies x n/G samples each; penalise the spread of the per-study MEAN error (the study offset)
+            G = min(8, n // 2); per = n // G; ks = rng.choice(len(by_study), G, replace=False, p=p_study)
+            sel = np.concatenate([rng.choice(by_study[k], per) for k in ks]); rows = e.c.X[sel]; idx, beta, valid, _ = draw(rows, K, rng); fz = rowz(rows, e.mean, e.std)
+            y = torch.as_tensor(age_to_t(e.age[sel]), dtype=torch.float32, device=m.cls.device); pred = m.age_t(idx, beta, valid, fz); err = pred - y
+            grp = torch.as_tensor(np.repeat(np.arange(G), per), device=err.device); gm = torch.stack([err[grp == g].mean() for g in range(G)])
+            return sl1(pred, y, beta=0.05) + ROB_LAMBDA * gm.var()
         if cons and n >= 2:                         # two independent CpG subsets of the same people: both fit the age, and they must agree
             sel = rng.choice(tr_rows, n // 2, p=w); rows = e.c.X[sel]; fz = rowz(rows, e.mean, e.std)
             y = torch.as_tensor(age_to_t(e.age[sel]), dtype=torch.float32, device=m.cls.device)
@@ -970,7 +1001,7 @@ def train_arm(e, ar, d):
     mp = d / "model.pt"; mark_done_from_old_files(d)
     if mp.exists() and (d / "finetune_done.json").exists():
         return mp
-    P = preset(e, ar["size"]); K = P["K"]; cfg = make_cfg(e, ar); pre = ensure_pretrained(e, ar["size"], ar["context"]) if ar["pretrain"] else None
+    P = preset(e, ar["size"]); K = P["K"]; cfg = make_cfg(e, ar); pre = ensure_pretrained(e, ar["size"], ar["context"], ar["ext"]) if ar["pretrain"] else None
     log(f"=== fine-tuning {ar['name']}: {KINDS[ar['kind']]}  (seed {ar['seed']})")
     torch.manual_seed(e.a.seed + 101 * ar["seed"]); rng = np.random.default_rng(e.a.seed + 101 * ar["seed"] + 7)
     model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
@@ -985,7 +1016,7 @@ def train_arm(e, ar, d):
         if m.lin_on:
             m.lin_u.data.copy_(torch.as_tensor(rg["w"] / LIN_SCALE)); nn.init.zeros_(m.age_head.weight); nn.init.zeros_(m.age_head.bias)
             log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
-    step, ev = age_fns(e, K, rng, ar["kind"] == "cons")
+    step, ev = age_fns(e, K, rng, ar["kind"])
     r2 = run_phase("finetune", model, step, ev, d, e.dev, P["lr"] * (0.5 if pre else 1.0), max_steps=e.a.ft_steps, eval_every=e.a.eval_every, patience=e.a.patience,
                    max_hours=P["ft_h"], init_from=pre, post_init=warm_start, budget=budget)
     if r2["reason"] == "stop-file":
@@ -1058,6 +1089,8 @@ def run_arm(e, name):
         return
     if ar["kind"] == "linear":
         fit_linear_tuned(e, d); return
+    if ar["ext"] and not ensure_external(e):
+        log(f"[skip] {name} needs the extra MethylGPT profiles, which are not available (run `python epiclock.py ingest`)"); return
     mp = train_arm(e, ar, d); predict_arm(e, ar, mp, d)
 
 
@@ -1088,7 +1121,8 @@ PAIRS = [("{s}-pre", "linear-tuned", "transformer (pre-trained) vs the linear co
          ("{s}-pre", "{s}-scratch", "value of pre-training"),
          ("{s}-pre", "{s}-noctx", "value of the genome-context inputs"),
          ("{s}-scratch", "{s}-pure", "value of the ridge-initialised linear core"),
-         ("{s}-cons", "{s}-pre", "consistency fine-tuning"),
+         ("{s}-cons", "{s}-pre", "consistency fine-tuning"), ("{s}-rob", "{s}-pre", "cross-study robustness fine-tuning (penalty on the spread of per-study mean error)"),
+         ("{s}-ext", "{s}-pre", "value of the extra MethylGPT / EWAS Data Hub profiles in pre-training"),
          ("{s}-pre-s1", "{s}-pre", "seed 1 vs seed 0 (training noise)"), ("{s}-pre-s2", "{s}-pre", "seed 2 vs seed 0 (training noise)")]
 
 
@@ -1134,8 +1168,8 @@ def build_report(e):
     Ms = {n: boot.med(A[n], "samples") for n in P}; Mc = {n: boot.med(A[n], "studies") for n in P}
     rows = []
     for n in P:
-        d = Mc[n] - Mc["ridge"]
-        rows.append(dict(model=n, MedAE=np.median(A[n]), CI_samples=ci(Ms[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1],
+        d = Mc[n] - Mc["ridge"]; off = pd.Series(S[n]).groupby(grp).transform("mean").to_numpy(); offm = pd.Series(S[n]).groupby(grp).transform("median").to_numpy()
+        rows.append(dict(model=n, MedAE=np.median(A[n]), offset_share=1 - np.mean((S[n] - off) ** 2) / np.mean(S[n] ** 2), MedAE_no_offsets=np.median(np.abs(S[n] - offm)), CI_samples=ci(Ms[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1],
                          MedAE_blood=np.median(A[n][blood]), MedAE_18_90=np.median(A[n][adult]), MedAE_no_sibling=np.median(A[n][nosib]),
                          study_avg_MedAE=pd.Series(A[n]).groupby(grp).median().mean(), vs_ridge=(f"{np.median(A[n]) - np.median(A['ridge']):+.2f} {ci(d, 2, True)}" if n != "ridge" else ""),
                          P_beats_ridge=float((d < 0).mean()) if n != "ridge" else np.nan, ours=n in ours))
@@ -1166,7 +1200,7 @@ def build_report(e):
                       f"study-level 95% CI [{lo:+.2f}, {hi:+.2f}] - " + ("the interval excludes zero." if hi < 0 or lo > 0 else "the interval includes zero: not distinguishable at the study level (the sample-level interval is narrower).")]
         lines += [""]
     lines += ["## All models on the same test samples (median absolute error in years; lower is better)", "```", main.drop(columns="ours").round(3).to_string(), "```",
-              "CI_samples resamples individual samples; CI_studies resamples whole studies (the honest one: samples within a study share batch effects). vs_ridge is the paired "
+              "offset_share = fraction of the squared error that is a per-study offset; MedAE_no_offsets = the error if each study's median error were removed (a diagnostic, not an achievable score). CI_samples resamples individual samples; CI_studies resamples whole studies (the honest one: samples within a study share batch effects). vs_ridge is the paired "
               "difference in MedAE (negative = better than ridge) with its study-level interval. `[linear part only]` rows show what the trained linear weights predict with the transformer correction removed.", ""]
     if len(pairs):
         lines += ["## What does each ingredient add? (paired, same test samples; negative = the first model is better)", "```", pairs.round(3).to_string(index=False), "```", ""]
@@ -1178,15 +1212,21 @@ def build_report(e):
                   "score = AA2 + AA1 x (1 - positive median bias / MedAE). Same study list, tests and formula as the `computage` package, applied to our predictions. "
                   "Scores differ by whole tests, so differences of 1-2 points are not meaningful.", "```", off.round(2).to_string(), "```", ""]
     if RC:
-        big = max(RC, key=lambda n: (list(PRESETS).index(parse_arm(n)["size"]), n)); sc_ = {"ridge: age acceleration": P["ridge"]}
+        mains = [n for n in RC if parse_arm(n)["kind"] == "pre" and parse_arm(n)["seed"] == 0] or list(RC)
+        big = max(mains, key=lambda n: (list(PRESETS).index(parse_arm(n)["size"]), n)); sc_ = {"ridge: age acceleration": P["ridge"]}
         if "Horvath V2" in P:
             sc_["Horvath V2: age acceleration"] = P["Horvath V2"]
-        best_ = [n for n in main.index if n in arms and n != "linear-tuned"][0]; sc_[f"EpiClock {best_}: age acceleration"] = P[best_]; sc_[f"EpiClock {big}: deviation (masked-CpG reconstruction error)"] = RC[big]
+        sc_[f"EpiClock {big}: age acceleration"] = P[big]; sc_[f"EpiClock {big}: deviation (masked-CpG reconstruction error)"] = RC[big]
         dt = disease_table(e, sc_)
         if dt is not None:
             lines += ["## Disease signal across the benchmark studies (AUC patients vs same-study healthy controls, age trend removed; 0.5 = none)",
                       f"{dt[1]} (study, condition) units with >= 10 patients and >= 10 controls. Classes: ISD immune/inflammatory, NDD neurodegenerative, CVD cardiovascular, MSD metabolic, MBD, RSD, PGS progeroid. "
                       "The deviation score needs no age label and no disease label: it asks how badly the pre-trained model reconstructs the sample's hidden CpGs.", "```", dt[0].to_string(), "```", ""]
+    bt = boa_table(e)
+    if bt is not None:
+        lines += ["## External cohort: Biomarkers of Aging Consortium (GEO GSE246337; 500 blood samples, EPICv2, adults with exact age <= 89)",
+                  "Never used for training, selection or early stopping. The public file has age, sex and race only - no mortality. The consortium's challenge reported 2.45 y for the best entry and about 4.8 y for the best published clock on its own hidden test split; those numbers are not directly comparable with this table.",
+                  "```", bt.round(3).to_string(), "```", ""]
     pj = sorted((e.out / "probes").glob("*.json")) if (e.out / "probes").exists() else []
     for f in pj:
         r = json.load(open(f))
@@ -1250,7 +1290,7 @@ def probe_architecture(e):
     Sv, Vt = None, None; base_cache = {}; done = []
     for n in finished_arms(e):
         ar = parse_arm(n)
-        if ar["kind"] not in ("pre", "noctx") or ar["seed"] != 0:
+        if ar["kind"] not in ("pre", "noctx", "ext") or ar["seed"] != 0:
             continue
         f = pdir / f"{n}.json"
         if f.exists():
@@ -1335,6 +1375,299 @@ The age output is a linear clock over the whole CpG row (initialised from ridge)
     log(f"[release] family package written to {rel}")
 
 
+# ======================================================================================================== external data
+MG_URL = "https://www.dropbox.com/scl/fi/bbs6sxlkpbx11rhyvdfto/processed_type3_parquet_shuffled.tar.gz?rlkey=s73utmumq6xldmv3y6kh9bz75&st=8pslwy2a&dl=1"
+MG_PROBES_URL = "https://www.dropbox.com/scl/fi/2n6bx7j8v0aon0kwfsghp/probe_ids_type3.csv?rlkey=ly133xlce1xxjiku6tiski6qq&st=pig4e41h&dl=1"
+BOA_BETAS_URL = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE246nnn/GSE246337/suppl/GSE246337_betas.csv.gz"
+BOA_MATRIX_URL = "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE246nnn/GSE246337/matrix/GSE246337_series_matrix.txt.gz"
+
+
+def download(url, dest, what):
+    """Resumable download (HTTP Range); keeps a .part file so an interrupted transfer continues where it stopped."""
+    import urllib.error
+    import urllib.request
+    dest = Path(dest); dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        return dest
+    part = dest.with_name(dest.name + ".part"); tries = 0
+    while True:
+        have = part.stat().st_size if part.exists() else 0
+        try:
+            req = urllib.request.Request(url, headers=dict({"User-Agent": "epiclock"}, **({"Range": f"bytes={have}-"} if have else {})))
+            with urllib.request.urlopen(req, timeout=120) as r:
+                clen = int(r.headers.get("Content-Length") or 0); resumed = r.status == 206 and have > 0
+                if not resumed:
+                    have = 0
+                total = have + clen
+                if clen and shutil.disk_usage(dest.parent).free < clen * 1.15:
+                    sys.exit(f"Not enough disk space for {what}: need {clen / 2**30:.0f} GB, only {shutil.disk_usage(dest.parent).free / 2**30:.0f} GB free in {dest.parent}.")
+                log(f"[download] {what}: {total / 2**30:.2f} GB" + (f" (resuming at {have / 2**30:.2f} GB)" if resumed else ""))
+                done, nxt = have, have + (1 << 30)
+                with open(part, "ab" if resumed else "wb") as f:
+                    while True:
+                        blk = r.read(1 << 23)
+                        if not blk:
+                            break
+                        f.write(blk); done += len(blk)
+                        if done >= nxt:
+                            log(f"[download] {what}: {done / 2**30:.1f} / {total / 2**30:.1f} GB"); nxt += 1 << 30
+            if total and part.stat().st_size < total:
+                raise OSError("connection closed early")
+            os.replace(part, dest); return dest
+        except urllib.error.HTTPError as ex:
+            if ex.code == 416 and part.exists():
+                os.replace(part, dest); return dest
+            raise
+        except (OSError, EOFError) as ex:
+            tries += 1
+            if tries > 8:
+                raise
+            log(f"[download] {what}: {type(ex).__name__}: {str(ex)[:80]} - retrying ({tries}/8)"); time.sleep(5 * tries)
+
+
+def heldout_ids(data):
+    """Sample ids of the leukaemia/AML/MDS series that are held out of every training set (kept out of the extra data too)."""
+    hf = data / "geo/holdout.txt"; hold = set(hf.read_text().split()) if hf.exists() else set(); out = set()
+    for sub in ("meta", "meta_unlabeled"):
+        for f in sorted((data / "geo" / sub).glob("GSE*.parquet")):
+            m = pd.read_parquet(f)
+            if "DatasetID" in m:
+                out |= set(m.index.astype(str)[m.DatasetID.isin(hold).to_numpy()])
+    return out
+
+
+def ingest_methylgpt(e, source=None, exclude_file=None):
+    """Turn the MethylGPT / EWAS Data Hub / ClockBase pre-training set (226k profiles x 49,156 CpGs, no labels) into extra label-free pre-training rows on our panel.
+    Only the 3,709 CpGs shared with our 9,098-CpG panel are kept (the model treats the other panel CpGs as 'not measured', as it does for 27K / 450K arrays).
+    Dropped: profiles whose id is already in our corpus (duplicates, and every ComputAge benchmark sample), the held-out leukaemia/AML/MDS series,
+    ids in --exclude, and profiles with fewer than half of the shared CpGs measured."""
+    import io
+    import tarfile
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        ensure_pkg("pyarrow", ["pyarrow"], "reading the parquet files"); import pyarrow.parquet as pq
+    d = e.data / "external"; out = d / "methylgpt_panel.npz"
+    if out.exists():
+        return out
+    probes = pd.read_csv(download(MG_PROBES_URL, d / "probe_ids_type3.csv", "MethylGPT CpG list"), index_col=0).iloc[:, 0].astype(str)
+    pos = pd.Index(probes).get_indexer(e.c.cpgs); pidx = np.flatnonzero(pos >= 0); pcols = pos[pidx]
+    log(f"[ingest] {len(pidx)} of the {len(e.c.cpgs)} panel CpGs are among the {len(probes)} CpGs of the MethylGPT set")
+    drop = set(e.c.meta.index.astype(str)) | heldout_ids(e.data)
+    if exclude_file:
+        drop |= set(Path(exclude_file).read_text().split())
+    src = Path(source) if source else None
+    if src is None:
+        cand = d / "processed_type3_parquet_shuffled.tar.gz"; src = cand if cand.exists() else download(MG_URL, cand, "MethylGPT pre-training set (about 23 GB)")
+    def shards():
+        if src.is_dir():
+            for f in sorted(src.rglob("*.parquet")):
+                yield f.name, f
+        else:
+            with tarfile.open(src, "r|gz") as tar:
+                for m in tar:
+                    if m.isfile() and m.name.endswith(".parquet"):
+                        yield m.name, io.BytesIO(tar.extractfile(m).read())
+    Xs, ids_all, seen, st = [], [], set(), collections.Counter(); t0 = time.time()
+    try:
+        for name, fobj in shards():
+            try:
+                pf = pq.ParquetFile(fobj)
+                for batch in pf.iter_batches(batch_size=500, columns=["id", "data"]):
+                    ids = np.array(batch.column("id").to_pylist(), dtype=object).astype(str); n = len(ids); st["seen"] += n
+                    v = batch.column("data").flatten().to_numpy(zero_copy_only=False).reshape(n, -1)[:, pcols]
+                    ok = np.array([i not in drop for i in ids], dtype=bool); st["in_corpus_or_heldout"] += int((~ok).sum())
+                    dup = np.array([i in seen for i in ids]); ok &= ~dup; st["duplicate_id"] += int(dup.sum())
+                    X = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
+                    good = ok & ((X != 255).mean(1) >= 0.5); st["too_few_cpgs"] += int((ok & ~good).sum())
+                    Xs.append(X[good]); ids_all.append(ids[good]); seen.update(ids[good].tolist())
+            except Exception as ex:                     # a damaged / truncated shard: keep what was read, go on
+                log(f"[ingest] {name}: {type(ex).__name__}: {str(ex)[:80]} - skipped the rest of this shard")
+            log(f"[ingest] {name[:40]}: kept {sum(len(x) for x in Xs)} so far of {st['seen']} read ({(time.time() - t0) / 60:.0f} min)")
+    except (tarfile.ReadError, EOFError, OSError) as ex:
+        log(f"[ingest] archive ended early ({type(ex).__name__}); using the shards read so far")
+    if not Xs or not sum(len(x) for x in Xs):
+        sys.exit("[ingest] no usable profiles were found in the source.")
+    X, ids = np.concatenate(Xs), np.concatenate(ids_all)
+    np.savez_compressed(out, X=X, ids=ids, pidx=pidx, cpgs=np.array(e.c.cpgs))
+    log(f"[ingest] wrote {len(X)} extra pre-training profiles to {out}. Read {st['seen']}; removed {st['in_corpus_or_heldout']} already in our corpus / benchmark / held-out series, "
+        f"{st['duplicate_id']} duplicate ids, {st['too_few_cpgs']} with too few CpGs.")
+    return out
+
+
+def attach_external(e):
+    """Append the ingested profiles to the corpus as role 'external' (label-free; never in train / validation / test)."""
+    e.sp["ext"] = np.array([], dtype=int)
+    f = e.data / "external/methylgpt_panel.npz"
+    if not f.exists():
+        return 0
+    z = np.load(f, allow_pickle=False)
+    if [str(x) for x in z["cpgs"]] != list(e.c.cpgs):
+        log("[external] the ingested file was made for a different CpG panel; ignoring it"); return 0
+    ids = z["ids"].astype(str); keep = ~pd.Index(ids).isin(e.c.meta.index); ids = ids[keep]
+    X = np.full((int(keep.sum()), len(e.c.cpgs)), 255, np.uint8); X[:, z["pidx"]] = z["X"][keep]
+    meta = pd.DataFrame(index=ids, columns=list(e.c.meta.columns)); meta["DatasetID"] = "EXT-methylgpt"; meta["role"] = "external"; meta["Age"] = np.nan
+    n0 = len(e.c.X); e.c.X = np.concatenate([e.c.X, X]); e.c.meta = pd.concat([e.c.meta, meta]); e.age = e.c.meta.Age.to_numpy(float)
+    e.sp["ext"] = np.arange(n0, n0 + len(X)); log(f"[external] {len(X)} extra label-free profiles available for pre-training (3,709 of the 9,098 panel CpGs measured in each)"); return len(X)
+
+
+def ensure_external(e):
+    if len(e.sp.get("ext", [])):
+        return True
+    if e.a.no_external:
+        return False
+    try:
+        ingest_methylgpt(e); attach_external(e)
+    except SystemExit as ex:
+        log(f"[external] {ex}"); return False
+    except Exception as ex:
+        log(f"[external] could not get the extra data ({type(ex).__name__}: {str(ex)[:120]}); skipping arms that need it. Fix and run `python epiclock.py ingest`."); return False
+    return len(e.sp["ext"]) > 0
+
+
+def ssl_pool(e, use_ext):
+    """Rows and sampling weights for pre-training.  With extra data the external profiles get `ext_share` of the draws."""
+    base = e.sp["ssl"]; w = sample_weights(e.c.meta, base, 0.5, 0.0)
+    if not use_ext or not len(e.sp.get("ext", [])):
+        return base, w
+    ext = e.sp["ext"]; s = e.a.ext_share
+    return np.concatenate([base, ext]), np.concatenate([w * (1 - s), np.full(len(ext), s / len(ext))])
+
+
+# ======================================================================================================== external cohort: Biomarkers of Aging Consortium (GSE246337)
+def get_boa(e):
+    """500 blood samples, EPICv2, ages 18-99 (ages above 89 are censored in the public file -> NaN).  The public GEO series has age / sex / race only: no mortality."""
+    f = e.data / "external/boa_cohort.npz"
+    if f.exists():
+        z = np.load(f, allow_pickle=True); return z["X"], z["age"], z["sex"]
+    import gzip
+    d = e.data / "external"; sm = download(BOA_MATRIX_URL, d / "GSE246337_series_matrix.txt.gz", "BoA cohort metadata")
+    bet = Path(os.environ["EPICLOCK_BOA_FILE"]) if os.environ.get("EPICLOCK_BOA_FILE") else download(BOA_BETAS_URL, d / "GSE246337_betas.csv.gz", "BoA cohort beta values (3.5 GB)")
+    rows, barcodes = {}, None
+    with gzip.open(sm, "rt") as fh:
+        for line in fh:
+            if line.startswith("!Sample_description"):
+                barcodes = [x.strip('"') for x in line.rstrip("\n").split("\t")[1:]]
+            elif line.startswith("!Sample_characteristics_ch1"):
+                vals = [x.strip('"') for x in line.rstrip("\n").split("\t")[1:]]; rows[vals[0].split(":")[0].strip().lower()] = [v.split(":", 1)[1].strip() if ":" in v else v for v in vals]
+            elif line.startswith("!series_matrix_table_begin"):
+                break
+    age = pd.to_numeric(pd.Series(rows["age"]), errors="coerce").to_numpy(float); sex = np.array(rows.get("sex", [""] * len(age)))
+    panel = pd.Index(e.c.cpgs); acc = []
+    try:
+        with gzip.open(bet, "rt") as fh:
+            for chunk in pd.read_csv(fh, index_col=0, chunksize=20000):
+                base = pd.Index(chunk.index.astype(str).str.split("_").str[0]); m = base.isin(panel)         # EPICv2 ids carry a replicate suffix (cg..._TC21)
+                if m.any():
+                    sub = chunk[m]; sub.index = base[m]; acc.append(sub)
+    except EOFError:
+        if not os.environ.get("EPICLOCK_BOA_FILE"):
+            raise
+        log("[boa] test file is truncated: using the rows read")
+    B = pd.concat(acc).groupby(level=0).mean().reindex(panel)[barcodes].T
+    v = B.to_numpy(float); X = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
+    log(f"[boa] {len(X)} samples; {int(B.notna().any(axis=0).sum())} of the {len(panel)} panel CpGs are on the EPICv2 array; {int(np.isfinite(age).sum())} have an exact age")
+    np.savez(f, X=X, age=age, sex=sex); return X, age, sex
+
+
+def predict_boa(e, name, X):
+    ar = parse_arm(name); d = arm_dir(e, ar); f = d / "preds_boa.npy"
+    if f.exists():
+        return np.load(f)
+    if ar["kind"] == "linear":
+        m = LinearClock(get_ridge(e)); m.load_state_dict(torch.load(d / "linear_best.pt", map_location="cpu", weights_only=False)["state"])
+        with torch.no_grad():
+            p = t_to_age(m(rowz(X, e.mean, e.std)).double().numpy())
+    else:
+        model, ck = load_model(d / "model.pt", e.dev); p = t_to_age(predict_t(model, X, ck["K"], e.a.test_draws, np.random.default_rng(17))); del model; free_mem(e.dev)
+    np.save(f, p); return p
+
+
+def boa_cohort_stage(e):
+    """Download the cohort once, score every comparator and every finished model on it (cached)."""
+    X, age, sex = get_boa(e); P = comparators_on(e, X, "comparators_boa.npz")
+    for n in finished_arms(e):
+        P[n] = predict_boa(e, n, X)
+    return P, age
+
+
+def boa_table(e):
+    f = e.data / "external/boa_cohort.npz"
+    if not f.exists():
+        return None
+    X, age, sex = get_boa(e); P = dict(np.load(e.out / "comparators_boa.npz")) if (e.out / "comparators_boa.npz").exists() else {}
+    for n in finished_arms(e):
+        g = arm_dir(e, parse_arm(n)) / "preds_boa.npy"
+        if g.exists():
+            P[n] = np.load(g)
+    ok = np.isfinite(age) & (age >= 18)
+    if not P or not ok.any():
+        return None
+    mem = [n for n in P if n in finished_arms(e) and parse_arm(n)["kind"] == "pre" and parse_arm(n)["seed"] == 0]
+    if len(mem) >= 2:
+        P["ensemble of " + "+".join(parse_arm(n)["size"] for n in mem)] = np.mean([P[n] for n in mem], 0)
+    rng = np.random.default_rng(0); idx = rng.integers(0, ok.sum(), (500, ok.sum())); rows = []
+    for n, p in P.items():
+        err = (p[ok] - age[ok]); a_ = np.abs(err); b = np.median(a_[idx], axis=1)
+        rows.append(dict(model=n, n=int(ok.sum()), MedAE=np.median(a_), CI=ci(b), MAE=a_.mean(), MedE=np.median(err), r=np.corrcoef(p[ok], age[ok])[0, 1]))
+    return pd.DataFrame(rows).set_index("model").sort_values("MedAE")
+
+
+# ======================================================================================================== survival / mortality validation (your own cohort files)
+def cox_fit(time, event, X, iters=40):
+    """Cox proportional hazards (Breslow ties), Newton-Raphson.  -> beta, standard errors, log partial likelihood."""
+    t = np.asarray(time, float); d = np.asarray(event, int); Z = np.asarray(X, float).reshape(len(t), -1)
+    o = np.argsort(-t, kind="stable"); t, d, Z = t[o], d[o], Z[o]; n, p = Z.shape
+    last = n - 1 - np.searchsorted(t[::-1], t, side="left")          # last index of each tied group in descending order: its risk set is everything up to there
+    beta = np.zeros(p); ll_old = -np.inf
+    for _ in range(iters):
+        eta = np.clip(Z @ beta, -30, 30); w = np.exp(eta)
+        S0 = np.cumsum(w)[last]; S1 = np.cumsum(w[:, None] * Z, 0)[last]; S2 = np.cumsum(w[:, None, None] * (Z[:, :, None] * Z[:, None, :]), 0)[last]
+        ev = d == 1; ll = float((eta[ev] - np.log(S0[ev])).sum())
+        m1 = S1[ev] / S0[ev, None]; grad = (Z[ev] - m1).sum(0); hess = -(S2[ev] / S0[ev, None, None] - m1[:, :, None] * m1[:, None, :]).sum(0)
+        step = np.linalg.solve(hess - 1e-9 * np.eye(p), -grad)
+        if ll < ll_old - 1e-10:
+            step *= 0.5
+        beta = beta + step; ll_old = ll
+        if np.abs(step).max() < 1e-8:
+            break
+    se = np.sqrt(np.diag(np.linalg.inv(-hess + 1e-12 * np.eye(p))))
+    return beta, se, ll
+
+
+def c_index(time, event, risk):
+    """Harrell's concordance: among comparable pairs (the earlier one is an event), how often does the earlier one have the higher risk?"""
+    t, d, r = np.asarray(time, float), np.asarray(event, int), np.asarray(risk, float); num = den = 0.0
+    for i in np.flatnonzero(d == 1):
+        later = t > t[i]; den += later.sum(); num += (r[i] > r[later]).sum() + 0.5 * (r[i] == r[later]).sum()
+    return num / den if den else float("nan")
+
+
+def survival_table(time, event, age, scores, sex=None, B=200, seed=0):
+    """For each score: the age-acceleration residual (score regressed on chronological age), standardised; hazard ratio per SD from a Cox model that also contains age
+    (and sex); the concordance of that model versus the model with age (and sex) only, with a bootstrap interval for the gain."""
+    time, event, age = np.asarray(time, float), np.asarray(event, int), np.asarray(age, float)
+    base = np.stack([age / 10.0] + ([np.asarray(sex, float)] if sex is not None else []), 1); rng = np.random.default_rng(seed); n = len(time)
+    b0, _, _ = cox_fit(time, event, base); c0 = c_index(time, event, base @ b0); rows = [dict(score="age" + (" + sex" if sex is not None else "") + " only", HR_per_SD="", CI="", p="", C_index=round(c0, 3), delta_C="", delta_C_CI="")]
+    from math import erfc, sqrt
+    for name, s in scores.items():
+        s = np.asarray(s, float); ok = np.isfinite(s)
+        if ok.sum() < 30 or event[ok].sum() < 10:
+            continue
+        A = np.stack([np.ones(ok.sum()), age[ok]], 1); res = s[ok] - A @ np.linalg.lstsq(A, s[ok], rcond=None)[0]; z = np.zeros(n); z[ok] = res / res.std()
+        Xa = np.concatenate([base, z[:, None]], 1)[ok]; t_, d_, Xb = time[ok], event[ok], base[ok]
+        b, se, _ = cox_fit(t_, d_, Xa); c1 = c_index(t_, d_, Xa @ b); bb0, _, _ = cox_fit(t_, d_, Xb); cb = c_index(t_, d_, Xb @ bb0); dc = []
+        for _ in range(B):
+            i = rng.integers(0, len(t_), len(t_))
+            try:
+                q1, _, _ = cox_fit(t_[i], d_[i], Xa[i]); q0, _, _ = cox_fit(t_[i], d_[i], Xb[i]); dc.append(c_index(t_[i], d_[i], Xa[i] @ q1) - c_index(t_[i], d_[i], Xb[i] @ q0))
+            except np.linalg.LinAlgError:
+                continue
+        hr = np.exp(b[-1]); rows.append(dict(score=name, HR_per_SD=round(hr, 3), CI=f"[{np.exp(b[-1] - 1.96 * se[-1]):.2f}, {np.exp(b[-1] + 1.96 * se[-1]):.2f}]", p=f"{erfc(abs(b[-1] / se[-1]) / sqrt(2)):.2g}",
+                                              C_index=round(c1, 3), delta_C=round(c1 - cb, 4), delta_C_CI=ci(dc, 4, True) if dc else ""))
+    return pd.DataFrame(rows).set_index("score")
+
+
 # ======================================================================================================== commands
 def default_queue(e):
     if e.a.smoke:
@@ -1346,6 +1679,12 @@ def default_queue(e):
 
 
 def finish(e):
+    try:
+        boa_cohort_stage(e)
+    except SystemExit as ex:
+        log(f"[boa] {ex}")
+    except Exception as ex:
+        log(f"[boa] external cohort skipped ({type(ex).__name__}: {str(ex)[:140]})")
     rep = build_report(e)
     probe_architecture(e)
     for n in finished_arms(e):
@@ -1377,16 +1716,22 @@ def cmd_report(a):
         pass
 
 
+def betas_to_rows(cpgs, betas):
+    """DataFrame of betas (samples x CpGs, or CpGs x samples) -> uint8 rows over the model's panel (255 = missing)."""
+    B = betas.T if pd.Index(betas.index.astype(str)).str.startswith("cg").mean() > 0.5 else betas
+    pos = pd.Index(cpgs).get_indexer(B.columns.astype(str)); keep = pos >= 0
+    X = np.full((len(B), len(cpgs)), 255, np.uint8); v = B.to_numpy(np.float64)[:, keep]
+    X[:, pos[keep]] = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
+    log(f"{len(B)} samples; {keep.sum()} of your {len(keep)} CpGs are in the model's panel ({keep.sum() / len(cpgs):.0%} of the panel)")
+    return B.index, X
+
+
 def epiclock_predict(model_path, betas, device="auto", draws=16):
     """Ages for a DataFrame of beta values (rows = samples, columns = CpG ids; rows may also be CpGs, it is detected).
     -> DataFrame with `epigenetic_age` and, for pre-trained models, `deviation` (masked-CpG reconstruction error: how unlike healthy methylation the sample is)."""
     dev = get_device(device); m, ck = load_model(model_path, dev)
-    B = betas.T if pd.Index(betas.index.astype(str)).str.startswith("cg").mean() > 0.5 else betas
-    pos = pd.Index(ck["cpgs"]).get_indexer(B.columns.astype(str)); keep = pos >= 0
-    X = np.full((len(B), len(ck["cpgs"])), 255, np.uint8); v = B.to_numpy(np.float64)[:, keep]
-    X[:, pos[keep]] = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
-    log(f"{len(B)} samples; {keep.sum()} of your {len(keep)} CpGs are in the model's panel ({keep.sum() / len(ck['cpgs']):.0%} of the panel)")
-    out = pd.DataFrame({"epigenetic_age": t_to_age(predict_t(m, X, ck["K"], draws, np.random.default_rng(0)))}, index=B.index)
+    index, X = betas_to_rows(ck["cpgs"], betas)
+    out = pd.DataFrame({"epigenetic_age": t_to_age(predict_t(m, X, ck["K"], draws, np.random.default_rng(0)))}, index=index)
     if ck.get("pretrained", True):
         out["deviation"] = recon_error(m, X, ck["K"], 4, np.random.default_rng(1))
     return out
@@ -1408,6 +1753,33 @@ def cmd_predict(a):
     out.to_csv(a.out, index=False); log(f"wrote {a.out}")
 
 
+def cmd_ingest(a):
+    e = make_env(a); ingest_methylgpt(e, a.source, a.exclude); attach_external(e)
+
+
+def cmd_survival(a):
+    """Mortality / time-to-event validation on a cohort you provide (betas + a table with follow-up time, event indicator, age)."""
+    import types
+    dev = get_device(a.device); m, ck = load_model(a.model, dev)
+    B = pd.read_csv(a.beta, sep="\t" if a.beta.endswith((".tsv", ".txt")) else ",", index_col=0); M = pd.read_csv(a.meta, sep="\t" if a.meta.endswith((".tsv", ".txt")) else ",", index_col=0)
+    index, X = betas_to_rows(ck["cpgs"], B); M = M.reindex(index); ok = M[[a.time_col, a.event_col, a.age_col]].notna().all(1).to_numpy()
+    log(f"{int(ok.sum())} of {len(M)} samples have follow-up time, event and age; {int(M.loc[ok, a.event_col].sum())} events")
+    scores = {"EpiClock epigenetic age": t_to_age(predict_t(m, X, ck["K"], a.draws, np.random.default_rng(0)))}
+    if ck.get("pretrained", True):
+        scores["EpiClock deviation (reconstruction error)"] = recon_error(m, X, ck["K"], 4, np.random.default_rng(1))
+    if not a.no_comparators:
+        c = types.SimpleNamespace(cpgs=list(ck["cpgs"]))
+        for nm, p in {**published_clocks(c, X, log), **biolearn_clocks(c, X, log)}.items():
+            scores[nm] = np.asarray(p, float)
+    sex = None
+    if a.sex_col:
+        s = M[a.sex_col].astype(str).str.upper().str[0]; sex = (s == "M").astype(float).to_numpy()[ok]
+    tab = survival_table(M.loc[ok, a.time_col].to_numpy(float), M.loc[ok, a.event_col].to_numpy(int), M.loc[ok, a.age_col].to_numpy(float), {k: v[ok] for k, v in scores.items()}, sex=sex)
+    log("Cox models: hazard ratio per SD of age acceleration (score residual after regressing on chronological age), adjusted for age" + (" and sex" if sex is not None else "") + "; "
+        "delta_C = gain in concordance over the model with age" + (" and sex" if sex is not None else "") + " only\n" + tab.to_string())
+    tab.to_csv(a.out); log(f"wrote {a.out}")
+
+
 def cmd_probe(a):
     a.arms = ""; e = make_env(a); probe_architecture(e)
     for n in finished_arms(e):
@@ -1426,16 +1798,22 @@ def main():
         p.add_argument("--val-draws", type=int, default=CONFIG["val_draws"]); p.add_argument("--test-draws", type=int, default=CONFIG["test_draws"]); p.add_argument("--boot", type=int, default=CONFIG["boot"])
         p.add_argument("--no-selftest", action="store_true"); p.add_argument("--smoke", action="store_true", help="30-step functional check of every code path (tiny models)")
         p.add_argument("--arms", default="", help="comma list overriding the default queue, e.g. base-pre,base-scratch")
+        p.add_argument("--no-external", action="store_true", help="never download / use the extra MethylGPT profiles"); p.add_argument("--ext-share", type=float, default=0.5, help="share of pre-training draws taken from the extra profiles")
     common(sub.add_parser("study")); common(sub.add_parser("report")); common(sub.add_parser("probe"))
+    ig = sub.add_parser("ingest", help="add the MethylGPT / EWAS Data Hub profiles (about 23 GB download) as extra pre-training data"); common(ig)
+    ig.add_argument("--source", default=None, help="the downloaded .tar.gz or an unpacked folder of parquet files (default: download it)"); ig.add_argument("--exclude", default=None, help="text file of sample ids to leave out")
+    sv = sub.add_parser("survival", help="Cox / concordance validation of age acceleration on a cohort with follow-up"); sv.add_argument("--model", required=True); sv.add_argument("--beta", required=True)
+    sv.add_argument("--meta", required=True); sv.add_argument("--time-col", required=True); sv.add_argument("--event-col", required=True); sv.add_argument("--age-col", default="age"); sv.add_argument("--sex-col", default=None)
+    sv.add_argument("--device", default="auto"); sv.add_argument("--draws", type=int, default=16); sv.add_argument("--no-comparators", action="store_true"); sv.add_argument("--out", default="survival_results.csv")
     p = sub.add_parser("predict"); p.add_argument("--model", required=True); p.add_argument("--beta", required=True); p.add_argument("--out", default="epigenetic_ages.csv")
     p.add_argument("--device", default="auto"); p.add_argument("--draws", type=int, default=16); p.add_argument("--meta", default=None, help="csv/tsv indexed by sample id")
     p.add_argument("--age-col", default="age"); p.add_argument("--group-col", default=None); p.add_argument("--control", default=None, help="value of --group-col that marks the controls")
     if len(sys.argv) == 1 or (sys.argv[1].startswith("-") and sys.argv[1] not in ("-h", "--help")):
         sys.argv.insert(1, "study")                                         # `python epiclock.py` alone runs the whole study with everything automatic
     a = ap.parse_args()
-    if a.cmd != "predict" and a.smoke:
+    if a.cmd not in ("predict", "survival") and a.smoke:
         a.ssl_steps, a.ft_steps, a.eval_every, a.test_draws, a.val_draws, a.boot, a.no_selftest = 30, 30, 15, 2, 1, 200, True
-    {"study": cmd_study, "report": cmd_report, "probe": cmd_probe, "predict": cmd_predict}[a.cmd](a)
+    {"study": cmd_study, "report": cmd_report, "probe": cmd_probe, "predict": cmd_predict, "ingest": cmd_ingest, "survival": cmd_survival}[a.cmd](a)
 
 
 if __name__ == "__main__":
