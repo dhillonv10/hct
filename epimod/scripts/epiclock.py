@@ -712,6 +712,11 @@ def cmd_train(a):
         if m.lin_on:
             m.lin_u.data.copy_(torch.as_tensor(rg["w"] / LIN_SCALE)); m.bias.data.fill_(rg["b"]); nn.init.zeros_(m.age_head.weight); nn.init.zeros_(m.age_head.bias)
             log("[finetune] linear clock initialised from ridge; transformer correction starts at zero")
+    old = out / "results.json"                                                       # written by earlier versions of this script when the run finished
+    if old.exists() and not (out / "finetune_done.json").exists():
+        ft = json.load(open(old)).get("finetune") or {}
+        if ft.get("reason") not in (None, "stop-file"):
+            json.dump(ft, open(out / "finetune_done.json", "w"))
     tr_rows = sp["train"]; w = sample_weights(c.meta, tr_rows, 0.5, 0.5)
     vsel = sp["val"][np.random.RandomState(6).choice(len(sp["val"]), min(2000, len(sp["val"])), replace=False)]
     def age_step(m, n):
