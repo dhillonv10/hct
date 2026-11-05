@@ -1,42 +1,25 @@
 #!/usr/bin/env python3
-"""EpiClock - a genome-aware transformer epigenetic clock, plus the experiments that show what the transformer is worth.  One file.
+"""EpiClock - a family of genome-aware transformer epigenetic clocks, trained ONLY on audited, clean data.  One script, no switches.
 
-  python epiclock.py                  # the whole study (resumable; results appear after every model): comparators, controls, a family of models,
-                                      # error bars, probes of what was learned, report.md, release package
-  python epiclock.py report           # rebuild report.md / probes / release package from whatever has finished (no training)
-  python epiclock.py predict --model runs/epiclock/release/EpiClock-B/model.pt --beta my_betas.csv [--meta meta.csv --age-col age --group-col status --control Control]
-  python epiclock.py --smoke --out /tmp/smoke      # 30-step functional check of every code path (tiny models)
+  python epiclock.py                     # audit and build the clean corpus -> pre-train -> fine-tune -> evaluate -> report.md   (resumable: run it again to continue)
+  python epiclock.py predict --model runs/epiclock_clean/release/EpiClock-B/model.pt --beta my_betas.csv [--meta meta.csv --age-col age --group-col status --control Control]
 
-Model
-  Every CpG is a token: learned identity + genome context (chromosome, position at several scales, CpG-island / shore / shelf / open sea, gene region,
-  regulatory flags) + its measured methylation (beta).  A sample is a random subset of its observed CpGs (any array, any missing values).
-  Pre-training (no labels): hide 25% of the CpGs and reconstruct them from the visible ones.  Fine-tuning: predict age (Horvath-transformed) from a CpG subset;
-  at test time predictions over several disjoint subsets are averaged.  The age output = a linear clock over the whole CpG row (initialised from ridge)
-  + a correction learned by the transformer; a step-0 evaluation guarantees the result is never worse than that start on the validation series.
+What goes in (data_audit.md and the end of report.md give exact counts and the reason for every exclusion)
+  Sources: the bundle (ComputAge Bench training studies, public GEO series) and the MethylGPT / EWAS Data Hub / ClockBase profiles (about 23 GB, downloaded once, resumable).
+  A profile is used only if ALL of these hold: EWAS Data Hub's curated metadata marks it a healthy control (or part of an HIV cohort) - never cancer, never other disease, never a control that
+  carries a condition field, never a cell culture; GEO's own sample description does not name a disease or cancer; its study is not cancer-themed; it is not from the same study as a
+  benchmark dataset; it is not a re-deposited copy of a benchmark sample (found by comparing the methylation profiles themselves).  Profiles without a health annotation are not used.
+  ComputAge Bench training studies are healthy controls by curation and are checked the same way.  The test set (ComputAge Bench healthy controls) is never trained on.
 
-What the study answers (see report.md)
-  * How much does the transformer add?  'linear-tuned' trains the linear core alone with the same recipe; '<size>-pre' vs it, '<size>-pre' vs '<size>-pre
-    [linear part only]' (the same model with the transformer's correction removed), pre-training vs none, genome-context inputs vs none, seed-to-seed noise.
-  * Error bars: paired bootstrap over samples and over whole studies (the honest one).
-  * Comparators: ridge, elastic net (same data), Horvath V1/V2, Hannum, Lin (computage), Vidal-Bralo, PhenoAge, Ying clocks (biolearn); missing packages are installed.
-  * The public ComputAge Bench score (healthy-control error + disease age-acceleration tests on 65 studies), applied to every model.
-  * Does the CpG embedding know islands / regulatory class / chromosome?  Linear probes against SVD / methylation-statistics baselines; the '-noctx' model is the
-    clean test because it is never shown the annotations.
-  * A model family (EpiClock-T/S/B/L/XL) with model cards, and an ensemble row.
-  * Cross-study robustness ('-rob' models: a penalty on the spread of the per-study mean error) and the share of every model's error that is a per-study offset.
-  * Disease signal without disease labels: the 'deviation' score (masked-CpG reconstruction error) next to age acceleration, per disease class, and in `predict`.
+What it trains: for each size (T/S/B/L/XL) the same network with and without masked-CpG pre-training, so the report shows what pre-training is worth; a base-size model without the genome-context
+inputs (to test whether the network discovers CpG islands / regulatory structure from methylation alone); a linear-only control; an ensemble.
+How it is judged: ridge and elastic net on the same data, Horvath / Hannum / Lin (computage) and more published clocks (biolearn), the ComputAge Bench score, paired bootstrap error bars over
+samples and over whole studies, probes of what the CpG embeddings know about islands / chromosome / regulatory class, the deviation score.
 
-Data hygiene (--corpus): the bundle's GEO samples were never screened for disease (about a third of those EWAS Data Hub knows are disease tissue, some are cancer).
-  all (default)        everything, no screening - the most data (also what the first runs used); the output goes to runs/epiclock
-  noncancer            GEO samples are used unless they are cancer (tumour, adjacent normal, cancer projects); samples EWAS Data Hub does not know are dropped
-  clean                GEO samples are used only if EWAS Data Hub's curated metadata marks them healthy or part of an HIV cohort (stricter, much less data)
-ComputAge Bench rows are kept as they are.  Each output folder remembers its corpus and refuses a mismatching run.
-Extra data (--external all, default): the MethylGPT / EWAS Data Hub profiles (about 23 GB download, then ingested once) join the label-free pre-training pool of every pre-trained model;
-ids already in the corpus, the benchmark or the held-out leukaemia series are always left out.  With --corpus noncancer / clean they are screened like the bundle's own samples.
-  python epiclock.py ingest           # only download + ingest the extra data
-
+Model: every CpG is a token (learned identity + genome context + its beta); a sample is a random subset of its observed CpGs; pre-training hides 25% and reconstructs them; fine-tuning predicts
+age (Horvath-transformed) = a linear clock over the whole row (ridge-initialised) + a transformer correction; test-time predictions over several CpG subsets are averaged.
 Control while it runs (in the output folder): `touch STOP` pauses (delete it and re-run to resume); `touch NEXT` ends the current training stage early.
-Device: --device auto uses the Apple GPU (MPS) when present; a self-test compares it with the CPU first.  Every stage stops by itself when validation stops improving."""
+Device: the Apple GPU (MPS) when present, after a self-test against the CPU.  Every stage stops by itself when validation stops improving."""
 from __future__ import annotations
 
 import argparse
@@ -848,18 +831,21 @@ KINDS = {"pre": "pre-trained transformer + linear core (the main model)", "scrat
          "rob": "pre-trained, fine-tuned with a cross-study robustness penalty (variance of the per-study mean error)",
          "noctx": "pre-trained, but the genome-context inputs (island, chromosome, regulatory class, position) are removed",
          "pure": "transformer alone: no linear core, no pre-training", "cons": "pre-trained, fine-tuned with a two-view consistency penalty"}
-DEFAULT_QUEUE = ["linear-tuned", "xl-pre", "tiny-pre", "small-scratch", "small-pre", "small-pure", "base-scratch", "base-pre", "base-noctx",
-                 "base-pre-s1", "base-pre-s2", "base-cons", "base-rob", "large-pre"]
-SMOKE_QUEUE = ["linear-tuned", "tiny-pre", "tiny-scratch", "tiny-noctx", "tiny-pure", "tiny-cons", "tiny-rob", "tiny-pre-s1"]
+DEFAULT_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "small-scratch", "small-pre", "base-scratch", "base-pre", "base-noctx", "large-scratch", "large-pre", "xl-scratch", "xl-pre"]
+SMOKE_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "tiny-noctx"]
 CONS_LAMBDA = 0.5
 ROB_LAMBDA = 5.0
 
 
-# ======================================================================================================== health screen of the bundle's own GEO samples
-# EWAS Data Hub's "control" label is NOT "healthy" (it includes HIV+ patients, cancer survivors, treated samples, controls that carry a disease label ...).
-# 'clean' accepts a sample only if it is a control AND none of the condition-bearing metadata fields below is filled in AND it is not a cell culture, or if it belongs to an HIV cohort.
-# Cancer is never accepted (tumour, adjacent normal of a tumour, cancer-registry projects, any cancer word in the descriptive fields).
+# ======================================================================================================== data: ONE fixed, audited training corpus
+# Training uses only profiles that pass every check below.  Nothing "dirty" is trained on; everything that is excluded is counted, with the reason, in data_audit.md.
 EWAS_URL = "https://ngdc.cncb.ac.cn/ewas/datahub/repository/basic?field=&val=&relationship=&limit={limit}&offset={offset}&sort=&order=asc"
+MG_URL = "https://www.dropbox.com/scl/fi/bbs6sxlkpbx11rhyvdfto/processed_type3_parquet_shuffled.tar.gz?rlkey=s73utmumq6xldmv3y6kh9bz75&st=8pslwy2a&dl=1"
+MG_PROBES_URL = "https://www.dropbox.com/scl/fi/2n6bx7j8v0aon0kwfsghp/probe_ids_type3.csv?rlkey=ly133xlce1xxjiku6tiski6qq&st=pig4e41h&dl=1"
+DUP_RMSD = 0.04                                        # a profile this close (RMS difference over co-measured CpGs) to a benchmark profile is the same sample deposited again
+
+# EWAS Data Hub's "control" label is NOT "healthy" (it includes HIV+ patients, cancer survivors, treated samples, controls that carry a disease label ...).
+# A sample counts as healthy only if it is a control AND none of the condition-bearing metadata fields below is filled in AND it is not a cell culture.  HIV cohorts are accepted; cancer never.
 EWAS_CONDITION_FIELDS = re.compile(r"disease|doid|infection|treatment|condition|tumor|cancer|histology|morpholog|metasta|survival|relapse|recurren|progression|sledai|psoriasis|psychiatric|"
                                    r"cognition|drug resistant|hypertension|hyperlipemia|pregnancy complication|gdm|obese|stage|mutation|respond|outcome|illness|anti ss|ocular|focus score|"
                                    r"mrc scale|national institutes|stroke|suicide|abuse|trauma|adversity|asthma|atopy|crp|future status|braak|toxicology|cause of death|passage|reprogramming|"
@@ -871,10 +857,20 @@ EWAS_CANCER_PROJECT = re.compile(r"^(TCGA|TARGET|CPTAC|HCMI|CGCI)")
 EWAS_HIV = re.compile(r"\bHIV|\bAIDS\b|immunodeficiency virus", re.I)
 EWAS_HIV_FIELDS_OK = re.compile(r"infection|viral load|cd4|antiretroviral|art adherence|intravenous|drug use|doid|^disease$|disease status|disease subtype|treatment|time point", re.I)
 EWAS_CULTURE_TISSUE = re.compile(r"cell line|cultured|iPSC|induced pluripotent|embryonic stem|organoid|xenograft", re.I)
+GOOD_TIERS = ("clean healthy", "HIV cohort (no cancer)")
+
+# second opinion from GEO's own sample descriptions: a string is evidence of disease when it names a disease or cancer and is not a negation / control statement
+GEO_DISEASE = re.compile(r"\b(disease|disorder|syndrome|patients?|cases?|diagnos\w*|infect\w*|diabet\w*|arthrit\w*|lupus|alzheimer\w*|parkinson\w*|schizophren\w*|psychos\w*|autis\w*|asthma\w*|copd|hypertens\w*|stroke|dementia|sclerosis|"
+                         r"crohn\w*|colitis|psoria\w*|depress\w*|bipolar|epilep\w*|covid\w*|sars\w*|sepsis|fibrosis|cirrhosis|hepatitis|nephro\w*|cardiovascular|coronary|myocardial|heart failure|infarct\w*|"
+                         r"atheroscler\w*|osteoporo\w*|endometriosis|pre-?eclampsia|obes\w*|cystic|dystroph\w*|palsy|ataxia|huntington\w*|tubercul\w*|malaria|leprosy|progeria|trisomy|tauopath\w*|"
+                         r"neurodegener\w*|lesions?|inflammat\w*|psp|ad|ms|ra|sle|ptsd|mdd|bpd|adenoma|polyp\w*)\b", re.I)
+GEO_HEALTHY = re.compile(r"\b(control\w*|healthy|normal|non[- ]?(case|patient|disease|demented|affected|cancer|tumou?r)\w*|unaffected|no|none|negative|wild[- ]?type|free|never|absent|without|not|reference|neg)\b|n/a", re.I)
+GEO_NEG_VALUES = {"0", "n", "no", "na", "n/a", "nan", "none", "false", "-", "unknown", "exclude", "nd", "not applicable", "missing", "."}
+CANCER_THEMED = re.compile(r"cancer\w*|carcinoma\w*|tumou?rs?|leuk[a]?emi\w*|lymphoma\w*|myeloma\w*|sarcoma\w*|blastoma\w*|neoplas\w*|malignan\w*|metasta\w*|oncolog\w*|\bMDS\b", re.I)
 
 
-def ewas_flags(pg):
-    """Per-sample flags for one page of EWAS Data Hub metadata: strict (healthy by the strict rule), hiv_ok (HIV cohort sample with nothing else wrong), noncancer."""
+def ewas_tier(pg):
+    """Disease-state tier of every sample on one page of EWAS Data Hub metadata."""
     cond = [k for k in pg.columns if EWAS_CONDITION_FIELDS.search(k)]
     txt = [k for k in pg.columns if re.search(r"disease|condition|histology|morpholog|tumor|metasta|status|type|diagnos|group|stage|survival|relapse", k, re.I)]
     st = pg["sample type"]; cancer = (st == "adjacent normal") | pg["project id"].astype(str).str.contains(EWAS_CANCER_PROJECT)
@@ -892,14 +888,21 @@ def ewas_flags(pg):
         if k in pg:
             v = pg[k].astype(str); named = named & (pg[k].isna() | v.str.contains(EWAS_HIV, na=False) | v.str.lower().isin(["negative", "control", "normal", "healthy"]))
     hiv_ok = hiv & ~cancer & ~culture & named & (pg[other].isna().all(axis=1) if other else True)
-    noncancer = ~cancer & ~culture & st.isin(["control", "disease tissue"])
-    return pd.DataFrame({"strict": strict.astype(bool), "hiv_ok": hiv_ok.astype(bool), "noncancer": noncancer.astype(bool)})
+    tier = np.full(len(pg), "other", object)
+    tier[((st == "control") & ~cancer & ~culture & ~strict & ~hiv_ok).to_numpy()] = "control carrying a condition field"
+    tier[((st == "disease tissue") & ~cancer & ~culture & ~hiv_ok).to_numpy()] = "non-cancer disease"
+    tier[(culture & ~cancer).to_numpy()] = "cell culture / line"
+    tier[hiv_ok.to_numpy()] = "HIV cohort (no cancer)"
+    tier[strict.to_numpy()] = "clean healthy"
+    tier[cancer.to_numpy()] = "CANCER"
+    tier[st.isna().to_numpy()] = "no sample type"
+    return tier
 
 
 def ewas_table(e):
-    """Flags for every sample of EWAS Data Hub's public sample table (fetched once, about 45 requests, cached).  Raises if it cannot be fetched."""
+    """EWAS Data Hub's curated metadata for all ~218k samples (public JSON endpoint, about 45 requests, cached) with a disease-state tier per sample.  Raises if it cannot be fetched."""
     import urllib.request
-    f = e.data / "external/ewas_annotations.parquet"
+    f = e.data / "external/ewas_table_v2.parquet"
     if f.exists():
         return pd.read_parquet(f)
     f.parent.mkdir(parents=True, exist_ok=True); keep, off, total, limit = [], 0, None, 5000
@@ -915,51 +918,116 @@ def ewas_table(e):
                 log(f"[ewas] {type(ex).__name__}: {str(ex)[:60]} - retrying"); time.sleep(5 * (attempt + 1))
         total = int(d["total"]); pg = pd.DataFrame(d["content"]); off += limit
         if len(pg):
-            keep.append(pd.concat([pg.reindex(columns=["sample id", "project id", "tissue", "platform", "sex", "age (year)", "sample type"]), ewas_flags(pg)], axis=1))
+            t = pg.reindex(columns=["sample id", "project id", "tissue", "platform", "sex", "age (year)", "sample type", "disease"]); t["tier"] = ewas_tier(pg); keep.append(t)
         log(f"[ewas] sample table {min(off, total)} / {total}"); time.sleep(1.0)
     H = pd.concat(keep, ignore_index=True); H["sample id"] = H["sample id"].astype(str); H["age (year)"] = pd.to_numeric(H["age (year)"], errors="coerce")
-    H.to_parquet(f); summ = dict(samples_in_table=int(total), strict_healthy=int(H.strict.sum()), hiv_ok=int(H.hiv_ok.sum()), noncancer=int(H.noncancer.sum()))
-    json.dump(summ, open(f.with_suffix(".json"), "w"), indent=1); log(f"[ewas] {total} samples in the table: {summ}"); return H
+    H["disease"] = H["disease"].astype(str).where(H["disease"].notna(), None); H = H.drop_duplicates("sample id")
+    H.to_parquet(f); log(f"[ewas] {len(H)} samples: {H.tier.value_counts().to_dict()}"); return H
 
 
-def allowed_ids(e):
-    """Sample ids accepted under --corpus: 'clean' = strictly healthy or an HIV cohort sample; 'noncancer' = anything that is not cancer.  Anything unmatched is not accepted."""
-    H = ewas_table(e)
-    return set(H.loc[(H.strict | H.hiv_ok) if e.a.corpus == "clean" else H.noncancer, "sample id"])
+def _http(url, rng=None, timeout=120):
+    import urllib.request
+    h = {"User-Agent": "epiclock"}
+    if rng:
+        h["Range"] = f"bytes={rng[0]}-{rng[1]}"
+    for a in range(4):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=timeout) as r:
+                return r.read()
+        except Exception:
+            if a == 3:
+                raise
+            time.sleep(2 * (a + 1))
 
 
-def screen_corpus(e):
-    """Health screen of the bundle's own GEO rows.  The bundle's labelled and unlabelled GEO samples were only screened for age (and leukaemia series), never for disease;
-    EWAS Data Hub's curated metadata marks about a third of the ones it knows as disease tissue.  Keep a GEO sample only if the strict healthy rule passes; everything
-    unmatched or non-healthy is dropped (no annotation, no data).  ComputAge Bench rows are kept as they are: its training studies are healthy controls by design and the
-    benchmark's disease cohorts are only ever used as test data."""
-    m = e.c.meta; role = m.role.to_numpy(); geo = np.isin(role, ["geo", "unlabeled"]); n0 = {r: int((role == r).sum()) for r in ("train", "benchmark", "geo", "unlabeled")}
-    try:
-        healthy = allowed_ids(e)
-    except Exception as ex:
-        log(f"[clean] CANNOT fetch the health annotations ({type(ex).__name__}: {str(ex)[:100]}). By the no-annotation-no-data rule all {int(geo.sum())} GEO samples are dropped: only ComputAge studies are used.")
-        healthy = set()
-    ok = ~geo | m.index.astype(str).isin(healthy); e.c.X = e.c.X[ok]; e.c.meta = m[ok]; role = e.c.meta.role.to_numpy()
-    e.screen = dict(before=n0, after={r: int((role == r).sum()) for r in n0})
-    log(f"[clean] --corpus {e.a.corpus}: GEO samples kept only if EWAS Data Hub's curated metadata accepts them: labelled GEO {n0['geo']} -> {e.screen['after']['geo']}, unlabelled GEO {n0['unlabeled']} -> {e.screen['after']['unlabeled']} "
-        f"(ComputAge training {n0['train']} and benchmark {n0['benchmark']} rows unchanged)")
-
-
-def check_corpus_stamp(e):
-    """A folder keeps results for one training corpus only: mixing runs made with and without the health screen would silently compare different data."""
-    f = e.out / "corpus.json"; cur = dict(mode=e.a.corpus, external=e.a.external, labelled_train=int(len(e.sp["train"])), pretrain_pool=int(len(e.sp["ssl"])))
+def geo_project(gse, cache):
+    """Sample descriptions (title, source, characteristics) and series text of one GEO series, from the headers of its series-matrix files (cached)."""
+    import zlib
+    f = cache / f"{gse}.json"
     if f.exists():
-        old = json.load(open(f))
-        if old != cur:
-            sys.exit(f"{e.out} holds results made with a different training corpus ({old}) than this run ({cur}). Use another --out folder, or delete this one.")
-    else:
-        json.dump(cur, open(f, "w"))
+        return json.load(open(f))
+    d = f"https://ftp.ncbi.nlm.nih.gov/geo/series/{gse[:-3]}nnn/{gse}/matrix/"; files = re.findall(r'href="([^"]*series_matrix\.txt\.gz)"', _http(d).decode("utf-8", "ignore")); samples, series = {}, ""
+    for fn in files:
+        for n in (1 << 20, 6 << 20, 24 << 20):
+            raw = _http(d + fn, (0, n - 1), timeout=180); z = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            try:
+                txt = z.decompress(raw).decode("utf-8", "ignore")
+            except zlib.error:
+                txt = ""
+            if "!series_matrix_table_begin" in txt or len(raw) < n:
+                break
+        hdr = {}
+        for line in txt.split("\n"):
+            if line.startswith("!series_matrix_table_begin"):
+                break
+            if line.startswith("!"):
+                k, _, v = line.partition("\t"); hdr.setdefault(k, []).append(v)
+        acc = [x.strip('"') for x in hdr.get("!Sample_geo_accession", [""])[0].split("\t")]; per = [[] for _ in acc]
+        for k in ("!Sample_title", "!Sample_source_name_ch1", "!Sample_characteristics_ch1", "!Sample_description", "!Sample_treatment_protocol_ch1"):
+            for line in hdr.get(k, []):
+                vals = [x.strip('"') for x in line.split("\t")]
+                for i in range(min(len(acc), len(vals))):
+                    per[i].append(vals[i])
+        samples.update(dict(zip(acc, per)))
+        series = series or " ".join(" ".join(hdr.get(k, [])) for k in ("!Series_title", "!Series_summary", "!Series_overall_design")).replace('"', "")
+    res = dict(samples=samples, series=series); json.dump(res, open(f, "w")); return res
 
 
-# ======================================================================================================== extra pre-training data: MethylGPT / EWAS Data Hub profiles (no labels)
-MG_URL = "https://www.dropbox.com/scl/fi/bbs6sxlkpbx11rhyvdfto/processed_type3_parquet_shuffled.tar.gz?rlkey=s73utmumq6xldmv3y6kh9bz75&st=8pslwy2a&dl=1"
-MG_PROBES_URL = "https://www.dropbox.com/scl/fi/2n6bx7j8v0aon0kwfsghp/probe_ids_type3.csv?rlkey=ly133xlce1xxjiku6tiski6qq&st=pig4e41h&dl=1"
-MIN_NEW_HEALTHY = 10000
+def geo_string_kind(s):
+    key, sep, val = s.partition(":"); v = (val if sep else s).strip().lower()
+    if sep and v in GEO_NEG_VALUES:
+        return ""
+    if EWAS_CANCER.search(s) and not GEO_HEALTHY.search(s):
+        return "cancer"
+    if GEO_DISEASE.search(s) and not GEO_HEALTHY.search(s) and not (EWAS_HIV.search(s) and not EWAS_CANCER.search(s)):
+        return "disease"
+    return ""
+
+
+def geo_review(e, projects):
+    """-> ({sample id: '' | 'disease' | 'cancer'}, {project: cancer-themed?}).  Samples whose GEO description cannot be fetched are absent (= unverified = not used)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    cache = e.data / "external/geo_descriptions"; cache.mkdir(parents=True, exist_ok=True)
+    todo = [p for p in projects if p.startswith("GSE") and not (cache / f"{p}.json").exists()]; failed = []
+    if todo:
+        log(f"[geo] fetching the sample descriptions of {len(todo)} GEO series (second opinion on health status)")
+        def job(g):
+            try:
+                geo_project(g, cache); return g, None
+            except Exception as ex:
+                return g, f"{type(ex).__name__}: {str(ex)[:60]}"
+        with ThreadPoolExecutor(6) as pool:
+            for i, fu in enumerate(as_completed([pool.submit(job, g) for g in todo])):
+                g, err = fu.result()
+                if err:
+                    failed.append((g, err))
+                if (i + 1) % 200 == 0:
+                    log(f"[geo] {i + 1}/{len(todo)} series fetched, {len(failed)} failed")
+        if failed:
+            log(f"[geo] {len(failed)} series could not be fetched ({failed[:3]}); their samples are treated as unverified and not used")
+    kinds, themed = {}, {}
+    for p in projects:
+        f = cache / f"{p}.json"
+        if not f.exists():
+            continue
+        d = json.load(open(f)); themed[p] = bool(CANCER_THEMED.search(d["series"]))
+        for gsm, strs in d["samples"].items():
+            ks = [geo_string_kind(s) for s in strs]; k = "cancer" if "cancer" in ks else "disease" if "disease" in ks else ""
+            kinds[gsm] = k if (k or gsm not in kinds) else kinds[gsm]
+    return kinds, themed
+
+
+def masked_nn(Xa, Xb, min_overlap):
+    """For every row of Xa: RMS difference to the closest row of Xb over the CpGs measured in both (uint8 rows, 255 = missing); rows sharing fewer than min_overlap CpGs are ignored."""
+    def prep(X):
+        return torch.as_tensor(np.where(X != 255, X / 100.0, 0.0).astype(np.float32)), torch.as_tensor((X != 255).astype(np.float32))
+    xa, ma = prep(Xa); xb, mb = prep(Xb); best = np.full(len(xa), 9.0, np.float32); xa2, xb2 = xa ** 2, xb ** 2
+    for s in range(0, len(xa), 1000):
+        a, am, a2 = xa[s:s + 1000], ma[s:s + 1000], xa2[s:s + 1000]
+        n = am @ mb.T; ss = a2 @ mb.T + am @ xb2.T - 2 * (a @ xb.T)
+        rmsd = torch.sqrt(torch.clamp(ss, min=0) / torch.clamp(n, min=1)); rmsd[n < min_overlap] = 9.0
+        best[s:s + 1000] = rmsd.min(1).values.numpy()
+    return best
 
 
 def download(url, dest, what):
@@ -1006,7 +1074,7 @@ def download(url, dest, what):
 
 
 def heldout_ids(data):
-    """Sample ids of the leukaemia/AML/MDS series that are held out of every training set (kept out of the extra data too)."""
+    """Sample ids of the leukaemia/AML/MDS series that the bundle holds out of every training set."""
     hf = data / "geo/holdout.txt"; hold = set(hf.read_text().split()) if hf.exists() else set(); out = set()
     for sub in ("meta", "meta_unlabeled"):
         for f in sorted((data / "geo" / sub).glob("GSE*.parquet")):
@@ -1016,37 +1084,23 @@ def heldout_ids(data):
     return out
 
 
-def ingest_methylgpt(e, source=None, exclude_file=None):
-    """Turn the MethylGPT / EWAS Data Hub / ClockBase pre-training set (226k profiles x 49,156 CpGs, no labels) into extra label-free pre-training rows on our panel.
-    Only profiles that EWAS Data Hub's curated metadata accepts under --corpus are kept (healthy or HIV cohort for 'clean', not cancer for 'noncancer'); everything else, and everything that cannot be matched to that metadata, is dropped.
-    Only the 3,709 CpGs shared with our 9,098-CpG panel are kept (the model treats the other panel CpGs as 'not measured', as it does for 27K / 450K arrays).
-    Dropped: profiles whose id is already in our corpus (duplicates, and every ComputAge benchmark sample), the held-out leukaemia/AML/MDS series,
-    ids in --exclude, and profiles with fewer than half of the shared CpGs measured."""
+def ingest_methylgpt(e, accept, tier_of, known_ids):
+    """Stream the MethylGPT / EWAS Data Hub / ClockBase set (226k profiles x 49,156 CpGs; 23 GB) and keep ONLY the profiles in `accept`, restricted to the 3,709 CpGs shared with our panel.
+    Counts every profile it sees by disease tier, so the audit covers the whole set, not only what is kept."""
     import io
     import tarfile
-    try:
-        import pyarrow.parquet as pq
-    except ImportError:
-        ensure_pkg("pyarrow", ["pyarrow"], "reading the parquet files"); import pyarrow.parquet as pq
-    d = e.data / "external"; out = d / f"methylgpt_panel_{e.a.corpus}.npz"           # one file per --corpus: the accepted set differs between modes
+    import hashlib
+    import pyarrow.parquet as pq
+    d = e.data / "external"; key = hashlib.sha256("\n".join(sorted(accept)).encode()).hexdigest()[:16]; out = d / f"methylgpt_clean_{key}.npz"
     if out.exists():
-        return out
-    healthy = None if e.a.corpus == "all" else allowed_ids(e)                     # --corpus all: nothing is screened; otherwise the health table is fetched first
-    drop = set(e.c.meta.index.astype(str)) | heldout_ids(e.data)
-    if exclude_file:
-        drop |= set(Path(exclude_file).read_text().split())
-    if healthy is None:
-        log("[ingest] --corpus all: every profile is kept (cancer and other disease profiles included) except ids already in our corpus / the benchmark / held-out series")
-    else:
-        new_max = len(healthy - drop); log(f"[ingest] {len(healthy)} samples are accepted by --corpus {e.a.corpus}; at most {new_max} of them are not already in our corpus / benchmark / held-out series")
-        if new_max < MIN_NEW_HEALTHY and not source:
-            sys.exit(f"only {new_max} new accepted profiles could be gained (< {MIN_NEW_HEALTHY}): not worth a 23 GB download, so the extra data is not used.")
+        z = np.load(out, allow_pickle=True); return z["X"], z["ids"].astype(str), z["pidx"], json.loads(str(z["stats"]))
+    src = os.environ.get("EPICLOCK_MG_SOURCE")
+    if src is None:
+        src = download(MG_URL, d / "processed_type3_parquet_shuffled.tar.gz", "MethylGPT pre-training set")
+    src = Path(src)
     probes = pd.read_csv(download(MG_PROBES_URL, d / "probe_ids_type3.csv", "MethylGPT CpG list"), index_col=0).iloc[:, 0].astype(str)
     pos = pd.Index(probes).get_indexer(e.c.cpgs); pidx = np.flatnonzero(pos >= 0); pcols = pos[pidx]
-    log(f"[ingest] {len(pidx)} of the {len(e.c.cpgs)} panel CpGs are among the {len(probes)} CpGs of the MethylGPT set")
-    src = Path(source) if source else None
-    if src is None:
-        cand = d / "processed_type3_parquet_shuffled.tar.gz"; src = cand if cand.exists() else download(MG_URL, cand, "MethylGPT pre-training set (about 23 GB)")
+    log(f"[ingest] {len(pidx)} of the {len(e.c.cpgs)} panel CpGs are among the {len(probes)} CpGs of the MethylGPT set; keeping only the {len(accept)} accepted ids")
     def shards():
         if src.is_dir():
             for f in sorted(src.rglob("*.parquet")):
@@ -1056,76 +1110,105 @@ def ingest_methylgpt(e, source=None, exclude_file=None):
                 for m in tar:
                     if m.isfile() and m.name.endswith(".parquet"):
                         yield m.name, io.BytesIO(tar.extractfile(m).read())
-    Xs, ids_all, seen, st = [], [], set(), collections.Counter(); t0 = time.time()
+    Xs, ids_all, seen, st, by_tier = [], [], set(), collections.Counter(), collections.Counter(); t0 = time.time()
     try:
         for name, fobj in shards():
             try:
                 pf = pq.ParquetFile(fobj)
                 for batch in pf.iter_batches(batch_size=500, columns=["id", "data"]):
-                    ids = np.array(batch.column("id").to_pylist(), dtype=object).astype(str); n = len(ids); st["seen"] += n
-                    v = batch.column("data").flatten().to_numpy(zero_copy_only=False).reshape(n, -1)[:, pcols]
-                    isdrop = np.array([i in drop for i in ids], dtype=bool); ishealthy = np.ones(n, dtype=bool) if healthy is None else np.array([i in healthy for i in ids], dtype=bool)
-                    st["in_corpus_or_heldout"] += int(isdrop.sum()); st["not_annotated_healthy"] += int((~isdrop & ~ishealthy).sum()); ok = ishealthy & ~isdrop
-                    dup = np.array([i in seen for i in ids]); ok &= ~dup; st["duplicate_id"] += int(dup.sum())
-                    X = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8)
-                    good = ok & ((X != 255).mean(1) >= 0.5); st["too_few_cpgs"] += int((ok & ~good).sum())
-                    Xs.append(X[good]); ids_all.append(ids[good]); seen.update(ids[good].tolist())
+                    ids = np.array(batch.column("id").to_pylist(), dtype=object).astype(str); n = len(ids); st["profiles_seen"] += n
+                    for i in ids:
+                        by_tier["already in the bundle / benchmark / held-out series" if i in known_ids else tier_of.get(i, "not in the EWAS table (no health annotation)")] += 1
+                    ok = np.array([i in accept for i in ids], dtype=bool)
+                    if not ok.any():
+                        continue
+                    v = batch.column("data").flatten().to_numpy(zero_copy_only=False).reshape(n, -1)[:, pcols][ok]
+                    X = np.where(np.isfinite(v) & (v >= 0) & (v <= 1), np.rint(v * 100), 255).astype(np.uint8); good = (X != 255).mean(1) >= 0.5
+                    st["too_few_cpgs"] += int((~good).sum()); sel = ids[ok][good]; fresh = np.array([i not in seen for i in sel], dtype=bool)
+                    Xs.append(X[good][fresh]); ids_all.append(sel[fresh]); seen.update(sel[fresh].tolist())
             except Exception as ex:                     # a damaged / truncated shard: keep what was read, go on
                 log(f"[ingest] {name}: {type(ex).__name__}: {str(ex)[:80]} - skipped the rest of this shard")
-            log(f"[ingest] {name[:40]}: kept {sum(len(x) for x in Xs)} so far of {st['seen']} read ({(time.time() - t0) / 60:.0f} min)")
+            log(f"[ingest] {name[:40]}: kept {sum(len(x) for x in Xs)} so far of {st['profiles_seen']} read ({(time.time() - t0) / 60:.0f} min)")
     except (tarfile.ReadError, EOFError, OSError) as ex:
         log(f"[ingest] archive ended early ({type(ex).__name__}); using the shards read so far")
     if not Xs or not sum(len(x) for x in Xs):
-        sys.exit("[ingest] no usable profiles were found in the source.")
-    X, ids = np.concatenate(Xs), np.concatenate(ids_all)
-    np.savez_compressed(out, X=X, ids=ids, pidx=pidx, cpgs=np.array(e.c.cpgs))
-    log(f"[ingest] wrote {len(X)} extra accepted pre-training profiles to {out}. Read {st['seen']}; removed {st['in_corpus_or_heldout']} already in our corpus / benchmark / held-out series, "
-        f"{st['not_annotated_healthy']} not accepted (cancer, disease, treated, unannotated ...), {st['duplicate_id']} duplicate ids, {st['too_few_cpgs']} with too few CpGs.")
-    json.dump(dict(kept=int(len(X)), read=int(st["seen"]), **{k: int(v) for k, v in st.items()}), open(out.with_suffix(".json"), "w"), indent=1)
-    return out
+        sys.exit("[ingest] none of the accepted profiles was found in the MethylGPT set.")
+    X, ids = np.concatenate(Xs), np.concatenate(ids_all); stats = dict(st, by_tier=dict(by_tier))
+    np.savez_compressed(out, X=X, ids=ids, pidx=pidx, stats=json.dumps(stats)); log(f"[ingest] kept {len(X)} clean profiles of {st['profiles_seen']} read"); return X, ids, pidx, stats
 
 
-def attach_external(e):
-    """Append the ingested profiles to the corpus as role 'external' (label-free; never in train / validation / test)."""
-    e.sp["ext"] = np.array([], dtype=int)
-    f = e.data / f"external/methylgpt_panel_{e.a.corpus}.npz"
-    if not f.exists():
-        return 0
-    z = np.load(f, allow_pickle=False)
-    if [str(x) for x in z["cpgs"]] != list(e.c.cpgs):
-        log("[external] the ingested file was made for a different CpG panel; ignoring it"); return 0
-    ids = z["ids"].astype(str); keep = ~pd.Index(ids).isin(e.c.meta.index); ids = ids[keep]
-    X = np.full((int(keep.sum()), len(e.c.cpgs)), 255, np.uint8); X[:, z["pidx"]] = z["X"][keep]
-    meta = pd.DataFrame(index=ids, columns=list(e.c.meta.columns)); meta["DatasetID"] = "EXT-methylgpt"; meta["role"] = "external"; meta["Age"] = np.nan
-    n0 = len(e.c.X); e.c.X = np.concatenate([e.c.X, X]); e.c.meta = pd.concat([e.c.meta, meta]); e.age = e.c.meta.Age.to_numpy(float)
-    e.sp["ext"] = np.arange(n0, n0 + len(X)); log(f"[external] {len(X)} extra label-free profiles available for pre-training (3,709 of the 9,098 panel CpGs measured in each)"); return len(X)
+def build_clean_corpus(e):
+    """The one training corpus: ComputAge training studies + bundle GEO samples + MethylGPT profiles, each kept only if every check passes; ComputAge benchmark rows (test) untouched."""
+    c = load_corpus(e.data); e.c = c; m = c.meta; ids = m.index.astype(str); role = m.role.to_numpy(); proj = m.DatasetID.astype(str).to_numpy(); P = len(c.cpgs)
+    H = ewas_table(e); tier_of = dict(zip(H["sample id"], H["tier"])); bench = np.flatnonzero(role == "benchmark")
+    bench_proj, bench_ids, held = set(proj[bench]), set(ids[bench]), heldout_ids(e.data)
+    cand = H[H.tier.isin(GOOD_TIERS)]; projects = sorted(set(proj[np.isin(role, ["train", "geo", "unlabeled"])]) | set(cand["project id"].astype(str)))
+    kinds, themed = geo_review(e, projects)
+    # ---- exact duplicates of benchmark samples inside the bundle (cached)
+    bundle_rows = np.flatnonzero(np.isin(role, ["train", "geo", "unlabeled"])); dupf = e.data / "external/bundle_benchmark_duplicates.npz"
+    if dupf.exists() and len(np.load(dupf)["rows"]) == len(bundle_rows):
+        dup = np.load(dupf)["dup"]
+    else:
+        log(f"[audit] comparing {len(bundle_rows)} bundle profiles with the {len(bench)} benchmark profiles to find re-deposited copies"); dup = masked_nn(c.X[bundle_rows], c.X[bench], 2500) < DUP_RMSD; np.savez(dupf, rows=bundle_rows, dup=dup)
+    # ---- decision per bundle row (the first failing check is the recorded reason)
+    reason = np.full(len(m), "", object); dupfull = np.zeros(len(m), bool); dupfull[bundle_rows] = dup
+    for i in bundle_rows:
+        r = role[i]; sid = ids[i]; tier = tier_of.get(sid, "not in the EWAS table"); kind = kinds.get(sid); by_design = r == "train"; why = ""
+        if tier == "CANCER": why = "EWAS: cancer / tumour / adjacent normal"
+        elif tier in ("non-cancer disease", "cell culture / line"): why = "EWAS: non-cancer disease or cell culture"
+        elif not by_design and tier == "control carrying a condition field": why = "EWAS: control that carries a condition field"
+        elif not by_design and tier not in GOOD_TIERS: why = "no health annotation (not in the EWAS table)"
+        elif kind is None: why = "GEO description unavailable (cannot cross-check)"
+        elif kind == "cancer" or (kind == "disease" and not by_design): why = f"GEO description names {kind}"
+        elif themed.get(proj[i], False): why = "cancer-themed study"
+        elif proj[i] in bench_proj: why = "same study as a benchmark dataset"
+        elif dupfull[i]: why = "exact copy of a benchmark sample"
+        reason[i] = why
+    keep_bundle = np.array([r in ("train", "geo", "unlabeled") and reason[i] == "" for i, r in enumerate(role)])
+    # ---- candidates from the MethylGPT set
+    known = set(ids) | bench_ids | held; cand_ok = cand[~cand["sample id"].isin(known)].copy()
+    cand_ok["kind"] = cand_ok["sample id"].map(kinds); cand_ok["themed"] = cand_ok["project id"].astype(str).map(themed).fillna(False); cand_ok["bench"] = cand_ok["project id"].astype(str).isin(bench_proj)
+    cand_ok = cand_ok[(cand_ok.kind == "") & ~cand_ok.themed.astype(bool) & ~cand_ok.bench & cand_ok["project id"].astype(str).str.startswith("GSE")]
+    accept = set(cand_ok["sample id"]); Xe, ide, pidx, mg_stats = ingest_methylgpt(e, accept, tier_of, known)
+    Xfull = np.full((len(Xe), P), 255, np.uint8); Xfull[:, pidx] = Xe
+    dup_e = masked_nn(Xfull, c.X[bench], 1500) < DUP_RMSD; log(f"[audit] {int(dup_e.sum())} of {len(Xe)} extra profiles are copies of benchmark samples and are dropped"); Xfull, ide = Xfull[~dup_e], ide[~dup_e]
+    Hi = H.set_index("sample id").loc[ide]; age = Hi["age (year)"].where(Hi["age (year)"].between(0, 110)).to_numpy(float)
+    sex = Hi["sex"].astype(str).str.upper().str[0]
+    meta_e = pd.DataFrame({"DatasetID": Hi["project id"].astype(str).to_numpy(), "Gender": sex.where(sex.isin(["M", "F"])).to_numpy(),
+                           "Age": age, "Condition": np.where(Hi.tier.to_numpy() == "HIV cohort (no cancer)", "HIV", "HC"), "Class": np.where(Hi.tier.to_numpy() == "HIV cohort (no cancer)", "ISD", "HC"),
+                           "Tissue": Hi["tissue"].to_numpy(), "Platform": Hi["platform"].to_numpy(), "role": np.where(np.isfinite(age), "geo", "unlabeled")}, index=ide)
+    keep = keep_bundle | (role == "benchmark")
+    c.X = np.concatenate([c.X[keep], Xfull]); c.meta = pd.concat([m[keep], meta_e.reindex(columns=m.columns)])
+    e.audit = dict(reason=pd.DataFrame({"role": role, "reason": reason, "tier": [tier_of.get(s, "not in the EWAS table") for s in ids]}, index=ids), H=H, mg=mg_stats, n_ext=int(len(ide)), n_ext_age=int(np.isfinite(age).sum()),
+                   cand=len(cand), cand_ok=len(cand_ok), role_final=c.meta.role.value_counts().to_dict())
+    write_audit(e, c); return c
 
 
-def ensure_external(e):
-    if len(e.sp.get("ext", [])):
-        return True
-    if e.a.external == "none":
-        return False
-    try:
-        ingest_methylgpt(e); attach_external(e)
-    except SystemExit as ex:
-        log(f"[external] {ex}"); return False
-    except Exception as ex:
-        log(f"[external] could not get the extra data ({type(ex).__name__}: {str(ex)[:120]}); skipping arms that need it. Fix and run `python epiclock.py ingest`."); return False
-    return len(e.sp["ext"]) > 0
+def write_audit(e, c):
+    A = e.audit; H = A["H"]; R = A["reason"]; L = ["# Data audit - what the training corpus is made of", "",
+         "Training uses ONLY profiles that pass every check. Everything else is counted below with its reason and is not used. The test set (ComputAge benchmark healthy controls) is never trained on.", "",
+         "## 1. The universe: EWAS Data Hub curated metadata (the master list behind the MethylGPT set), by disease state", "", "| disease-state tier | samples | with an age |", "|---|---|---|"]
+    for t, n in H.tier.value_counts().items():
+        L.append(f"| {t} | {n} | {int(H[H.tier == t]['age (year)'].between(0, 110).sum())} |")
+    L += ["", "Tier rules: 'clean healthy' = curated control with none of ~150 condition-bearing fields filled and not a cell culture; 'HIV cohort' = HIV-only cohorts (accepted); 'CANCER' = tumour, adjacent normal, cancer projects or any cancer word; "
+          "'control carrying a condition field' = labelled control but with a treatment / disease / stage / ... field filled in (not used).", "", "## 2. The bundle (45,280 profiles): attrition by source", ""]
+    for role, nm in (("train", "ComputAge Bench training studies"), ("geo", "bundle: labelled GEO"), ("unlabeled", "bundle: unlabelled GEO")):
+        r = R[R.role == role]; L += [f"**{nm}**: {len(r)} profiles", ""] + [f"- removed - {k}: {v}" for k, v in r.reason[r.reason != ""].value_counts().items()] + [f"- **kept: {int((r.reason == '').sum())}**", ""]
+    mg = A["mg"]; L += ["## 3. The MethylGPT / EWAS Data Hub / ClockBase set (%d profiles read), by what we know about each" % mg["profiles_seen"], "", "| status | profiles |", "|---|---|"]
+    L += [f"| {k} | {v} |" for k, v in sorted(mg["by_tier"].items(), key=lambda x: -x[1])]
+    L += ["", f"Candidates passing the EWAS tier, the GEO-description check, the cancer-themed-study check and the benchmark-study check: {A['cand_ok']} ids; found in the set: {A['n_ext']} kept after removing copies of benchmark samples ({A['n_ext_age']} with an age).", "",
+          "## 4. The training corpus", "", f"- labelled (have an age; fine-tuning and ridge/elastic-net baselines): {int(((c.meta.role.isin(['train', 'geo'])) & c.meta.Age.notna()).sum())}",
+          f"- label-free only (pre-training): {int((c.meta.role == 'unlabeled').sum())}", f"- test (ComputAge benchmark rows, never trained on): {int((c.meta.role == 'benchmark').sum())}",
+          f"- profiles that are partly measured (3,709 of the 9,098 panel CpGs): {A['n_ext']}", "",
+          "Not used, by design: cancer; non-cancer disease; controls carrying a condition field; cell cultures; anything without a health annotation; anything whose GEO description names a disease; cancer-themed studies; copies of test samples.", ""]
+    txt = "\n".join(L); (e.out / "data_audit.md").write_text(txt); R.to_csv(e.out / "provenance_bundle.csv.gz"); e.audit_text = txt; log("[audit] wrote data_audit.md")
 
 
-def ssl_pool(e, use_ext):
-    """Rows and sampling weights for pre-training.  With extra data the external profiles get `ext_share` of the draws."""
-    base = e.sp["ssl"]; w = sample_weights(e.c.meta, base, 0.5, 0.0)
-    if not use_ext or not len(e.sp.get("ext", [])):
-        return base, w
-    ext = e.sp["ext"]; s = e.a.ext_share
-    return np.concatenate([base, ext]), np.concatenate([w * (1 - s), np.full(len(ext), s / len(ext))])
-
-
-def cmd_ingest(a):
-    e = make_env(a); ingest_methylgpt(e, a.source, a.exclude); attach_external(e)
+def dedupe_validation(e):
+    """Validation must not contain copies of training profiles (a copy would make early stopping look better than it is)."""
+    va, tr = e.sp["val"], e.sp["train"]; drop = masked_nn(e.c.X[va], e.c.X[tr], 1500) < DUP_RMSD
+    if drop.any():
+        log(f"[audit] {int(drop.sum())} validation profiles are copies of training profiles and are removed from validation"); e.sp["val"] = va[~drop]
 
 
 def make_env(a):
@@ -1137,14 +1220,8 @@ def make_env(a):
     except AttributeError:
         pass
     e.dev = get_device(a.device); e.mem = total_mem_gb(); e.limit = a.memory_fraction * e.mem; e.selftested = False
-    e.data = find_data(a.data); e.c = load_corpus(e.data); e.clean = a.corpus != "all"; e.screen = None
-    if e.clean:
-        screen_corpus(e)
-    else:
-        log("[corpus] --corpus all: the bundle's GEO samples are used WITHOUT a disease screen (about a third of the ones EWAS Data Hub knows are disease tissue, some are cancer)")
-    e.sp = make_splits(e.c, a.seed); check_corpus_stamp(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
+    e.data = find_data(a.data); e.c = build_clean_corpus(e); e.sp = make_splits(e.c, a.seed); dedupe_validation(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
     e.ctx = genome_context(e.data, e.c.cpgs); e.age = e.c.meta.Age.to_numpy(float); e.rng = np.random.default_rng(a.seed); torch.manual_seed(a.seed)
-    attach_external(e)
     sp = e.sp
     log(f"EpiClock study | device {e.dev} | machine memory {e.mem:.0f} GB (training budget {e.limit:.0f} GB) | data {e.data}\n"
         f"corpus {len(e.c.X)} samples x {len(e.c.cpgs)} CpGs | train {len(sp['train'])} | val {len(sp['val'])} ({len(sp['val_series'])} series) | "
@@ -1179,14 +1256,8 @@ def arm_dir(e, ar):
     return e.out if (ar["kind"] == "pre" and ar["seed"] == 0 and legacy_preset(e) == ar["size"]) else e.out / "arms" / ar["name"]
 
 
-def use_ext(e):
-    return e.a.external == "all" and len(e.sp.get("ext", [])) > 0
-
-
-def pre_dir(e, size, ctx, ext=False):
-    if ctx and not ext and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists():
-        return e.out
-    return e.out / "pre" / (size + ("" if ctx else "-noctx") + ("-ext" if ext else ""))
+def pre_dir(e, size, ctx):
+    return e.out if (ctx and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists()) else e.out / "pre" / (size if ctx else size + "-noctx")
 
 
 def mark_done_from_old_files(d):
@@ -1211,11 +1282,11 @@ def make_cfg(e, ar):
 
 def ensure_pretrained(e, size, ctx):
     """Masked-CpG reconstruction on the label-free pool (shared by every arm of the same size and context setting)."""
-    ext = use_ext(e); d = pre_dir(e, size, ctx, ext); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
+    d = pre_dir(e, size, ctx); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
     if (d / "pretrain_done.json").exists():
         return d / "pretrain_best.pt"
     P = preset(e, size); K = P["K"]; cfg = make_cfg(e, dict(size=size, context=ctx, linear=True))
-    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}{' + extra MethylGPT profiles' if ext else ''}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
+    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
     model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
     sanity_check_device(e, model, K)
     budget = Budget(P["batch"], e.dev, e.limit); rng = np.random.default_rng(e.a.seed + 3)
@@ -1223,11 +1294,11 @@ def ensure_pretrained(e, size, ctx):
         sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
         return m.reconstruct(idx, ib, valid, is_mask).mean()
     model.train(); budget.fit(model, trial)
-    pool, w_ssl = ssl_pool(e, ext)
+    w_ssl = sample_weights(e.c.meta, e.sp["ssl"], 0.5, 0.0)
     vrows = e.c.X[e.sp["val"][np.random.RandomState(5).choice(len(e.sp["val"]), min(1500, len(e.sp["val"])), replace=False)]]
     base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - e.mean)))
     def ssl_step(m, n):
-        rows = e.c.X[rng.choice(pool, n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
+        rows = e.c.X[rng.choice(e.sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
         pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
         err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
     def ssl_eval(m):
@@ -1460,11 +1531,9 @@ def build_report(e):
         sz = parse_arm(n)["size"]; sc.append(dict(model=SIZE_NAMES[sz], arm=n, parameters=f"{param_count(e, sz):,}", MedAE=np.median(A[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1]))
     scaling = pd.DataFrame(sc)
     off = official_scores(e, P)
-    corp = (f"Training corpus (--corpus {e.a.corpus}): SCREENED with EWAS Data Hub's curated metadata - GEO samples kept only if accepted (labelled GEO {e.screen['before']['geo']} -> {e.screen['after']['geo']}, unlabelled {e.screen['before']['unlabeled']} -> {e.screen['after']['unlabeled']}); {len(e.sp['train'])} labelled training samples, {len(e.sp['ssl'])} pre-training samples." if e.screen else "Training corpus: the bundle WITHOUT a disease screen (--corpus all).")
-    ext_n = len(e.sp.get("ext", []))
-    extra = (f"Extra label-free pre-training data: {ext_n} MethylGPT / EWAS Data Hub profiles ({'UNSCREENED: cancer and other disease profiles are included' if e.a.corpus == 'all' else 'screened with --corpus ' + e.a.corpus}) "
-             f"in every pre-trained model of this folder (a legacy xl-pre from the first runs was pre-trained without them)." if ext_n and e.a.external == "all" else "Extra pre-training data: none.")
-    lines = [f"# EpiClock study report", "", corp, "", extra, "", f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
+    corp = (f"Training corpus: {int(((e.c.meta.role.isin(['train', 'geo'])) & e.c.meta.Age.notna()).sum())} labelled and {int((e.c.meta.role == 'unlabeled').sum())} label-free profiles, ALL of them passing the checks "
+            f"in the data audit at the end of this report (no cancer, no disease, no copies of test samples, nothing without a health annotation).")
+    lines = [f"# EpiClock study report", "", corp, "", f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
              f"{len(sib)} studies adjacent to training series). None of these studies was used for training, model selection or early stopping.", ""]
     best = [n for n in main.index if main.loc[n, "ours"] and "[linear part only]" not in n and n != "linear-tuned"]
     if best:
@@ -1515,7 +1584,7 @@ def build_report(e):
               "- EpiClock and ridge/elastic net were trained on this data mix and the published clocks were not: ridge is the fair opponent, the published clocks give context.",
               "- Bootstrap intervals describe test-set sampling uncertainty. Training-run noise is shown by the -s1/-s2 seed arms.",
               "- Chronological-age accuracy is not the same as usefulness as a biomarker: see the disease age-acceleration score above and use `predict --meta ...` on your own cohorts."]
-    (e.out / "report.md").write_text("\n".join(lines) + "\n"); main.to_csv(e.out / "report_main.csv"); pairs.to_csv(e.out / "report_pairs.csv", index=False)
+    lines += ["## Data audit", "", e.audit_text]; (e.out / "report.md").write_text("\n".join(lines) + "\n"); main.to_csv(e.out / "report_main.csv"); pairs.to_csv(e.out / "report_pairs.csv", index=False)
     rep = dict(main={n: dict(MedAE=float(main.loc[n, "MedAE"]), CI_studies=main.loc[n, "CI_studies"], MAE=float(main.loc[n, "MAE"]), r=float(main.loc[n, "r"])) for n in main.index},
                official=None if off is None else off.round(2).to_dict("index"), n_test=int(len(hc)), n_studies=int(meta.DatasetID.nunique()))
     json.dump(rep, open(e.out / "report.json", "w"), indent=1)
@@ -1650,10 +1719,7 @@ The age output is a linear clock over the whole CpG row (initialised from ridge)
 def default_queue(e):
     if e.a.smoke:
         return list(SMOKE_QUEUE)
-    q = list(DEFAULT_QUEUE)
-    if legacy_preset(e) != "xl":                       # no finished xl model on this machine: train it last, not first
-        q.remove("xl-pre"); q.append("xl-pre")
-    return q
+    return list(DEFAULT_QUEUE)
 
 
 def finish(e):
@@ -1671,8 +1737,6 @@ def cmd_study(a):
     e = make_env(a); queue = [x for x in a.arms.split(",") if x] or default_queue(e)
     log(f"queue: {queue}. Results are written after every model; Ctrl-C or `touch {e.out / 'STOP'}` pauses, the same command resumes. `touch {e.out / 'NEXT'}` ends the current training stage early.")
     try:
-        if a.external == "all":
-            ensure_external(e)                              # downloads (once, resumable) and ingests the extra pre-training profiles before anything is trained
         get_comparators(e)
         for name in queue:
             log(f"##### {name}")
@@ -1730,31 +1794,19 @@ def cmd_probe(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter); sub = ap.add_subparsers(dest="cmd", required=True)
-    def common(p):
-        p.add_argument("--data", default=None); p.add_argument("--out", default=None, help="default: runs/epiclock_<corpus> (runs/epiclock for --corpus all)");
-        p.add_argument("--corpus", choices=["all", "noncancer", "clean"], default="all", help="all (default): everything, no screening; noncancer: drop cancer samples; clean: only healthy or HIV-cohort samples");
-        p.add_argument("--external", choices=["all", "none"], default="all", help="all (default): add the MethylGPT / EWAS Data Hub profiles to every pre-trained model; none: do not use them"); p.add_argument("--ext-share", type=float, default=0.5, help="share of pre-training draws taken from the extra profiles"); p.add_argument("--device", default="auto"); p.add_argument("--threads", type=int, default=0)
-        p.add_argument("--memory-fraction", type=float, default=CONFIG["memory_fraction"]); p.add_argument("--seed", type=int, default=0)
-        p.add_argument("--eval-every", type=int, default=CONFIG["eval_every"]); p.add_argument("--patience", type=int, default=CONFIG["patience"])
-        p.add_argument("--ssl-steps", type=int, default=10**9); p.add_argument("--ft-steps", type=int, default=10**9)
-        p.add_argument("--val-draws", type=int, default=CONFIG["val_draws"]); p.add_argument("--test-draws", type=int, default=CONFIG["test_draws"]); p.add_argument("--boot", type=int, default=CONFIG["boot"])
-        p.add_argument("--no-selftest", action="store_true"); p.add_argument("--smoke", action="store_true", help="30-step functional check of every code path (tiny models)")
-        p.add_argument("--arms", default="", help="comma list overriding the default queue, e.g. base-pre,base-scratch")
-    common(sub.add_parser("study")); common(sub.add_parser("report")); common(sub.add_parser("probe"))
-    ig = sub.add_parser("ingest", help="download (about 23 GB, resumable) and ingest the MethylGPT / EWAS Data Hub profiles"); common(ig)
-    ig.add_argument("--source", default=None, help="the downloaded .tar.gz or an unpacked folder of parquet files (default: download it)"); ig.add_argument("--exclude", default=None, help="text file of sample ids to leave out")
-    p = sub.add_parser("predict"); p.add_argument("--model", required=True); p.add_argument("--beta", required=True); p.add_argument("--out", default="epigenetic_ages.csv")
-    p.add_argument("--device", default="auto"); p.add_argument("--draws", type=int, default=16); p.add_argument("--meta", default=None, help="csv/tsv indexed by sample id")
-    p.add_argument("--age-col", default="age"); p.add_argument("--group-col", default=None); p.add_argument("--control", default=None, help="value of --group-col that marks the controls")
-    if len(sys.argv) == 1 or (sys.argv[1].startswith("-") and sys.argv[1] not in ("-h", "--help")):
-        sys.argv.insert(1, "study")                                         # `python epiclock.py` alone runs the whole study with everything automatic
-    a = ap.parse_args()
-    if a.cmd in ("study", "report", "probe", "ingest") and a.out is None:
-        a.out = CONFIG["out_dir"] if a.corpus == "all" else f"runs/epiclock_{a.corpus}"
-    if a.cmd != "predict" and a.smoke:
+    import types
+    if len(sys.argv) > 1 and sys.argv[1] == "predict":
+        ap = argparse.ArgumentParser(); ap.add_argument("cmd"); ap.add_argument("--model", required=True); ap.add_argument("--beta", required=True); ap.add_argument("--out", default="epigenetic_ages.csv")
+        ap.add_argument("--device", default="auto"); ap.add_argument("--draws", type=int, default=16); ap.add_argument("--meta", default=None, help="csv/tsv indexed by sample id")
+        ap.add_argument("--age-col", default="age"); ap.add_argument("--group-col", default=None); ap.add_argument("--control", default=None, help="value of --group-col that marks the controls")
+        cmd_predict(ap.parse_args()); return
+    smoke = os.environ.get("EPICLOCK_SMOKE") == "1"                          # developer switch: 30-step functional check of every code path (tiny models)
+    a = types.SimpleNamespace(data=os.environ.get("EPICLOCK_DATA"), out=os.environ.get("EPICLOCK_OUT", "runs/epiclock_clean"), device=os.environ.get("EPICLOCK_DEVICE", "auto"), threads=0,
+                              memory_fraction=CONFIG["memory_fraction"], seed=0, eval_every=CONFIG["eval_every"], patience=CONFIG["patience"], ssl_steps=10**9, ft_steps=10**9,
+                              val_draws=CONFIG["val_draws"], test_draws=CONFIG["test_draws"], boot=CONFIG["boot"], no_selftest=False, smoke=smoke, arms="")
+    if smoke:
         a.ssl_steps, a.ft_steps, a.eval_every, a.test_draws, a.val_draws, a.boot, a.no_selftest = 30, 30, 15, 2, 1, 200, True
-    {"study": cmd_study, "report": cmd_report, "probe": cmd_probe, "predict": cmd_predict, "ingest": cmd_ingest}[a.cmd](a)
+    cmd_study(a)
 
 
 if __name__ == "__main__":
