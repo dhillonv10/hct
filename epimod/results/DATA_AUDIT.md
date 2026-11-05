@@ -64,6 +64,7 @@ The 44,200 EWAS-clean profiles shrink to about 36,700 after the GEO-description,
 
 1. EWAS tier is clean healthy or HIV cohort (ComputAge training studies are healthy controls by curation: EWAS cancer/disease/culture still removes them).
 2. GEO's own sample description (title, source, characteristics) does not name a disease or cancer (independent second opinion; conservative, some false positives). Disease words are not applied to ComputAge's curated controls, whose descriptions name the disease of the study they were drawn from.
+2b. GEO's description does not name cell culture / in-vitro material (passage, iPSC, cultured, transfected, day-N time courses). Added after a spot check found an in-vitro Treg time course among the survivors; removes 67 + 57 bundle rows and about 1.7% of the MethylGPT survivors (a few false positives such as "NotCultured").
 3. The study is not cancer-themed (title / summary / design). Found necessary: EWAS "clean" included cancer patients, e.g. EPIC-Italy cancer cases (GSE51032), esophageal cancer saliva (GSE232332), pancreatic cancer (GSE74071), Wilms tumour normals (GSE59157), osteosarcoma (GSE193000).
 4. The study is not one of the benchmark datasets.
 5. The profile is not a re-deposited copy of a benchmark sample (found by comparing methylation profiles, RMS difference < 0.04 over co-measured CpGs; the distribution has no values between 0.005 and 0.04 for the bundle, i.e. a clean gap).
@@ -94,3 +95,9 @@ For comparison, the unscreened bundle had 16,849 labelled training samples and a
 - About 16% of MethylGPT profiles and 64% of the bundle's unlabelled GEO rows have no health annotation; by the rule "no annotation, no data" they are not used.
 - About 4% of the 2,830 benchmark healthy controls that EWAS knows are marked "disease tissue" there; the benchmark's own definition is kept for the test set.
 - Test-set exposure of the bundle was audited only against the ComputAge benchmark; other public cohorts that are not in either source are not covered.
+
+## 8. How clean is "clean"? (honest status)
+
+- Not proven clean, only clean as far as four independent checks can see. Roughly: the EWAS curation and the GEO-description check disagree on about 5% of EWAS-clean samples; the description check catches about 74% of EWAS-labelled disease and 93% of EWAS-labelled cancer, so a residual disease rate of roughly 1-2% among survivors is plausible (an estimate under strong assumptions, not a measurement).
+- Spot check, 40 random survivors from the MethylGPT part, read by eye: no disease or cancer sample found (explicit controls, population cohorts, newborns and children, buccal swabs). What did slip through is not disease but is not "healthy adult blood" either: one in-vitro Treg time course (now caught by check 2b), smoker / snuff-user exposure groups, preterm-birth and assisted-reproduction newborns, fetal brain, sperm, skin, purified cell types. 0 of 40 only bounds the contamination rate at about 7% (95%).
+- Non-cancer disease as an extra category (ridge, bundle data only, +1,913 labelled rows = +20%): healthy-control test error changed by +0.05 / -0.12 / -0.29 years at alpha 3,000 / 10,000 / 30,000, all with intervals that include 0; disease-signal AUC (age acceleration, disease vs same-study controls, 31 units) moved from 0.568 to 0.559. Neutral for accuracy, slightly lower disease signal. In the full universe it would add about 12,000 labelled and 8,000 label-free profiles.

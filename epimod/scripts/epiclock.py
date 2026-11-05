@@ -865,6 +865,7 @@ GEO_DISEASE = re.compile(r"\b(disease|disorder|syndrome|patients?|cases?|diagnos
                          r"atheroscler\w*|osteoporo\w*|endometriosis|pre-?eclampsia|obes\w*|cystic|dystroph\w*|palsy|ataxia|huntington\w*|tubercul\w*|malaria|leprosy|progeria|trisomy|tauopath\w*|"
                          r"neurodegener\w*|lesions?|inflammat\w*|psp|ad|ms|ra|sle|ptsd|mdd|bpd|adenoma|polyp\w*)\b", re.I)
 GEO_HEALTHY = re.compile(r"\b(control\w*|healthy|normal|non[- ]?(case|patient|disease|demented|affected|cancer|tumou?r)\w*|unaffected|no|none|negative|wild[- ]?type|free|never|absent|without|not|reference|neg)\b|n/a", re.I)
+GEO_CULTURE = re.compile(r"\b(cultured|in[- ]vitro|passage|cell[- ]?lines?|ipsc\w*|differentiat\w*|organoid\w*|xenograft\w*|reprogram\w*|stimulat\w*|transfect\w*|knock-?(down|out)|crispr|embryoid|hesc|culture\w*|day[ _-]?\d+|d\d{1,2}_|\w+_day\d+)\b", re.I)
 GEO_NEG_VALUES = {"0", "n", "no", "na", "n/a", "nan", "none", "false", "-", "unknown", "exclude", "nd", "not applicable", "missing", "."}
 CANCER_THEMED = re.compile(r"cancer\w*|carcinoma\w*|tumou?rs?|leuk[a]?emi\w*|lymphoma\w*|myeloma\w*|sarcoma\w*|blastoma\w*|neoplas\w*|malignan\w*|metasta\w*|oncolog\w*|\bMDS\b", re.I)
 
@@ -981,6 +982,8 @@ def geo_string_kind(s):
         return "cancer"
     if GEO_DISEASE.search(s) and not GEO_HEALTHY.search(s) and not (EWAS_HIV.search(s) and not EWAS_CANCER.search(s)):
         return "disease"
+    if GEO_CULTURE.search(s):                           # cell culture / in-vitro / time-course material is not a physiological human sample
+        return "culture"
     return ""
 
 
@@ -1012,7 +1015,7 @@ def geo_review(e, projects):
             continue
         d = json.load(open(f)); themed[p] = bool(CANCER_THEMED.search(d["series"]))
         for gsm, strs in d["samples"].items():
-            ks = [geo_string_kind(s) for s in strs]; k = "cancer" if "cancer" in ks else "disease" if "disease" in ks else ""
+            ks = [geo_string_kind(s) for s in strs]; k = "cancer" if "cancer" in ks else "disease" if "disease" in ks else "culture" if "culture" in ks else ""
             kinds[gsm] = k if (k or gsm not in kinds) else kinds[gsm]
     return kinds, themed
 
@@ -1159,7 +1162,7 @@ def build_clean_corpus(e):
         elif not by_design and tier == "control carrying a condition field": why = "EWAS: control that carries a condition field"
         elif not by_design and tier not in GOOD_TIERS: why = "no health annotation (not in the EWAS table)"
         elif kind is None: why = "GEO description unavailable (cannot cross-check)"
-        elif kind == "cancer" or (kind == "disease" and not by_design): why = f"GEO description names {kind}"
+        elif kind in ("cancer", "culture") or (kind == "disease" and not by_design): why = "GEO description names cell culture / in-vitro material" if kind == "culture" else f"GEO description names {kind}"
         elif themed.get(proj[i], False): why = "cancer-themed study"
         elif proj[i] in bench_proj: why = "same study as a benchmark dataset"
         elif dupfull[i]: why = "exact copy of a benchmark sample"
