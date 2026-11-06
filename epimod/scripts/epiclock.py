@@ -1224,6 +1224,26 @@ def write_audit(e, c):
     txt = "\n".join(L); (e.out / "data_audit.md").write_text(txt); R.to_csv(e.out / "provenance_bundle.csv.gz"); e.audit_text = txt; log("[audit] wrote data_audit.md")
 
 
+def check_corpus_stamp(e):
+    """An output folder belongs to ONE training corpus.  A folder that holds results but no matching stamp (made by an earlier version of this script, or from other data) is refused:
+    resuming in it would silently mix models and caches trained on different - possibly contaminated - data."""
+    import hashlib
+    ids = e.c.meta.index.astype(str).to_numpy(); h = hashlib.sha256()
+    for k in ("train", "val", "ssl", "test", "test_all"):
+        h.update(k.encode()); h.update("\n".join(sorted(ids[e.sp[k]])).encode())
+    h.update(b"not-clean-extra"); h.update("\n".join(sorted(ids[e.sp_dis["train"]])).encode())
+    cur = dict(corpus_sha=h.hexdigest()[:16], labelled_train=int(len(e.sp["train"])), pretrain_pool=int(len(e.sp["ssl"]))); f = e.out / "corpus.json"
+    if f.exists():
+        old = json.load(open(f))
+        if old.get("corpus_sha") != cur["corpus_sha"]:
+            sys.exit(f"{e.out} holds results made with a different training corpus ({old}) than this run ({cur}). Move that folder away (do not delete it blindly) or choose another one.")
+    else:
+        stale = [n for n in ("arms", "pre", "ridge.npz", "enet.npz", "comparators.npz", "model.pt", "results.json", "report.md", "pretrain_best.pt", "finetune_best.pt") if (e.out / n).exists()]
+        if stale:
+            sys.exit(f"{e.out} already contains results ({', '.join(stale)}) from an earlier version of this script, trained on data that was not audited. Move the folder away (e.g. `mv {e.out} {e.out}_OLD`) and run again.")
+        json.dump(cur, open(f, "w"))
+
+
 def make_dis_splits(e):
     """The NOT-CLEAN model also sees non-cancer disease profiles (never from a validation study, never copies of validation profiles); validation and test stay the clean ones."""
     m = e.c.meta; role = m.role.to_numpy(); proj = m.DatasetID.astype(str).to_numpy(); ok = ~np.isin(proj, list(e.sp["val_series"]))
@@ -1253,7 +1273,7 @@ def make_env(a):
     except AttributeError:
         pass
     e.dev = get_device(a.device); e.mem = total_mem_gb(); e.limit = a.memory_fraction * e.mem; e.selftested = False
-    e.data = find_data(a.data); e.c = build_clean_corpus(e); e.sp = make_splits(e.c, a.seed); dedupe_validation(e); make_dis_splits(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
+    e.data = find_data(a.data); e.c = build_clean_corpus(e); e.sp = make_splits(e.c, a.seed); dedupe_validation(e); make_dis_splits(e); check_corpus_stamp(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
     e.ctx = genome_context(e.data, e.c.cpgs); e.age = e.c.meta.Age.to_numpy(float); e.rng = np.random.default_rng(a.seed); torch.manual_seed(a.seed)
     sp = e.sp
     log(f"EpiClock study | device {e.dev} | machine memory {e.mem:.0f} GB (training budget {e.limit:.0f} GB) | data {e.data}\n"
