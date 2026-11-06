@@ -12,7 +12,9 @@ What goes in (data_audit.md and the end of report.md give exact counts and the r
   ComputAge Bench training studies are healthy controls by curation and are checked the same way.  The test set (ComputAge Bench healthy controls) is never trained on.
 
 What it trains: for each size (T/S/B/L/XL) the same network with and without masked-CpG pre-training, so the report shows what pre-training is worth; a base-size model without the genome-context
-inputs (to test whether the network discovers CpG islands / regulatory structure from methylation alone); a linear-only control; an ensemble.
+inputs (to test whether the network discovers CpG islands / regulatory structure from methylation alone); a linear-only control; an ensemble; and ONE deliberately
+NOT-CLEAN base-size model (base-dis: the clean data plus non-cancer disease profiles, still no cancer) that exists only to measure what such data does - it is marked NOT CLEAN everywhere
+and is never part of the family.
 How it is judged: ridge and elastic net on the same data, Horvath / Hannum / Lin (computage) and more published clocks (biolearn), the ComputAge Bench score, paired bootstrap error bars over
 samples and over whole studies, probes of what the CpG embeddings know about islands / chromosome / regulatory class, the deviation score.
 
@@ -584,11 +586,11 @@ def ensure_pkg(mod, pip_args, why):
     return True
 
 
-def get_ridge(e):
-    f = e.out / "ridge.npz"
+def get_ridge(e, variant=""):
+    f = e.out / ("ridge_dis.npz" if variant == "dis" else "ridge.npz")
     if f.exists():
         z = np.load(f); return dict(w=z["w"], b=float(z["b"]), alpha=float(z["alpha"]), val_medae=float(z["val_medae"]))
-    rg = ridge_fit(e.c, e.sp, e.mean, e.std, log); np.savez(f, **rg); return rg
+    rg = ridge_fit(e.c, e.sp_dis if variant == "dis" else e.sp, e.mean, e.std, log); np.savez(f, **rg); return rg
 
 
 def enet_predict(e, X_rows):
@@ -830,9 +832,10 @@ SIZE_NAMES = {"tiny": "EpiClock-T", "small": "EpiClock-S", "base": "EpiClock-B",
 KINDS = {"pre": "pre-trained transformer + linear core (the main model)", "scratch": "the same network without pre-training",
          "rob": "pre-trained, fine-tuned with a cross-study robustness penalty (variance of the per-study mean error)",
          "noctx": "pre-trained, but the genome-context inputs (island, chromosome, regulatory class, position) are removed",
-         "pure": "transformer alone: no linear core, no pre-training", "cons": "pre-trained, fine-tuned with a two-view consistency penalty"}
-DEFAULT_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "small-scratch", "small-pre", "base-scratch", "base-pre", "base-noctx", "large-scratch", "large-pre", "xl-scratch", "xl-pre"]
-SMOKE_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "tiny-noctx"]
+         "pure": "transformer alone: no linear core, no pre-training", "cons": "pre-trained, fine-tuned with a two-view consistency penalty",
+         "dis": "NOT CLEAN - pre-trained and fine-tuned on the clean data PLUS non-cancer disease samples (a deliberate contamination experiment; never part of the family)"}
+DEFAULT_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "small-scratch", "small-pre", "base-scratch", "base-pre", "base-noctx", "base-dis", "large-scratch", "large-pre", "xl-scratch", "xl-pre"]
+SMOKE_QUEUE = ["linear-tuned", "tiny-scratch", "tiny-pre", "tiny-noctx", "tiny-dis"]
 CONS_LAMBDA = 0.5
 ROB_LAMBDA = 5.0
 
@@ -1137,7 +1140,7 @@ def ingest_methylgpt(e, accept, tier_of, known_ids):
     if not Xs or not sum(len(x) for x in Xs):
         sys.exit("[ingest] none of the accepted profiles was found in the MethylGPT set.")
     X, ids = np.concatenate(Xs), np.concatenate(ids_all); stats = dict(st, by_tier=dict(by_tier))
-    np.savez_compressed(out, X=X, ids=ids, pidx=pidx, stats=json.dumps(stats)); log(f"[ingest] kept {len(X)} clean profiles of {st['profiles_seen']} read"); return X, ids, pidx, stats
+    np.savez_compressed(out, X=X, ids=ids, pidx=pidx, stats=json.dumps(stats)); log(f"[ingest] kept {len(X)} accepted profiles (clean ones, plus the non-cancer-disease ones used only by the NOT-CLEAN model) of {st['profiles_seen']} read"); return X, ids, pidx, stats
 
 
 def build_clean_corpus(e):
@@ -1145,7 +1148,8 @@ def build_clean_corpus(e):
     c = load_corpus(e.data); e.c = c; m = c.meta; ids = m.index.astype(str); role = m.role.to_numpy(); proj = m.DatasetID.astype(str).to_numpy(); P = len(c.cpgs)
     H = ewas_table(e); tier_of = dict(zip(H["sample id"], H["tier"])); bench = np.flatnonzero(role == "benchmark")
     bench_proj, bench_ids, held = set(proj[bench]), set(ids[bench]), heldout_ids(e.data)
-    cand = H[H.tier.isin(GOOD_TIERS)]; projects = sorted(set(proj[np.isin(role, ["train", "geo", "unlabeled"])]) | set(cand["project id"].astype(str)))
+    cand = H[H.tier.isin(GOOD_TIERS)]; cand_dis = H[H.tier == "non-cancer disease"]          # cand_dis feeds ONLY the one NOT-CLEAN comparison model
+    projects = sorted(set(proj[np.isin(role, ["train", "geo", "unlabeled"])]) | set(cand["project id"].astype(str)) | set(cand_dis["project id"].astype(str)))
     kinds, themed = geo_review(e, projects)
     # ---- exact duplicates of benchmark samples inside the bundle (cached)
     bundle_rows = np.flatnonzero(np.isin(role, ["train", "geo", "unlabeled"])); dupf = e.data / "external/bundle_benchmark_duplicates.npz"
@@ -1168,22 +1172,30 @@ def build_clean_corpus(e):
         elif dupfull[i]: why = "exact copy of a benchmark sample"
         reason[i] = why
     keep_bundle = np.array([r in ("train", "geo", "unlabeled") and reason[i] == "" for i, r in enumerate(role)])
+    dis_bundle = np.zeros(len(m), bool)                  # non-cancer disease rows of the bundle: still no cancer, no cell culture, no cancer-themed or benchmark study, no copy of a test sample
+    for i in bundle_rows:
+        if role[i] in ("geo", "unlabeled") and tier_of.get(ids[i]) == "non-cancer disease":
+            k = kinds.get(ids[i]); dis_bundle[i] = k in ("disease", "") and not themed.get(proj[i], False) and proj[i] not in bench_proj and not dupfull[i]
     # ---- candidates from the MethylGPT set
     known = set(ids) | bench_ids | held; cand_ok = cand[~cand["sample id"].isin(known)].copy()
     cand_ok["kind"] = cand_ok["sample id"].map(kinds); cand_ok["themed"] = cand_ok["project id"].astype(str).map(themed).fillna(False); cand_ok["bench"] = cand_ok["project id"].astype(str).isin(bench_proj)
     cand_ok = cand_ok[(cand_ok.kind == "") & ~cand_ok.themed.astype(bool) & ~cand_ok.bench & cand_ok["project id"].astype(str).str.startswith("GSE")]
-    accept = set(cand_ok["sample id"]); Xe, ide, pidx, mg_stats = ingest_methylgpt(e, accept, tier_of, known)
+    cd = cand_dis[~cand_dis["sample id"].isin(known)].copy(); cd["kind"] = cd["sample id"].map(kinds); cd["themed"] = cd["project id"].astype(str).map(themed).fillna(False); cd["bench"] = cd["project id"].astype(str).isin(bench_proj)
+    cd = cd[cd.kind.isin(["disease", ""]) & ~cd.themed.astype(bool) & ~cd.bench & cd["project id"].astype(str).str.startswith("GSE")]
+    accept, accept_dis = set(cand_ok["sample id"]), set(cd["sample id"]); Xe, ide, pidx, mg_stats = ingest_methylgpt(e, accept | accept_dis, tier_of, known)
     Xfull = np.full((len(Xe), P), 255, np.uint8); Xfull[:, pidx] = Xe
     dup_e = masked_nn(Xfull, c.X[bench], 1500) < DUP_RMSD; log(f"[audit] {int(dup_e.sum())} of {len(Xe)} extra profiles are copies of benchmark samples and are dropped"); Xfull, ide = Xfull[~dup_e], ide[~dup_e]
     Hi = H.set_index("sample id").loc[ide]; age = Hi["age (year)"].where(Hi["age (year)"].between(0, 110)).to_numpy(float)
-    sex = Hi["sex"].astype(str).str.upper().str[0]
+    sex = Hi["sex"].astype(str).str.upper().str[0]; is_dis = pd.Index(ide).isin(list(accept_dis)); hiv = Hi.tier.to_numpy() == "HIV cohort (no cancer)"
     meta_e = pd.DataFrame({"DatasetID": Hi["project id"].astype(str).to_numpy(), "Gender": sex.where(sex.isin(["M", "F"])).to_numpy(),
-                           "Age": age, "Condition": np.where(Hi.tier.to_numpy() == "HIV cohort (no cancer)", "HIV", "HC"), "Class": np.where(Hi.tier.to_numpy() == "HIV cohort (no cancer)", "ISD", "HC"),
-                           "Tissue": Hi["tissue"].to_numpy(), "Platform": Hi["platform"].to_numpy(), "role": np.where(np.isfinite(age), "geo", "unlabeled")}, index=ide)
+                           "Age": age, "Condition": np.where(is_dis, Hi["disease"].astype(str).str.lower().to_numpy(), np.where(hiv, "HIV", "HC")), "Class": np.where(is_dis, "DIS", np.where(hiv, "ISD", "HC")),
+                           "Tissue": Hi["tissue"].to_numpy(), "Platform": Hi["platform"].to_numpy(),
+                           "role": np.where(is_dis, np.where(np.isfinite(age), "geo_dis", "unlabeled_dis"), np.where(np.isfinite(age), "geo", "unlabeled"))}, index=ide)
+    md = m[dis_bundle].copy(); md["Condition"] = H.set_index("sample id").reindex(md.index.astype(str))["disease"].astype(str).str.lower().to_numpy(); md["Class"] = "DIS"; md["role"] = np.where(md.Age.notna(), "geo_dis", "unlabeled_dis")
     keep = keep_bundle | (role == "benchmark")
-    c.X = np.concatenate([c.X[keep], Xfull]); c.meta = pd.concat([m[keep], meta_e.reindex(columns=m.columns)])
+    c.X = np.concatenate([c.X[keep], c.X[dis_bundle], Xfull]); c.meta = pd.concat([m[keep], md, meta_e.reindex(columns=m.columns)])
     e.audit = dict(reason=pd.DataFrame({"role": role, "reason": reason, "tier": [tier_of.get(s, "not in the EWAS table") for s in ids]}, index=ids), H=H, mg=mg_stats, n_ext=int(len(ide)), n_ext_age=int(np.isfinite(age).sum()),
-                   cand=len(cand), cand_ok=len(cand_ok), role_final=c.meta.role.value_counts().to_dict())
+                   cand=len(cand), cand_ok=len(cand_ok), role_final=c.meta.role.value_counts().to_dict(), n_dis_bundle=int(dis_bundle.sum()), n_dis_ext=int(is_dis.sum()), cand_dis_ok=len(cd))
     write_audit(e, c); return c
 
 
@@ -1204,7 +1216,25 @@ def write_audit(e, c):
           f"- label-free only (pre-training): {int((c.meta.role == 'unlabeled').sum())}", f"- test (ComputAge benchmark rows, never trained on): {int((c.meta.role == 'benchmark').sum())}",
           f"- profiles that are partly measured (3,709 of the 9,098 panel CpGs): {A['n_ext']}", "",
           "Not used, by design: cancer; non-cancer disease; controls carrying a condition field; cell cultures; anything without a health annotation; anything whose GEO description names a disease; cancer-themed studies; copies of test samples.", ""]
+    rd = c.meta[c.meta.role.isin(["geo_dis", "unlabeled_dis"])]
+    L += ["## 5. The NOT-CLEAN extra model (exactly one model: base-dis)", "", "It is trained on the clean corpus PLUS non-cancer disease profiles, to measure what that data does to healthy-control accuracy and to disease signal. It is never part of the family, "
+          "the ensemble or the release, and every table marks it NOT CLEAN. Its disease profiles pass every check except the disease check (still no cancer, no cancer-themed study, no cell culture, no benchmark study, no copy of a test sample); "
+          "they never come from a validation study and never duplicate a validation profile.", "", f"- non-cancer disease profiles available: {len(rd)} ({int((rd.role == 'geo_dis').sum())} with an age, {int((rd.role == 'unlabeled_dis').sum())} label-free); from the bundle {A['n_dis_bundle']}, from MethylGPT {A['n_ext_dis'] if 'n_ext_dis' in A else A['n_dis_ext']}",
+          "- most frequent disease labels: " + ", ".join(f"{k} {v}" for k, v in rd.Condition.value_counts().head(12).items()), ""]
     txt = "\n".join(L); (e.out / "data_audit.md").write_text(txt); R.to_csv(e.out / "provenance_bundle.csv.gz"); e.audit_text = txt; log("[audit] wrote data_audit.md")
+
+
+def make_dis_splits(e):
+    """The NOT-CLEAN model also sees non-cancer disease profiles (never from a validation study, never copies of validation profiles); validation and test stay the clean ones."""
+    m = e.c.meta; role = m.role.to_numpy(); proj = m.DatasetID.astype(str).to_numpy(); ok = ~np.isin(proj, list(e.sp["val_series"]))
+    dl = np.flatnonzero((role == "geo_dis") & m.Age.notna().to_numpy() & ok); du = np.flatnonzero((role == "unlabeled_dis") & ok); allr = np.concatenate([dl, du])
+    if len(allr) and len(e.sp["val"]):
+        cp = masked_nn(e.c.X[allr], e.c.X[e.sp["val"]], 1500) < DUP_RMSD
+        if cp.any():
+            drop = set(allr[cp].tolist()); dl = np.array([i for i in dl if i not in drop], dtype=int); du = np.array([i for i in du if i not in drop], dtype=int)
+            log(f"[audit] {int(cp.sum())} non-cancer-disease profiles are copies of validation profiles and are not used")
+    e.sp_dis = dict(e.sp); e.sp_dis["train"] = np.concatenate([e.sp["train"], dl]); e.sp_dis["ssl"] = np.concatenate([e.sp["ssl"], dl, du])
+    log(f"[audit] NOT-CLEAN model: +{len(dl)} labelled and +{len(du)} label-free non-cancer-disease profiles on top of the clean corpus")
 
 
 def dedupe_validation(e):
@@ -1223,7 +1253,7 @@ def make_env(a):
     except AttributeError:
         pass
     e.dev = get_device(a.device); e.mem = total_mem_gb(); e.limit = a.memory_fraction * e.mem; e.selftested = False
-    e.data = find_data(a.data); e.c = build_clean_corpus(e); e.sp = make_splits(e.c, a.seed); dedupe_validation(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
+    e.data = find_data(a.data); e.c = build_clean_corpus(e); e.sp = make_splits(e.c, a.seed); dedupe_validation(e); make_dis_splits(e); e.mean, e.std = panel_stats(e.c.X, e.sp["train"])
     e.ctx = genome_context(e.data, e.c.cpgs); e.age = e.c.meta.Age.to_numpy(float); e.rng = np.random.default_rng(a.seed); torch.manual_seed(a.seed)
     sp = e.sp
     log(f"EpiClock study | device {e.dev} | machine memory {e.mem:.0f} GB (training budget {e.limit:.0f} GB) | data {e.data}\n"
@@ -1244,7 +1274,7 @@ def parse_arm(name):
     if len(p) < 2 or p[0] not in PRESETS or p[1] not in KINDS or (len(p) > 2 and not re.fullmatch(r"s\d+", p[2])):
         sys.exit(f"Unknown arm '{name}'. Arms are <size>-<kind>[-s<seed>] with size in {list(PRESETS)} and kind in {list(KINDS)}, or 'linear-tuned'.")
     k = p[1]
-    return dict(name=name, size=p[0], kind=k, seed=int(p[2][1:]) if len(p) > 2 else 0, context=k != "noctx", linear=k != "pure", pretrain=k in ("pre", "noctx", "cons", "rob"))
+    return dict(name=name, size=p[0], kind=k, seed=int(p[2][1:]) if len(p) > 2 else 0, context=k != "noctx", linear=k != "pure", pretrain=k in ("pre", "noctx", "cons", "rob", "dis"))
 
 
 def legacy_preset(e):
@@ -1259,7 +1289,9 @@ def arm_dir(e, ar):
     return e.out if (ar["kind"] == "pre" and ar["seed"] == 0 and legacy_preset(e) == ar["size"]) else e.out / "arms" / ar["name"]
 
 
-def pre_dir(e, size, ctx):
+def pre_dir(e, size, ctx, dis=False):
+    if dis:
+        return e.out / "pre" / (size + "-dis")
     return e.out if (ctx and legacy_preset(e) == size and (e.out / "pretrain_best.pt").exists()) else e.out / "pre" / (size if ctx else size + "-noctx")
 
 
@@ -1283,25 +1315,25 @@ def make_cfg(e, ar):
     P = preset(e, ar["size"]); return dict(d=P["d"], layers=P["layers"], heads=P["heads"], context=ar["context"], linear_skip=ar["linear"], dropout=P["dropout"])
 
 
-def ensure_pretrained(e, size, ctx):
+def ensure_pretrained(e, size, ctx, dis=False):
     """Masked-CpG reconstruction on the label-free pool (shared by every arm of the same size and context setting)."""
-    d = pre_dir(e, size, ctx); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
+    sp = e.sp_dis if dis else e.sp; d = pre_dir(e, size, ctx, dis); d.mkdir(parents=True, exist_ok=True); mark_done_from_old_files(d)
     if (d / "pretrain_done.json").exists():
         return d / "pretrain_best.pt"
     P = preset(e, size); K = P["K"]; cfg = make_cfg(e, dict(size=size, context=ctx, linear=True))
-    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
+    log(f"=== pre-training {SIZE_NAMES[size]}{'' if ctx else ' (no genome-context inputs)'}{' (NOT CLEAN: + non-cancer disease)' if dis else ''}: d={cfg['d']} layers={cfg['layers']} K={K} batch={P['batch']}")
     model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
     sanity_check_device(e, model, K)
     budget = Budget(P["batch"], e.dev, e.limit); rng = np.random.default_rng(e.a.seed + 3)
     def trial(m, n):
-        sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
+        sel = rng.choice(sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
         return m.reconstruct(idx, ib, valid, is_mask).mean()
     model.train(); budget.fit(model, trial)
-    w_ssl = sample_weights(e.c.meta, e.sp["ssl"], 0.5, 0.0)
+    w_ssl = sample_weights(e.c.meta, sp["ssl"], 0.5, 0.0)
     vrows = e.c.X[e.sp["val"][np.random.RandomState(5).choice(len(e.sp["val"]), min(1500, len(e.sp["val"])), replace=False)]]
     base_mae = float(np.nanmean(np.abs(np.where(vrows != 255, vrows / 100.0, np.nan) - e.mean)))
     def ssl_step(m, n):
-        rows = e.c.X[rng.choice(e.sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
+        rows = e.c.X[rng.choice(sp["ssl"], n, p=w_ssl)]; idx, ib, valid, is_mask, beta = ssl_batch(rows, K, rng)
         pred = m.reconstruct(idx, ib, valid, is_mask); tgt = beta.to(pred.device); ok = (is_mask & valid).to(pred.device)
         err = (pred - tgt).abs(); return torch.where(err < 0.05, 0.5 * err ** 2 / 0.05, err - 0.025)[ok].mean()
     def ssl_eval(m):
@@ -1323,7 +1355,7 @@ def ensure_pretrained(e, size, ctx):
 
 def age_fns(e, K, rng, kind):
     cons, rob = kind == "cons", kind == "rob"
-    tr_rows = e.sp["train"]; w = sample_weights(e.c.meta, tr_rows, 0.5, 0.5); vsel = e.sp["val"]; sl1 = nn.functional.smooth_l1_loss
+    tr_rows = (e.sp_dis if kind == "dis" else e.sp)["train"]; w = sample_weights(e.c.meta, tr_rows, 0.5, 0.5); vsel = e.sp["val"]; sl1 = nn.functional.smooth_l1_loss
     ust, inv = np.unique(e.c.meta.DatasetID.to_numpy()[tr_rows].astype(str), return_inverse=True); by_study = [tr_rows[inv == k] for k in range(len(ust))]
     p_study = np.sqrt([len(r) for r in by_study]); p_study /= p_study.sum()
     def step(m, n):
@@ -1351,7 +1383,7 @@ def train_arm(e, ar, d):
     mp = d / "model.pt"; mark_done_from_old_files(d)
     if mp.exists() and (d / "finetune_done.json").exists():
         return mp
-    P = preset(e, ar["size"]); K = P["K"]; cfg = make_cfg(e, ar); pre = ensure_pretrained(e, ar["size"], ar["context"]) if ar["pretrain"] else None
+    P = preset(e, ar["size"]); K = P["K"]; cfg = make_cfg(e, ar); pre = ensure_pretrained(e, ar["size"], ar["context"], ar["kind"] == "dis") if ar["pretrain"] else None
     log(f"=== fine-tuning {ar['name']}: {KINDS[ar['kind']]}  (seed {ar['seed']})")
     torch.manual_seed(e.a.seed + 101 * ar["seed"]); rng = np.random.default_rng(e.a.seed + 101 * ar["seed"] + 7)
     model = EpiClock(len(e.c.cpgs), e.mean, e.std, e.ctx, cfg).to(e.dev); log(f"parameters {sum(p.numel() for p in model.parameters()):,}")
@@ -1360,7 +1392,7 @@ def train_arm(e, ar, d):
     def trial(m, n):
         sel = rng.choice(e.sp["ssl"], n); idx, ib, valid, is_mask, beta = ssl_batch(e.c.X[sel], K, rng)
         return m.reconstruct(idx, ib, valid, is_mask).mean()
-    model.train(); budget.fit(model, trial); rg = get_ridge(e)
+    model.train(); budget.fit(model, trial); rg = get_ridge(e, "dis" if ar["kind"] == "dis" else "")
     def warm_start(m):
         m.bias.data.fill_(rg["b"])
         if m.lin_on:
@@ -1437,6 +1469,8 @@ def run_arm(e, name):
     ar = parse_arm(name); d = arm_dir(e, ar); d.mkdir(parents=True, exist_ok=True)
     if (d / "preds.npz").exists():
         return
+    if ar["kind"] == "dis" and len(e.sp_dis["train"]) == len(e.sp["train"]):
+        log(f"[skip] {name}: no non-cancer-disease profiles passed the checks"); return
     if ar["kind"] == "linear":
         fit_linear_tuned(e, d); return
     mp = train_arm(e, ar, d); predict_arm(e, ar, mp, d)
@@ -1469,7 +1503,8 @@ PAIRS = [("{s}-pre", "linear-tuned", "transformer (pre-trained) vs the linear co
          ("{s}-pre", "{s}-scratch", "value of pre-training"),
          ("{s}-pre", "{s}-noctx", "value of the genome-context inputs"),
          ("{s}-scratch", "{s}-pure", "value of the ridge-initialised linear core"),
-         ("{s}-cons", "{s}-pre", "consistency fine-tuning"), ("{s}-rob", "{s}-pre", "cross-study robustness fine-tuning (penalty on the spread of per-study mean error)"),
+         ("{s}-cons", "{s}-pre", "consistency fine-tuning"), ("{s}-dis", "{s}-pre", "adding non-cancer disease samples to the training data (NOT CLEAN)"),
+         ("ridge [NOT CLEAN: + non-cancer disease]", "ridge", "ridge with non-cancer disease samples added (NOT CLEAN)"), ("{s}-rob", "{s}-pre", "cross-study robustness fine-tuning (penalty on the spread of per-study mean error)"),
          ("{s}-pre-s1", "{s}-pre", "seed 1 vs seed 0 (training noise)"), ("{s}-pre-s2", "{s}-pre", "seed 2 vs seed 0 (training noise)")]
 
 
@@ -1506,6 +1541,8 @@ def build_report(e):
             P[f"{n} [linear part only]"] = d["lin"]; ours.append(f"{n} [linear part only]")
     RC = {n: load_arm_preds(e, n)["recon"] for n in arms if "recon" in load_arm_preds(e, n)}
     members = [n for n in arms if n != "linear-tuned" and parse_arm(n)["kind"] == "pre" and parse_arm(n)["seed"] == 0]
+    if len(e.sp_dis["train"]) > len(e.sp["train"]):
+        rgd = get_ridge(e, "dis"); P["ridge [NOT CLEAN: + non-cancer disease]"] = t_to_age(standardize(e.c.X[e.sp["test_all"]], e.mean, e.std) @ rgd["w"] + rgd["b"])
     if len(members) >= 2:
         ens = "ensemble of " + "+".join(parse_arm(n)["size"] for n in members); P[ens] = np.mean([P[n] for n in members], 0); ours.append(ens)
     te_all = e.sp["test_all"]; hc = np.searchsorted(te_all, e.sp["test"]); meta = e.c.meta.iloc[e.sp["test"]]; age = meta.Age.to_numpy(float); grp = meta.DatasetID.to_numpy()
@@ -1521,6 +1558,7 @@ def build_report(e):
                          study_avg_MedAE=pd.Series(A[n]).groupby(grp).median().mean(), vs_ridge=(f"{np.median(A[n]) - np.median(A['ridge']):+.2f} {ci(d, 2, True)}" if n != "ridge" else ""),
                          P_beats_ridge=float((d < 0).mean()) if n != "ridge" else np.nan, ours=n in ours))
     main = pd.DataFrame(rows).set_index("model").sort_values("MedAE")
+    main.insert(0, "training_data", ["NOT CLEAN (+ non-cancer disease)" if ("NOT CLEAN" in n or n.split(" [")[0].endswith("-dis")) else "clean" if (n.split(" [")[0] in arms or n in ("ridge", "elastic net")) else "published clock (their own data)" for n in main.index])
     pr = []
     for s in list(PRESETS):
         for a_, b_, why in PAIRS:
@@ -1528,7 +1566,7 @@ def build_report(e):
             if a_ in P and b_ in P and a_ != b_:
                 d_s, d_c = Ms[a_] - Ms[b_], Mc[a_] - Mc[b_]
                 pr.append(dict(comparison=f"{a_}  minus  {b_}", meaning=why, delta_MedAE=np.median(A[a_]) - np.median(A[b_]), CI_samples=ci(d_s, 2, True), CI_studies=ci(d_c, 2, True), P_first_better_studies=float((d_c < 0).mean())))
-    pairs = pd.DataFrame(pr)
+    pairs = pd.DataFrame(pr).drop_duplicates("comparison") if pr else pd.DataFrame(pr)
     sc = []
     for n in members:
         sz = parse_arm(n)["size"]; sc.append(dict(model=SIZE_NAMES[sz], arm=n, parameters=f"{param_count(e, sz):,}", MedAE=np.median(A[n]), CI_studies=ci(Mc[n]), MAE=A[n].mean(), r=np.corrcoef(P[n][hc], age)[0, 1]))
@@ -1536,7 +1574,9 @@ def build_report(e):
     off = official_scores(e, P)
     corp = (f"Training corpus: {int(((e.c.meta.role.isin(['train', 'geo'])) & e.c.meta.Age.notna()).sum())} labelled and {int((e.c.meta.role == 'unlabeled').sum())} label-free profiles, ALL of them passing the checks "
             f"in the data audit at the end of this report (no cancer, no disease, no copies of test samples, nothing without a health annotation).")
-    lines = [f"# EpiClock study report", "", corp, "", f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
+    dis_note = ("Rows marked NOT CLEAN (-dis models, ridge [NOT CLEAN ...]) were trained on the clean data PLUS non-cancer disease profiles. They exist only to measure what that data does and are not part of the family. "
+                if any(parse_arm(n)["kind"] == "dis" for n in arms) or "ridge [NOT CLEAN: + non-cancer disease]" in P else "")
+    lines = [f"# EpiClock study report", "", corp, "", dis_note, f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
              f"{len(sib)} studies adjacent to training series). None of these studies was used for training, model selection or early stopping.", ""]
     best = [n for n in main.index if main.loc[n, "ours"] and "[linear part only]" not in n and n != "linear-tuned"]
     if best:
@@ -1564,7 +1604,11 @@ def build_report(e):
         big = max(RC, key=lambda n: (list(PRESETS).index(parse_arm(n)["size"]), n)); sc_ = {"ridge: age acceleration": P["ridge"]}
         if "Horvath V2" in P:
             sc_["Horvath V2: age acceleration"] = P["Horvath V2"]
-        best_ = [n for n in main.index if n in arms and n != "linear-tuned"][0]; sc_[f"EpiClock {best_}: age acceleration"] = P[best_]; sc_[f"EpiClock {big}: deviation (masked-CpG reconstruction error)"] = RC[big]
+        sc_[f"EpiClock {big}: age acceleration"] = P[big]; sc_[f"EpiClock {big}: deviation (masked-CpG reconstruction error)"] = RC[big]
+        for dn in [n for n in arms if parse_arm(n)["kind"] == "dis"]:
+            sc_[f"EpiClock {dn} [NOT CLEAN]: age acceleration"] = P[dn]
+            if dn in RC:
+                sc_[f"EpiClock {dn} [NOT CLEAN]: deviation"] = RC[dn]
         dt = disease_table(e, sc_)
         if dt is not None:
             lines += ["## Disease signal across the benchmark studies (AUC patients vs same-study healthy controls, age trend removed; 0.5 = none)",
