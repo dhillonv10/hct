@@ -1578,7 +1578,7 @@ def build_report(e):
                          study_avg_MedAE=pd.Series(A[n]).groupby(grp).median().mean(), vs_ridge=(f"{np.median(A[n]) - np.median(A['ridge']):+.2f} {ci(d, 2, True)}" if n != "ridge" else ""),
                          P_beats_ridge=float((d < 0).mean()) if n != "ridge" else np.nan, ours=n in ours))
     main = pd.DataFrame(rows).set_index("model").sort_values("MedAE")
-    main.insert(0, "training_data", ["NOT CLEAN (+ non-cancer disease)" if ("NOT CLEAN" in n or n.split(" [")[0].endswith("-dis")) else "clean" if (n.split(" [")[0] in arms or n in ("ridge", "elastic net")) else "published clock (their own data)" for n in main.index])
+    main.insert(0, "training_data", ["NOT CLEAN (+ non-cancer disease)" if ("NOT CLEAN" in n or n.split(" [")[0].endswith("-dis")) else "clean" if (n.split(" [")[0] in arms or n in ("ridge", "elastic net") or n.startswith("ensemble of")) else "published clock (their own data)" for n in main.index])
     pr = []
     for s in list(PRESETS):
         for a_, b_, why in PAIRS:
@@ -1598,15 +1598,23 @@ def build_report(e):
                 if any(parse_arm(n)["kind"] == "dis" for n in arms) or "ridge [NOT CLEAN: + non-cancer disease]" in P else "")
     lines = [f"# EpiClock study report", "", corp, "", dis_note, f"Test set: {len(hc)} healthy controls from {meta.DatasetID.nunique()} held-out ComputAge benchmark studies ({int(blood.sum())} blood; "
              f"{len(sib)} studies adjacent to training series). None of these studies was used for training, model selection or early stopping.", ""]
-    best = [n for n in main.index if main.loc[n, "ours"] and "[linear part only]" not in n and n != "linear-tuned"]
+    best = [n for n in main.index if main.loc[n, "ours"] and "[linear part only]" not in n and n != "linear-tuned" and main.loc[n, "training_data"] == "clean"]      # the headline is about the CLEAN family only
     if best:
         b = best[0]; d = Mc[b] - Mc["ridge"]
-        lines += ["## Headline", f"- Best EpiClock result: **{b}**, median absolute error **{main.loc[b, 'MedAE']:.2f} y** (95% CI over studies {main.loc[b, 'CI_studies']}) versus ridge "
+        lines += ["## Headline (clean models only)", f"- Best clean EpiClock result: **{b}**, median absolute error **{main.loc[b, 'MedAE']:.2f} y** (95% CI over studies {main.loc[b, 'CI_studies']}) versus ridge "
                   f"{main.loc['ridge', 'MedAE']:.2f} y {main.loc['ridge', 'CI_studies']}. Paired difference {main.loc[b, 'vs_ridge']}; it beats ridge in {float((d < 0).mean()):.0%} of study-level bootstrap draws."]
+        if "elastic net" in P:
+            d3 = Mc[b] - Mc["elastic net"]; lo, hi = np.percentile(d3, [2.5, 97.5])
+            lines += [f"- Against the elastic net (the stronger linear baseline): {np.median(A[b]) - np.median(A['elastic net']):+.2f} y (elastic net {main.loc['elastic net', 'MedAE']:.2f} y), study-level 95% CI [{lo:+.2f}, {hi:+.2f}], it beats the elastic net in {float((d3 < 0).mean()):.0%} of draws."]
         if "linear-tuned" in P and b != "linear-tuned":
             d2 = Mc[b] - Mc["linear-tuned"]; lo, hi = np.percentile(d2, [2.5, 97.5])
             lines += [f"- Against the linear core retrained with the same recipe (the right control for 'is it the transformer?'): {np.median(A[b]) - np.median(A['linear-tuned']):+.2f} y, "
                       f"study-level 95% CI [{lo:+.2f}, {hi:+.2f}] - " + ("the interval excludes zero." if hi < 0 or lo > 0 else "the interval includes zero: not distinguishable at the study level (the sample-level interval is narrower).")]
+        for dn in [n for n in arms if parse_arm(n)["kind"] == "dis"]:
+            tw = f"{parse_arm(dn)['size']}-pre"
+            if tw in P:
+                d4 = Mc[dn] - Mc[tw]; lo, hi = np.percentile(d4, [2.5, 97.5])
+                lines += [f"- NOT CLEAN, not part of the family: **{dn}** {np.median(A[dn]):.2f} y; versus its clean twin {tw}: {np.median(A[dn]) - np.median(A[tw]):+.2f} y, study-level 95% CI [{lo:+.2f}, {hi:+.2f}] (what the extra non-cancer-disease data does to healthy-control error)."]
         lines += [""]
     lines += ["## All models on the same test samples (median absolute error in years; lower is better)", "```", main.drop(columns="ours").round(3).to_string(), "```",
               "offset_share = fraction of the squared error that is a per-study offset; MedAE_no_offsets = the error if each study's median error were removed (a diagnostic, not an achievable score). CI_samples resamples individual samples; CI_studies resamples whole studies (the honest one: samples within a study share batch effects). vs_ridge is the paired "
