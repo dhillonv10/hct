@@ -93,3 +93,34 @@ to put a number on it: **~0.96 against ClinVar, ~0.61 against function, same gen
 `variants_scored.csv` (per-variant, all scores), `metrics.csv` (every AUC and Spearman with bootstrap
 intervals), `roc_curves.csv` (ROC points per score per contrast), `by_position.csv` (per-position aggregates for
 the positional track).
+
+## Addendum: is any of this usable as clinical evidence?
+
+Combining the two best signals helps a little. Rank-percentile average, same 106-vs-329 contrast:
+
+| score | AUC | 95% CI |
+|---|--:|---|
+| ViennaRNA ddG alone | 0.629 | [0.564, 0.689] |
+| RiNALMo-giga alone | 0.603 | [0.544, 0.661] |
+| **ddG + giga** | **0.667** | [0.610, 0.725] |
+| ddG + giga + CADD | 0.667 | [0.610, 0.722] |
+
+So the language model does carry something the folding energy does not — the combination beats either alone, and
+its interval's lower bound sits above giga's point estimate. Adding CADD on top changes nothing.
+
+Precision among each score's top-ranked calls, against a base rate of 0.244 depleted:
+
+| score | top 10% | top 20% | top 30% |
+|---|--:|--:|--:|
+| CADD | 0.279 | 0.276 | 0.277 |
+| ViennaRNA ddG | **0.512** | 0.402 | 0.354 |
+| RiNALMo-giga | 0.326 | 0.299 | 0.300 |
+| ddG + giga | 0.465 | 0.402 | 0.362 |
+
+At its most confident decile the best score is right about half the time when the prior is a quarter: a 2x
+enrichment. The 651M language model manages 1.3x. CADD is indistinguishable from the base rate.
+
+**Read for practice: none of these is usable as standalone computational evidence for classifying a variant in
+this gene.** Folding energy roughly doubles the prior and is free; the large language model does not reach that
+alone, adds a little in combination, and its ClinVar-benchmarked accuracy (0.86-0.96 on this gene) is not what a
+clinician would actually get.
