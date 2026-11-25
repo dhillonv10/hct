@@ -1,0 +1,39 @@
+RNU4-2 saturation genome editing, Nature 2026;654:429-436 (CC BY 4.0)
+  435 SNVs scored by the assay; the labelled contrast is 12 ReNU syndrome vs 346 population variants
+
+GATE -- reproduce the paper's own numbers before trusting anything new
+  CADD v1.7        AUC 0.649   published 0.65   MATCH
+  ViennaRNA ddG    AUC 0.718   published 0.72   MATCH
+  SGE assay        AUC 0.934   published 0.93   MATCH
+  gate passed: every number below is computed the same way
+
+A. SEPARATING ReNU SYNDROME FROM POPULATION VARIANTS  (the paper's own contrast)
+  score                     AUC           95% CI   vs CADD 0.65
+  CADD v1.7               0.649  [0.561,0.734]   +0.000
+  ViennaRNA ddG           0.718  [0.555,0.861]   +0.069
+  RiNALMo-micro           0.750  [0.669,0.827]   +0.101
+  RiNALMo-mega            0.447  [0.322,0.580]   -0.201
+  RiNALMo-giga            0.539  [0.406,0.688]   -0.110
+  SGE assay (ceiling)     0.934
+
+B. AGREEMENT WITH THE CONTINUOUS FUNCTION SCORE  (all SNVs, not just the 358 labelled ones)
+   Spearman against the measured effect, oriented so positive = agrees with the assay.
+  score                      rho            95% CI      n
+  CADD v1.7                0.088  [-0.005,0.175]    435
+  ViennaRNA ddG            0.237  [0.138,0.329]    435
+  RiNALMo-micro            0.179  [0.089,0.271]    435
+  RiNALMo-mega             0.167  [0.079,0.250]    435
+  RiNALMo-giga             0.189  [0.099,0.278]    435
+
+C. SEPARATING THE PAPER'S OWN DEPLETED CALLS  (function score < -0.302 at q < 0.01)
+   The best-powered contrast available: it uses the assay's own hit calls rather than the 12 clinically
+   ascertained variants, so the intervals are a third as wide as in A.
+   106 depleted vs 329 not depleted
+  score                     AUC           95% CI
+  CADD v1.7               0.564  [0.503,0.622]
+  ViennaRNA ddG           0.629  [0.564,0.689]
+  RiNALMo-micro           0.611  [0.552,0.671]
+  RiNALMo-mega            0.598  [0.538,0.652]
+  RiNALMo-giga            0.603  [0.544,0.661]
+
+Note on direction: a language model's masked log-odds is oriented so that higher means more damaging, and the assay's function score is lower when a variant is more depleted, so the two are expected to correlate negatively; the sign is flipped above so that positive means agreement.
