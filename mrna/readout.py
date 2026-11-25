@@ -320,8 +320,21 @@ def load_splits(work):
     return out
 
 
-def stage_embed(work, lm, ckpt, limit=0, bs=64, max_len=100):
-    """Frozen backbone -> structured pooled cells, cached per split. Per-token reps are never stored."""
+def stage_embed(work, lm, ckpt, limit=0, bs=64, max_len=100, permute=False):
+    """Frozen backbone -> structured pooled cells, cached per split. Per-token reps are never stored.
+
+    `permute` is THE control for the obvious objection to the headline: R-joint has 16x B1's dimensionality,
+    so it might win on capacity rather than on region/frame structure. With permute=True the token reps are
+    randomly shuffled along the length axis WITHIN each sequence before pooling. Every cell still exists,
+    the basis is still 7680 dims, the alpha sweep is identical -- but each cell is now a mean over a random
+    subset of the same tokens, so position and frame carry no information.
+
+      control ~= R-joint  -> the gain was dimensionality, and the structural story is dead
+      control ~= B1       -> the gain is the structure, which is the claim
+
+    Note the permutation is applied to the OUTPUT reps, not the input tokens: the backbone still sees the
+    real sequence in the real order, so this isolates the read-out and nothing else.
+    """
     import torch
     from rnakd import teacher
     torch.set_num_threads(max(1, os.cpu_count() or 1))
@@ -334,8 +347,9 @@ def stage_embed(work, lm, ckpt, limit=0, bs=64, max_len=100):
         print(f"NO CHECKPOINT -- random init, for pipeline rehearsal only")
     d = cfg["embed"]
     sp = load_splits(work)
+    tag = f"{lm}perm" if permute else lm
     for name, df in sp.items():
-        out = os.path.join(work, f"cells_{lm}_{name}.npz")
+        out = os.path.join(work, f"cells_{tag}_{name}.npz")
         if os.path.exists(out):
             print(f"  {name}: cached"); continue
         seqs = df.utr.tolist()
@@ -354,6 +368,12 @@ def stage_embed(work, lm, ckpt, limit=0, bs=64, max_len=100):
                 toks = torch.tensor([teacher.encode(seqs[i][:max_len], pad_to) for i in idx])
                 rep, _ = model(toks)
                 H = rep[:, 1:, :]                                # drop <cls>; <eos>/<pad> are masked out by lens
+                if permute:
+                    H = H.clone()
+                    g = torch.Generator().manual_seed(917 + bi)
+                    for r in range(H.shape[0]):
+                        Lr = int(bl[r])
+                        H[r, :Lr] = H[r, :Lr][torch.randperm(Lr, generator=g)]
                 cells = pool_cells(H, torch.tensor(bl))
                 for c in CELLS:
                     store[c][idx] = cells[c].float().numpy()
@@ -441,6 +461,18 @@ def stage_train(work, lm, pca_k=96, cnn_epochs=24, skip_cnn=False, seed=0):
     p, a, va = fit_select(Fm["train"], Y["train"], {k: Fm[k] for k in evals}, Y["val"])
     record("B2-features", p, va, {"alpha": a, "dims": int(Fm["train"].shape[1])})
 
+    print(f"\n[R+B2] does the language model add anything on top of explicit biology?")
+    parts2 = ["B2-features", "R-joint"]
+    Zv = np.stack([preds[a_]["val"] for a_ in parts2], 1)
+    w2 = np.linalg.lstsq(np.hstack([Zv, np.ones((len(Zv), 1))]), Y["val"], rcond=None)[0]
+    p2 = {}
+    for k in evals:
+        Z = np.stack([preds[a_][k] for a_ in parts2], 1)
+        p2[k] = np.hstack([Z, np.ones((len(Z), 1))]) @ w2
+    record("R+B2", p2, r2(Y["val"], p2["val"]),
+           {"weights": {a_: float(x) for a_, x in zip(parts2, w2[:-1])},
+            "marginal_vs_B2": {k: float(r2(Y[k], p2[k]) - res["B2-features"][k]) for k in evals}})
+
     if not skip_cnn:
         print(f"\n[B3] scratch CNN on one-hot  ({cnn_epochs} epochs, {ntr} train rows)")
         pc, vc = train_cnn(seqs["train"], Y["train"], {k: seqs[k] for k in evals}, Y["val"],
@@ -460,7 +492,10 @@ def stage_train(work, lm, pca_k=96, cnn_epochs=24, skip_cnn=False, seed=0):
 
     out = os.path.join(work, f"results_{lm}.json")
     json.dump({"lm": lm, "n_train": ntr, "arms": res}, open(out, "w"), indent=1, default=float)
-    print(f"\nwrote {out}")
+    pp = os.path.join(work, f"preds_{lm}.npz")
+    np.savez_compressed(pp, **{f"{arm}__{k}": v for arm, p_ in preds.items() for k, v in p_.items()},
+                        **{f"y__{k}": Y[k] for k in evals})
+    print(f"\nwrote {out} and {pp}")
     return res
 
 
@@ -518,6 +553,8 @@ def main():
     ap.add_argument("--cnn-epochs", type=int, default=24)
     ap.add_argument("--skip-cnn", action="store_true")
     ap.add_argument("--synthetic", action="store_true")
+    ap.add_argument("--permute", action="store_true",
+                    help="dimensionality control: shuffle token reps within each sequence before pooling")
     a = ap.parse_args()
 
     if a.stage == "selftest":
@@ -530,7 +567,8 @@ def main():
         print("\nselftest done -- the pipeline runs end to end. Numbers here are meaningless by construction.")
         return
     if a.stage == "data":   stage_data(a.work, synthetic=a.synthetic); return
-    if a.stage == "embed":  stage_embed(a.work, a.lm, a.ckpt, limit=a.limit, bs=a.bs); return
+    if a.stage == "embed":  stage_embed(a.work, a.lm, a.ckpt, limit=a.limit, bs=a.bs,
+                                        permute=a.permute); return
     if a.stage == "train":  stage_train(a.work, a.lm, pca_k=a.pca_k, cnn_epochs=a.cnn_epochs,
                                         skip_cnn=a.skip_cnn); return
     if a.stage == "report": stage_report(a.work, a.lm); return
