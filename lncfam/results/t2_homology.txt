@@ -1,0 +1,18 @@
+GENCODE v50: 196091 lncRNA transcripts -> 34866 lncRNA genes on chr1-22,X,Y
+sequences recovered for 34866 genes (median length 858 nt)
+folds: locked test (chr8/13/18/21) 4210 genes; fold 0 6034, fold 1 6400, fold 2 6171, fold 3 6044, fold 4 6007
+k-mer matrix: 34866 genes x 1048576 possible 10-mers, 43.3M nonzeros
+candidate pairs at containment >= 0.1: 931502
+
+HOMOLOGY AT FULL SIZE  (all GENCODE v50 lncRNA genes, not a subsample)
+   containment     pairs   genes with a homolog   genes with a CROSS-FOLD homolog
+          0.10    931502         34804 (99.8%)                  31192 (89.5%)
+          0.25     97035         33545 (96.2%)                  28400 (81.5%)
+          0.40     26548         20227 (58.0%)                  16174 (46.4%)
+          0.50      7779          6505 (18.7%)                   4571 (13.1%)
+          0.70      1266          1330 ( 3.8%)                    404 ( 1.2%)
+
+At the threshold LncBench uses (0.40), homology pruning would remove 16174 of 34866 genes (46.4%).
+VERDICT: pruning removes a material fraction, so the all-vs-pruned comparison is worth running at full size on a labelled task.
+
+Caveat: 10-mer containment is a crude homology measure. It catches paralogs and shared repeat families and will miss diverged homologs that an alignment would find.
