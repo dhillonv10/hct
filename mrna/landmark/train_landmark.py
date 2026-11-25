@@ -59,6 +59,17 @@ FEATURES_GBM = 0.7023
 PERIODS = (3.0, 10.0, 30.0, 100.0, 300.0, 1000.0, 3000.0, 10000.0)   # 3 nt => reading frame, explicitly
 N_LANDMARK = 6
 
+# The released family. Depth and width scale together; dilations grow so the receptive field keeps pace.
+# With only ~14k scorable genes the expectation is that this SATURATES early -- where it saturates is the
+# result, because it tells a practitioner what size they actually need.
+SIZES = {
+    "tiny":  dict(c1=16, c=32,  s1=(1, 2),    s2=(1, 2, 4),             s3=(1, 2, 4, 8),             head=128),
+    "small": dict(c1=24, c=64,  s1=(1, 2),    s2=(1, 2, 4, 8),          s3=(1, 2, 4, 8, 16),         head=256),
+    "base":  dict(c1=32, c=96,  s1=(1, 2),    s2=(1, 2, 4, 8, 16),      s3=(1, 2, 4, 8, 16, 32),     head=512),
+    "large": dict(c1=48, c=160, s1=(1, 2, 4), s2=(1, 2, 4, 8, 16),      s3=(1, 2, 4, 8, 16, 32),     head=768),
+    "xl":    dict(c1=64, c=256, s1=(1, 2, 4), s2=(1, 2, 4, 8, 16, 32),  s3=(1, 2, 4, 8, 16, 32, 64), head=1024),
+}
+
 
 def pick_device(name=""):
     if name:
@@ -86,6 +97,12 @@ class Bundle:
         self.cols = list(z["feat_cols"])
         self.lmax = lmax
         self.n = len(self.L)
+        # extended bundle: `scored` marks genes with a PC1 label (the only ones ever evaluated), and Y holds
+        # the 54 individual decay datasets -- 25x the supervision of PC1 alone, on the same sequences.
+        self.scored = z["scored"].astype(bool) if "scored" in z.files else np.ones(self.n, bool)
+        self.Y = z["Y"].astype(np.float32) if "Y" in z.files else None
+        self.tasks = list(z["task_names"]) if "task_names" in z.files else []
+        self.species = str(z["species"][0]) if "species" in z.files else "human"
 
     def item(self, i):
         """One transcript as fixed-length arrays. Everything is 5'-anchored and right-padded."""
@@ -109,8 +126,10 @@ class Bundle:
             dn = np.where(k2 < len(j), j[np.clip(k2, 0, len(j) - 1)] - pos, 30000)
         else:
             up = np.full(lm, 30000); dn = np.full(lm, 30000)
+        ym = self.Y[i] if self.Y is not None else np.zeros(0, np.float32)
         return (codes, np.int32(L), np.int32(min(start, lm)), np.int32(min(stop, lm)),
-                isj, up.astype(np.int16), dn.astype(np.int16), self.X[i], self.y[i])
+                isj, up.astype(np.int16), dn.astype(np.int16), self.X[i], self.y[i],
+                ym, np.float32(self.scored[i]))
 
 
 def collate(bundle, idx):
@@ -122,7 +141,9 @@ def collate(bundle, idx):
                 stop=torch.tensor([int(o[3]) for o in out]),
                 isj=t(4, np.float32), dup=t(5, np.float32), ddn=t(6, np.float32),
                 aux=t(7, np.float32),
-                y=torch.tensor([float(o[8]) for o in out], dtype=torch.float32))
+                y=torch.tensor([float(o[8]) for o in out], dtype=torch.float32),
+                ytask=t(9, np.float32),
+                scored=torch.tensor([float(o[10]) for o in out], dtype=torch.float32))
 
 
 # ------------------------------------------------------------------------------------------- model
@@ -151,18 +172,20 @@ class Block(nn.Module):
 
 
 class LandmarkNet(nn.Module):
-    def __init__(self, n_aux, c1=32, c=96, periods=PERIODS, head=512, dropout=0.2,
-                 aux_drop=0.3):
+    def __init__(self, n_aux, size="base", periods=PERIODS, dropout=0.2, aux_drop=0.3, n_task=0):
         super().__init__()
+        cfg = SIZES[size]
+        c1, c, head = cfg["c1"], cfg["c"], cfg["head"]
+        self.size, self.n_task = size, n_task
         self.periods = periods
         in_ch = 4 + 3 + 1 + 1 + N_LANDMARK * 2 * len(periods)
         self.in_ch = in_ch
         self.stem = nn.Conv1d(in_ch, c1, 9, padding=4)
-        self.s1 = nn.Sequential(*[Block(c1, 5, d) for d in (1, 2)])
+        self.s1 = nn.Sequential(*[Block(c1, 5, d) for d in cfg["s1"]])
         self.d1 = nn.Conv1d(c1, c, 4, stride=4)
-        self.s2 = nn.Sequential(*[Block(c, 5, d) for d in (1, 2, 4, 8, 16)])
+        self.s2 = nn.Sequential(*[Block(c, 5, d) for d in cfg["s2"]])
         self.d2 = nn.Conv1d(c, c, 4, stride=4)
-        self.s3 = nn.Sequential(*[Block(c, 5, d) for d in (1, 2, 4, 8, 16, 32)])
+        self.s3 = nn.Sequential(*[Block(c, 5, d) for d in cfg["s3"]])
         self.attn = nn.Conv1d(c, 1, 1)
         n_cells = 6 + 6 + 2 + 2 + 1          # regions(3 mean+3 max) + 6 bands + 2 junction + 2 global + attn
         self.pool_dim = n_cells * c + 3 * c1
@@ -174,8 +197,11 @@ class LandmarkNet(nn.Module):
         self.aux_drop = aux_drop
         self.head = nn.Sequential(
             nn.Linear(self.pool_dim + n_aux, head), nn.GELU(), nn.Dropout(dropout),
-            nn.Linear(head, head // 2), nn.GELU(), nn.Dropout(dropout),
-            nn.Linear(head // 2, 1))
+            nn.Linear(head, head // 2), nn.GELU(), nn.Dropout(dropout))
+        self.out_pc1 = nn.Linear(head // 2, 1)
+        # One head per individual decay dataset. These are never reported; they exist so the trunk sees
+        # 482k label cells instead of 19.5k, and so the 2,265 genes that lack a PC1 label can still train.
+        self.out_task = nn.Linear(head // 2, n_task) if n_task else None
 
     def build_input(self, b):
         codes, isj = b["codes"], b["isj"]
@@ -241,7 +267,8 @@ class LandmarkNet(nn.Module):
         if self.training and self.aux_drop > 0:
             keep = (torch.rand(a_in.shape[0], 1, device=a_in.device) >= self.aux_drop).float()
             a_in = a_in * keep
-        return self.head(torch.cat([z, a_in], 1)).squeeze(-1)
+        h = self.head(torch.cat([z, a_in], 1))
+        return self.out_pc1(h).squeeze(-1), (self.out_task(h) if self.out_task is not None else None)
 
 
 # ---------------------------------------------------------------------------------------- training
@@ -252,12 +279,23 @@ def pearson(a, b):
 
 
 def run_fold(bu, tr, va, te, dev, args, seed):
+    """tr may include train-only genes (no PC1 label); va and te are always scorable genes only."""
     torch.manual_seed(seed)
     np.random.seed(seed)
     mu, sd = bu.X[tr].mean(0), bu.X[tr].std(0)
     sd[sd < 1e-6] = 1.0
-    ymu, ysd = float(bu.y[tr].mean()), float(bu.y[tr].std())
-    net = LandmarkNet(bu.X.shape[1], aux_drop=args.aux_drop).to(dev)
+    sc_tr = tr[bu.scored[tr]]
+    ymu, ysd = float(bu.y[sc_tr].mean()), float(bu.y[sc_tr].std())
+    # per-task standardisation from training rows only; tasks are sparsely observed so use nan-aware stats
+    n_task = bu.Y.shape[1] if (bu.Y is not None and args.multitask) else 0
+    if n_task:
+        Yt = bu.Y[tr]
+        tmu = np.nanmean(np.where(np.isfinite(Yt), Yt, np.nan), 0)
+        tsd = np.nanstd(np.where(np.isfinite(Yt), Yt, np.nan), 0)
+        tmu = np.nan_to_num(tmu); tsd = np.where(np.isfinite(tsd) & (tsd > 1e-6), tsd, 1.0)
+        tmu_t = torch.from_numpy(tmu.astype(np.float32)).to(dev)
+        tsd_t = torch.from_numpy(tsd.astype(np.float32)).to(dev)
+    net = LandmarkNet(bu.X.shape[1], size=args.size, aux_drop=args.aux_drop, n_task=n_task).to(dev)
     nparam = sum(p.numel() for p in net.parameters())
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-2)
     steps = args.epochs * math.ceil(len(tr) / args.bs)
@@ -277,7 +315,7 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         p = 0
         with torch.no_grad():
             for b, sel in batches(idx, args.bs, False):
-                out[p:p + len(sel)] = (net(b).float().cpu().numpy() * ysd + ymu)
+                out[p:p + len(sel)] = (net(b)[0].float().cpu().numpy() * ysd + ymu)
                 p += len(sel)
         net.train()
         return out
@@ -287,8 +325,17 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         t0, tot, nb = time.time(), 0.0, 0
         for b, sel in batches(tr, args.bs, True):
             opt.zero_grad()
-            pred = net(b)
-            loss = F.huber_loss(pred, (b["y"] - ymu) / ysd, delta=1.5)
+            pred, tpred = net(b)
+            # PC1 loss only where a PC1 label exists; the train-only genes contribute through the task heads
+            m = b["scored"]
+            tgt = (b["y"] - ymu) / ysd
+            loss = (F.huber_loss(pred, tgt, delta=1.5, reduction="none") * m).sum() / m.sum().clamp(min=1.0)
+            if tpred is not None:
+                yt = b["ytask"]
+                obs = torch.isfinite(yt).float()
+                ytn = torch.nan_to_num((yt - tmu_t) / tsd_t, nan=0.0, posinf=0.0, neginf=0.0)
+                tl = F.huber_loss(tpred, ytn, delta=1.5, reduction="none") * obs
+                loss = loss + args.task_w * tl.sum() / obs.sum().clamp(min=1.0)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(net.parameters(), 1.0)
             opt.step(); sched.step()
@@ -301,7 +348,7 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         print(f"    ep {ep + 1:3d}/{args.epochs}  loss {tot / max(nb,1):.4f}  val r {rv:.4f}"
               f"{'  *' if ep == best_ep else ''}  {time.time() - t0:.0f}s", flush=True)
     print(f"    best val r {best:.4f} at epoch {best_ep + 1}  ({nparam/1e6:.2f}M params)")
-    return best_te, best
+    return best_te, best, nparam
 
 
 def main():
@@ -315,7 +362,13 @@ def main():
     ap.add_argument("--seeds", type=int, default=1, help="predictions averaged over this many seeds per fold")
     ap.add_argument("--device", default="")
     ap.add_argument("--out", default="landmark_results.json")
-    ap.add_argument("--aux-drop", type=float, default=0.3)
+    ap.add_argument("--aux-drop", type=float, default=0.3,
+                    help="1.0 = sequence-only arm, the mechanism control (Saluki sequence-only is 0.608)")
+    ap.add_argument("--size", default="base", choices=list(SIZES))
+    ap.add_argument("--multitask", action="store_true",
+                    help="train the 54 individual-decay-dataset heads too (25x the label cells)")
+    ap.add_argument("--task-w", type=float, default=1.0, help="weight on the auxiliary task loss")
+    ap.add_argument("--tag", default="", help="label for this run in the results file")
     ap.add_argument("--quick", action="store_true", help="3 folds, lmax 8192, 25 epochs")
     ap.add_argument("--bench", action="store_true",
                     help="time 20 training steps and extrapolate the full run, then exit")
@@ -328,14 +381,18 @@ def main():
 
     dev = pick_device(args.device)
     bu = Bundle(args.bundle, args.lmax)
-    print(f"device {dev} | {bu.n} transcripts | lmax {args.lmax} | {bu.X.shape[1]} aux features")
-    net0 = LandmarkNet(bu.X.shape[1])
+    nt = bu.Y.shape[1] if (bu.Y is not None and args.multitask) else 0
+    print(f"device {dev} | {bu.n} transcripts ({int(bu.scored.sum())} scorable on PC1, "
+          f"{int((~bu.scored).sum())} train-only) | species {bu.species}")
+    print(f"size '{args.size}' | lmax {args.lmax} | {bu.X.shape[1]} aux features | "
+          f"{nt} auxiliary task heads | aux_drop {args.aux_drop}")
+    net0 = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt)
     print(f"input channels {net0.in_ch}  pooled dim {net0.pool_dim}  "
           f"params {sum(p.numel() for p in net0.parameters())/1e6:.2f}M")
     del net0
 
     if args.bench:
-        net = LandmarkNet(bu.X.shape[1]).to(dev)
+        net = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt).to(dev)
         opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
         sel = np.random.default_rng(0).permutation(bu.n)[:args.bs * 21]
         t0 = None
@@ -343,7 +400,7 @@ def main():
             b = collate(bu, sel[i * args.bs:(i + 1) * args.bs])
             b = {k: (v.to(dev) if torch.is_tensor(v) else v) for k, v in b.items()}
             opt.zero_grad()
-            F.huber_loss(net(b), b["y"] * 0).backward()
+            F.huber_loss(net(b)[0], b["y"] * 0).backward()
             opt.step()
             if i == 0:
                 if dev.type == "mps": torch.mps.synchronize()
@@ -359,12 +416,17 @@ def main():
         print("12288 truncates 2.2%), or run --folds 5. Fewer folds only adds noise to the mean, it is not a cheat.")
         return
 
-    idx = np.arange(bu.n)
+    scorable = np.flatnonzero(bu.scored)
+    trainonly = np.flatnonzero(~bu.scored)
     if args.selftest:
-        idx = np.random.default_rng(0).permutation(bu.n)[:240]
+        scorable = np.random.default_rng(0).permutation(scorable)[:240]
+        trainonly = np.random.default_rng(1).permutation(trainonly)[:60]
+    idx = scorable
     posmap = {int(g): i for i, g in enumerate(idx)}
     rng = np.random.default_rng(0)
     fold = rng.permutation(len(idx)) % 10
+    print(f"folds built over {len(idx)} scorable genes; {len(trainonly)} train-only genes "
+          f"added to every training set")
     preds = np.full(len(idx), np.nan)
     per_fold = []
     for k in range(args.folds):
@@ -372,11 +434,12 @@ def main():
         inner = idx[fold != k]
         vcut = max(2, len(inner) // 9)
         perm = np.random.default_rng(100 + k).permutation(len(inner))
-        va, tr = inner[perm[:vcut]], inner[perm[vcut:]]
+        va, tr = inner[perm[:vcut]], np.concatenate([inner[perm[vcut:]], trainonly])
         print(f"\n=== fold {k}  train {len(tr)}  val {len(va)}  test {len(te)} ===", flush=True)
         acc = np.zeros(len(te))
+        nparam = 0
         for s in range(args.seeds):
-            pt, bv = run_fold(bu, tr, va, te, dev, args, seed=1234 + 17 * s)
+            pt, bv, nparam = run_fold(bu, tr, va, te, dev, args, seed=1234 + 17 * s)
             acc += pt
         pt = acc / args.seeds
         preds[np.array([posmap[t] for t in te])] = pt
@@ -397,9 +460,12 @@ def main():
         print(f"NOTE: only {args.folds} of 10 folds run, so this mean is noisier than the published one.")
     if args.selftest:
         print("\nSELFTEST ONLY -- 240 transcripts, 2 epochs. Numbers are meaningless; the point is that it ran.")
-    json.dump(dict(per_fold=per_fold, mean=float(np.mean(per_fold)),
+    json.dump(dict(tag=args.tag or args.size, size=args.size, species=bu.species,
+                   params=int(nparam), multitask=bool(nt), aux_drop=args.aux_drop,
+                   per_fold=per_fold, mean=float(np.mean(per_fold)), sd=float(np.std(per_fold)),
+                   pooled=pearson(bu.y[idx[done]], preds[done]),
                    saluki=SALUKI_HUMAN, folds=args.folds, epochs=args.epochs,
-                   lmax=args.lmax, seeds=args.seeds),
+                   lmax=args.lmax, seeds=args.seeds, n_scorable=int(len(idx))),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}")
 
