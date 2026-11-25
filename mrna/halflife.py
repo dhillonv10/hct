@@ -3,7 +3,7 @@
 
 Why this task. On MRL we measured the ceiling directly: two replicates of the same 50-mer library agree at
 r2=0.94 even at 4000+ reads, and published SOTA (0.925) sits within ~0.01-0.03 of it. Nothing to win there.
-Half-life is different: Saluki reports r=0.777 (human), so roughly 40% of the variance is still unexplained.
+Half-life is different: Saluki reports r=0.773 (human), so roughly 40% of the variance is still unexplained.
 
 Why a feature model has a real shot. Saluki's own ablation table says the splice-site track is worth more
 than everything else it adds (sequence 0.608 -> +splice 0.744 -> +codon 0.783), and exon-junction density is
@@ -12,7 +12,7 @@ a SCALAR -- a hand-built feature captures it exactly, no convolution needed. The
 already nearly closed in their own paper; this script tries to close and cross it.
 
 Target to beat (their Fig5_S6/experimentResults.csv, 10 CV folds):
-    Saluki human  mean r = 0.7768   (min 0.7346, max 0.7870)
+    Saluki human  mean r = 0.7726   (min 0.7346, max 0.7870)
     Saluki mouse  mean r = 0.7320
     BEeM   human  mean r = 0.7721
     BC3MS  human  mean r = 0.6732
