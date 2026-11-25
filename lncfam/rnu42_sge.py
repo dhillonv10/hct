@@ -219,6 +219,21 @@ def stage_report(work, out=None):
         say(f"  {name:22s} {r:7.3f}  [{lo:.3f},{hi:.3f}]  {len(m):5d}")
 
     say()
+    say("C. SEPARATING THE PAPER'S OWN DEPLETED CALLS  (function score < -0.302 at q < 0.01)")
+    say("   The best-powered contrast available: it uses the assay's own hit calls rather than the 12 clinically")
+    say("   ascertained variants, so the intervals are a third as wide as in A.")
+    dep = v[v.function_score_mean.notna()].copy()
+    dep["yd"] = (dep.function_score_mean < -0.302).astype(int)
+    say(f"   {int(dep.yd.sum())} depleted vs {int((1 - dep.yd).sum())} not depleted")
+    say(f"  {'score':22s} {'AUC':>6s}  {'95% CI':>15s}")
+    for col, name in [("CADD_score", "CADD v1.7"), ("ddG_bind", "ViennaRNA ddG")] + \
+                     [(c, c.replace("lm_", "RiNALMo-")) for c in models]:
+        m = dep[dep[col].notna()]
+        a = auroc(m.yd.values, m[col].values)
+        lo, hi = boot_auroc(m.yd.values, m[col].values)
+        say(f"  {name:22s} {a:6.3f}  [{lo:.3f},{hi:.3f}]")
+
+    say()
     say("Note on direction: a language model's masked log-odds is oriented so that higher means more damaging, "
         "and the assay's function score is lower when a variant is more depleted, so the two are expected to "
         "correlate negatively; the sign is flipped above so that positive means agreement.")
