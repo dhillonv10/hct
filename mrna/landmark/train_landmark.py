@@ -53,9 +53,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-SALUKI_HUMAN = 0.7726
+SALUKI = {"human": 0.7726, "mouse": 0.7320}      # their Fig5_S6/experimentResults.csv, mean of 10 folds
+SALUKI_HUMAN = SALUKI["human"]
 BEEM_HUMAN = 0.7681
 FEATURES_GBM = 0.7023
+SEQ_ONLY_SALUKI = 0.608                          # their sequence-only ablation, the phase-D reference
 PERIODS = (3.0, 10.0, 30.0, 100.0, 300.0, 1000.0, 3000.0, 10000.0)   # 3 nt => reading frame, explicitly
 N_LANDMARK = 6
 
@@ -451,10 +453,14 @@ def main():
     print(f"\n{'arm':26s}{'mean fold r':>13s}{'sd':>8s}{'pooled r':>11s}")
     print(f"{'landmark model':26s}{np.mean(per_fold):13.4f}{np.std(per_fold):8.4f}"
           f"{pearson(bu.y[idx[done]], preds[done]):11.4f}")
-    print(f"{'Saluki (published)':26s}{SALUKI_HUMAN:13.4f}")
-    print(f"{'BEeM (their features)':26s}{BEEM_HUMAN:13.4f}")
-    print(f"{'our features + GBM':26s}{FEATURES_GBM:13.4f}")
-    d = float(np.mean(per_fold)) - SALUKI_HUMAN
+    ref = SALUKI.get(bu.species, SALUKI["human"])
+    print(f"{'Saluki ' + bu.species + ' (published)':26s}{ref:13.4f}")
+    if bu.species == "human":
+        print(f"{'BEeM (their features)':26s}{BEEM_HUMAN:13.4f}")
+        print(f"{'our features + GBM':26s}{FEATURES_GBM:13.4f}")
+    if args.aux_drop >= 1.0:
+        print(f"{'Saluki sequence-only':26s}{SEQ_ONLY_SALUKI:13.4f}   <- the relevant reference for this arm")
+    d = float(np.mean(per_fold)) - ref
     print(f"\nvs Saluki: {d:+.4f}  ->  {'BEATS IT' if d > 0 else 'does not beat it'}")
     if args.folds < 10:
         print(f"NOTE: only {args.folds} of 10 folds run, so this mean is noisier than the published one.")
@@ -464,7 +470,7 @@ def main():
                    params=int(nparam), multitask=bool(nt), aux_drop=args.aux_drop,
                    per_fold=per_fold, mean=float(np.mean(per_fold)), sd=float(np.std(per_fold)),
                    pooled=pearson(bu.y[idx[done]], preds[done]),
-                   saluki=SALUKI_HUMAN, folds=args.folds, epochs=args.epochs,
+                   saluki=ref, folds=args.folds, epochs=args.epochs,
                    lmax=args.lmax, seeds=args.seeds, n_scorable=int(len(idx))),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}")
