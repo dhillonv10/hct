@@ -190,7 +190,14 @@ class LandmarkNet(nn.Module):
         self.s3 = nn.Sequential(*[Block(c, 5, d) for d in cfg["s3"]])
         self.attn = nn.Conv1d(c, 1, 1)
         n_cells = 6 + 6 + 2 + 2 + 1          # regions(3 mean+3 max) + 6 bands + 2 junction + 2 global + attn
-        self.pool_dim = n_cells * c + 3 * c1
+        # Explicit STRUCTURAL scalars. The first real run showed the network performing like a model with no
+        # splice information even though junctions are in its input: a junction is a 1-nt spike in an 8192-long
+        # tensor, and after /16 avg-pooling it is 1/16th of a bin, so the network cannot count them. The GBM,
+        # which gets junction density directly, found it the most important of 609 features by 6.5x. These ten
+        # scalars hand the read-out what convolution+pooling cannot recover. They are structure, not sequence
+        # content, and Saluki's splice track carries the same information in a form its GRU can integrate.
+        self.n_struct = 10
+        self.pool_dim = n_cells * c + 3 * c1 + self.n_struct
         self.norm_pool = nn.LayerNorm(self.pool_dim)
         self.norm_aux = nn.LayerNorm(n_aux)
         # Aux-block dropout. The 609 engineered features already reach r=0.702 alone, so without this the
@@ -264,6 +271,20 @@ class LandmarkNet(nn.Module):
         fr = (pos - st) % 3
         for f in range(3):
             cells.append(self.mmean(h1, inc * (fr == f).float()))
+        # structural scalars, computed on device from inputs already present
+        L1_ = L.squeeze(-1)                                         # (B,1)
+        st1, sp1 = st.squeeze(-1), sp.squeeze(-1)
+        njn = (isj * valid).sum(-1)                                 # (B,1)
+        n_after = (isj * (pos > sp + 50).float() * valid).sum(-1)
+        n_cds = (isj * ((pos >= st) & (pos < sp)).float() * valid).sum(-1)
+        last_j = (isj * valid * pos).max(-1).values                 # (B,1)
+        kb = (L1_ / 1000.0).clamp(min=1e-3)
+        struct = torch.cat([
+            njn / 50.0, njn / kb / 10.0, n_after / 10.0, n_cds / kb / 10.0,
+            (last_j - sp1) / 1000.0, (L1_ - sp1) / 1000.0,
+            torch.log1p(L1_) / 10.0, st1 / L1_.clamp(min=1.0),
+            (sp1 - st1) / L1_.clamp(min=1.0), (L1_ - sp1) / L1_.clamp(min=1.0)], 1)
+        cells.append(torch.nan_to_num(struct, nan=0.0, posinf=0.0, neginf=0.0))
         z = self.norm_pool(torch.cat(cells, 1))
         a_in = self.norm_aux(b["aux"])
         if self.training and self.aux_drop > 0:
@@ -379,7 +400,9 @@ def main():
     ap.add_argument("--folds", type=int, default=10)
     ap.add_argument("--epochs", type=int, default=40)
     ap.add_argument("--bs", type=int, default=16)
-    ap.add_argument("--lr", type=float, default=2e-3)
+    ap.add_argument("--lr", type=float, default=7e-4,
+                    help="lowered from 2e-3: at 2e-3 validation r swung 0.62->0.37->0.62 between adjacent "
+                         "epochs and only stabilised once OneCycle annealed")
     ap.add_argument("--seeds", type=int, default=1, help="predictions averaged over this many seeds per fold")
     ap.add_argument("--device", default="")
     ap.add_argument("--out", default="landmark_results.json")

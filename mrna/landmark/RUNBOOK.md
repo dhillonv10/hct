@@ -18,22 +18,31 @@ Numbers are meaningless (240 genes, 2 epochs). You are checking that it runs and
 
 ```bash
 python3 train_landmark.py --bundle hl_bundle2_human.npz --quick --multitask \
-    --aux-drop 1.0 --stack-gbm --out seqonly_quick.json
+    --aux-drop 1.0 --stack-gbm --lr 7e-4 --out seqonly_quick.json
 ```
 
-Three folds, 25 epochs, lmax 8192. Read **`nn`** — the sequence-only network, no engineered features:
+### CORRECTED comparator (the first version of this runbook had it wrong)
 
-| `nn` | meaning | what to do |
+`--aux-drop 1.0` removes the 609 engineered features, but the network still receives **frame** (the period-3
+Fourier channel), **splice** (junction indicator and junction distances) and **region identity**. That is the
+same information Saluki's FULL model gets, plus explicit distance encodings. So the comparator is not their
+one-hot-only ablation.
+
+| Saluki input | r | relation to our `nn` arm |
+|---|--:|---|
+| sequence (one-hot only) | 0.6091 | strictly less information than ours |
+| + codon frame | 0.6748 | less |
+| + splice | 0.7443 | less |
+| **+ splice + codon = full Saluki** | **0.7726** | **the correct comparator** |
+
+First measured result at `--lr 2e-3`: **nn = 0.6322**, i.e. 0.140 BELOW the right comparator, and below even
+their one-hot+frame row. Reading it against 0.608 made a failure look like a pass.
+
+| `nn` | meaning | action |
 |---|---|---|
-| **≥ 0.60** | beats Saluki's own sequence-only ablation (0.608). The landmark encoding works. | run step 3 |
-| **0.45 – 0.60** | partially working | send me the per-epoch curves; likely a schedule fix |
-| **< 0.45** | the architecture is not delivering | **stop** — do not spend 35 h on the sweep |
-
-`stack` should beat 0.7023 regardless, because it can lean on the GBM. That alone is **not** evidence the
-architecture works — only `nn` is.
-
-Also send me the first fold's per-epoch lines. Where validation peaks tells me whether the learning-rate
-schedule needs changing (last time it peaked at epoch 8 of 25, which means OneCycle never annealed).
+| **≥ 0.74** | matches their sequence+splice | the architecture is competitive; run the family |
+| **0.68 – 0.74** | real progress over 0.632 but short | worth one more tuning round |
+| **< 0.68** | not exploiting splice information | stop; the sequence model is not the path |
 
 ## Step 3 — the family (~35 h, resumable)
 
