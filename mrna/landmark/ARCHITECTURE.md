@@ -45,22 +45,62 @@ then pooling into 20 cells rather than one global average:
 
 This is the structured read-out that gained +0.145, generalised from frame to arbitrary landmarks.
 
-**3. Engineered features at the head.** All 609: exon/junction geometry, codon usage and the Forrest et al.
-codon stability coefficients, region lengths and GC/GC3, 3'UTR AREs and DRACH m6A sites and Pumilio motifs,
-uORFs by frame, capped-window folding energies. Saluki learns codon effects from scratch; this model is
-given them.
+**3. The engineered features, fused LATE.** All 609: exon/junction geometry, codon usage and the Forrest
+et al. codon stability coefficients, region lengths and GC/GC3, 3'UTR AREs and DRACH m6A sites and Pumilio
+motifs, uORFs by frame, capped-window folding energies. A gradient-boosted model is trained on them inside
+each fold, on the same training rows, and combined with the network on the inner validation split.
 
-Because those features alone reach r=0.702, the head would happily ignore the convolutional path. **Aux-block
-dropout** (zeroing the entire feature block on 30% of training steps) forces the sequence path to carry
-weight. This sets a floor near 0.70 while leaving the upside to the sequence model.
+## What the first real run falsified, and what replaced it
+
+The first design concatenated those 609 features **into the network's head**, on the argument that they set
+a floor the network could only add to. The first full run killed that argument:
+
+```
+ep   1/25  loss 0.7205  val r 0.6741  *
+...
+ep  25/25  loss 0.4051  val r 0.6677
+best val r 0.6751 at epoch 8
+```
+
+Validation r is reached in **one epoch** and never improves, while training loss halves from 0.72 to 0.40.
+All three folds behaved the same way. What a head can learn in one epoch is the feature block — so the
+convolutional trunk had a shortcut, never received a useful gradient, and contributed essentially nothing.
+The hybrid scored **0.6933, below the 0.7023 that gradient boosting reaches on those features with no
+network at all**.
+
+The floor argument was simply wrong. The floor a shared head provides is an *MLP* on the features (~0.67),
+not a *GBM* on them (0.702); a two-layer MLP with dropout is worse at tabular features than boosting. And
+aux-block dropout at 0.3 was far too weak to prevent it — 70% of batches still handed the head the shortcut.
+
+**Late fusion replaces it.** The network trains on sequence only (`--aux-drop 1.0`); the GBM trains on the
+features; the two are combined on the inner validation split (`--stack-gbm`). The shortcut is gone, the
+floor is real because the GBM is now a component rather than something an MLP must re-derive, and every run
+reports all three numbers per fold.
+
+## Reading any result
+
+| component | what it is | reference |
+|---|---|--:|
+| `nn` | the landmark network, sequence only | Saluki's sequence-only ablation **0.608** |
+| `gbm` | the 609 features alone | our **0.7023** |
+| `stack` | the two combined | full Saluki **0.7726** |
+
+**`nn` is the number that decides whether this architecture is worth anything.** Above 0.608 it extracts
+something Saluki's convolutions do not. Near 0.60 it merely matches them. Below ~0.45 the landmark encoding
+is not delivering, and a `stack` that still looks respectable would be the GBM carrying it — which must be
+reported that way rather than as an architectural win.
+
+This control used to be a separate phase that could be skipped or forgotten. It is now part of every single
+run, which is where it belonged.
 
 ## Size and cost
 
-2.04M parameters — ~1/300th of RiNALMo-giga. 680 ms/step at bs=16, lmax=12288 on 4 CPU cores.
+Five sizes: 0.24M / 0.77M / 2.05M / 4.91M / 11.43M parameters. RiNALMo-giga is 651M, so `tiny` is about
+1/2700th of it. On an M4 via MPS, `base` runs ~55 ms/step at bs=16, lmax=12288 — roughly 0.85 min/epoch.
 
-## What would falsify the idea
+## Known open issue
 
-If the landmark encoding is doing nothing, the model lands at the aux-feature floor (~0.70) regardless of
-how long it trains, and `--aux-drop 1.0` (sequence path only) collapses toward the sequence-only ablation
-Saluki reports, 0.608. That is the control to run if the headline is disappointing: **a sequence-only arm
-that beats 0.608 means the landmark encoding is contributing something Saluki's convolutions do not get.**
+The learning-rate schedule is mismatched to the observed dynamics: validation peaked at epochs 8–12 of a
+25-epoch OneCycle, so the selected checkpoint is taken mid-schedule with the learning rate still near its
+maximum and never sees the annealing phase. With the shortcut removed the dynamics will differ, so this is
+worth re-reading from the new curves before being tuned blind.
