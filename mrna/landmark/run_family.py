@@ -3,6 +3,15 @@
 
 Four phases, and the order matters -- each one's result changes whether the next is worth its compute.
 
+REVISED after the first real run. The original design concatenated the 609 engineered features into the
+network's head. That let the head reach val r=0.674 in ONE epoch and never improve across 25 more, because
+the trunk had a shortcut and never received a useful gradient; the hybrid scored 0.693, BELOW the 0.702 that
+gradient boosting gets on those features alone. So every phase now runs the network on SEQUENCE ONLY
+(--aux-drop 1.0) and fuses late with a GBM trained inside the same fold (--stack-gbm). Each run therefore
+reports three numbers: `nn` (sequence only, compare to Saluki's sequence-only ablation 0.608), `gbm`
+(features alone, our 0.7023), and `stack` (compare to Saluki 0.7726). The old phase D is gone because the
+control it provided is now part of every single run.
+
   A  SCALING SWEEP     5 sizes (tiny..xl), human, 5 folds. Produces the scaling curve.
                        Pre-registered expectation: this SATURATES early. With ~14k scorable genes, capacity
                        is not the binding constraint, and where the curve flattens is the deliverable --
@@ -10,11 +19,6 @@ Four phases, and the order matters -- each one's result changes whether the next
                        for mRNA half-life.
   B  HEADLINE          best size by validation, human, 10 folds, 2 seeds. The number compared to Saluki.
   C  MOUSE             same size, mouse bundle, 10 folds. Second published benchmark (Saluki 0.7320).
-  D  MECHANISM         --aux-drop 1.0 at the best size: sequence path only, engineered features switched
-                       off entirely. Saluki's own sequence-only ablation is 0.608, so BEATING 0.608 here is
-                       what shows the landmark encoding contributes something their convolutions miss.
-                       If phase B looks good but D lands at ~0.60, the win came from the features, not the
-                       architecture, and the paper has to say so.
 
   python3 run_family.py --bundle hl_bundle2_human.npz --mouse-bundle hl_bundle2_mouse.npz
   python3 run_family.py --bundle hl_bundle2_human.npz --phases A        # just the sweep
@@ -55,13 +59,18 @@ def run(tag, bundle, outdir, extra, dry):
 
 
 def table(rows, saluki):
-    print(f"\n{'run':22s}{'params':>10s}{'mean r':>9s}{'sd':>8s}{'folds':>7s}{'vs Saluki':>11s}")
-    print("-" * 67)
+    print(f"\n{'run':22s}{'params':>10s}{'seq-only':>10s}{'gbm':>8s}{'stack':>8s}{'sd':>8s}{'vs Saluki':>11s}")
+    print("-" * 77)
     for r in rows:
         if not r:
             continue
-        print(f"{r['tag']:22s}{r['params']/1e6:9.2f}M{r['mean']:9.4f}{r['sd']:8.4f}"
-              f"{r['folds']:7d}{r['mean'] - saluki.get(r['species'], saluki['human']):+11.4f}")
+        c = r.get("components") or {}
+        nn = f"{c['nn']:10.4f}" if c else f"{'-':>10s}"
+        gb = f"{c['gbm']:8.4f}" if c else f"{'-':>8s}"
+        print(f"{r['tag']:22s}{r['params']/1e6:9.2f}M{nn}{gb}{r['mean']:8.4f}{r['sd']:8.4f}"
+              f"{r['mean'] - saluki.get(r['species'], saluki['human']):+11.4f}")
+    print(f"\nseq-only column compares to Saluki's sequence-only ablation {SEQ_ONLY_SALUKI}; "
+          f"stack compares to full Saluki.")
 
 
 def main():
@@ -69,7 +78,7 @@ def main():
     ap.add_argument("--bundle", required=True, help="human bundle (hl_bundle2_human.npz)")
     ap.add_argument("--mouse-bundle", default="")
     ap.add_argument("--outdir", default="family_results")
-    ap.add_argument("--phases", default="ABCD")
+    ap.add_argument("--phases", default="ABC")
     ap.add_argument("--sweep-folds", type=int, default=5)
     ap.add_argument("--sweep-epochs", type=int, default=30)
     ap.add_argument("--final-folds", type=int, default=10)
@@ -80,7 +89,8 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     os.makedirs(a.outdir, exist_ok=True)
-    common = ["--lmax", str(a.lmax), "--bs", str(a.bs), "--multitask"]
+    common = ["--lmax", str(a.lmax), "--bs", str(a.bs), "--multitask",
+              "--aux-drop", "1.0", "--stack-gbm"]
     if a.device:
         common += ["--device", a.device]
 
@@ -118,18 +128,6 @@ def main():
         out.append(run(f"C_{best_size}_mouse", a.mouse_bundle, a.outdir,
                        common + ["--size", best_size, "--folds", str(a.final_folds),
                                  "--epochs", str(a.final_epochs)], a.dry_run))
-    if "D" in a.phases:
-        print("\n### PHASE D -- mechanism control: sequence path only ###")
-        d = run(f"D_{best_size}_seqonly", a.bundle, a.outdir,
-                common + ["--size", best_size, "--folds", str(a.sweep_folds),
-                          "--epochs", str(a.final_epochs), "--aux-drop", "1.0"], a.dry_run)
-        out.append(d)
-        if d:
-            print(f"\nsequence-only: r = {d['mean']:.4f}  vs Saluki's sequence-only ablation {SEQ_ONLY_SALUKI}"
-                  f"  ({d['mean'] - SEQ_ONLY_SALUKI:+.4f})")
-            print("  above 0.608 -> the landmark encoding is extracting something their convolutions do not."
-                  "\n  at or below  -> any headline win came from the engineered features, and must be reported"
-                  " that way.")
 
     rows = [r for r in sweep + out if r]
     if rows:

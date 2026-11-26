@@ -4,7 +4,7 @@
 
 ```bash
 python3 -m venv ~/venv-landmark && source ~/venv-landmark/bin/activate
-pip install torch numpy          # pip torch on macOS arm64 ships MPS support
+pip install torch numpy scikit-learn    # pip torch on macOS arm64 ships MPS support
 ```
 
 Nothing else. No genome, no GENCODE, no ViennaRNA — sequences, exon structure, all 609 engineered features
@@ -13,40 +13,49 @@ and every label are baked into the two bundles.
 ## Run in this order
 
 ```bash
-# 1. ~3 min. Exercises every path: multi-task heads, both species, the sequence-only control.
+# 1. ~3 min sanity check.
 python3 train_landmark.py --bundle hl_bundle2_human.npz --selftest --multitask
-python3 train_landmark.py --bundle hl_bundle2_mouse.npz --selftest --multitask
 
-# 2. ~1 min. Times 20 real steps on YOUR hardware and extrapolates the whole family.
-python3 train_landmark.py --bundle hl_bundle2_human.npz --bench --bs 16 --size base
+# 2. The decisive 45-minute run: sequence-only network + GBM, fused late.
+python3 train_landmark.py --bundle hl_bundle2_human.npz --quick --multitask \
+    --aux-drop 1.0 --stack-gbm
 
-# 3. The whole family. Resumable — re-run after an interruption and finished phases are skipped.
+# 3. The whole family, if step 2 looks right. Resumable.
 python3 run_family.py --bundle hl_bundle2_human.npz --mouse-bundle hl_bundle2_mouse.npz
 ```
 
-`run_family.py --dry-run` prints the plan without running anything.
+`sklearn` is now required as well (`pip install torch numpy scikit-learn`).
 
-## What the four phases do, and why in that order
+## Why the design changed after the first run
 
-| phase | what | why it comes here |
-|---|---|---|
-| **A** | 5 sizes, human, 5 folds | the scaling curve. Decides which size phases B–D use. |
-| **B** | best size, human, 10 folds, 2 seeds | the headline number vs Saluki 0.7726 |
-| **C** | same size, mouse, 10 folds | second published benchmark, Saluki 0.7320 |
-| **D** | `--aux-drop 1.0`, features off | **the control that can kill the headline** |
+The first version concatenated the 609 engineered features into the network's head. The first real run showed
+exactly what that does:
 
-**Phase D is the important one.** The head normally sees the 609 engineered features, which reach r=0.702
-alone — so a good phase-B number is uninterpretable without knowing whether the sequence model contributed.
-`--aux-drop 1.0` switches the features off entirely. Saluki's own sequence-only ablation is **0.608**:
+```
+ep   1/25  loss 0.7205  val r 0.6741  *
+...
+ep  25/25  loss 0.4051  val r 0.6677
+best val r 0.6751 at epoch 8
+```
 
-* phase D **above 0.608** → the landmark encoding extracts something their convolutions miss. Real result.
-* phase D **at or below 0.608** → any phase-B win came from the features, not the architecture, and the
-  write-up has to say so.
+Val r is reached in **one epoch** and never improves while training loss halves. The head had a shortcut —
+the features alone get ~0.67 — so the convolutional trunk never received a useful gradient and learned
+nothing. The hybrid scored **0.693, below the 0.7023 that gradient boosting gets on those features alone**.
+The claim that the features were a "floor the network can only add to" was wrong: the floor is an *MLP* on
+the features (~0.67), not a *GBM* on them (0.702).
 
-**Pre-registered expectation for phase A: the curve saturates early.** With ~14k scorable genes, capacity is
-not the binding constraint. The driver prints both "best" and "cheapest within 0.005 of best" and hands the
-**cheapest** to later phases. If those differ, the small model is the honest release — and "mRNA half-life
-prediction saturates at N parameters" is a result nobody has published.
+So the network now runs on **sequence only** (`--aux-drop 1.0`) and is fused **late** with a GBM trained
+inside the same fold on the same training rows (`--stack-gbm`), with the combination weights fitted on the
+inner validation split. Every run reports three numbers per fold:
+
+| component | what it is | compare against |
+|---|---|--:|
+| `nn` | the landmark network, sequence only | Saluki sequence-only **0.608** |
+| `gbm` | the 609 features alone | our **0.7023** |
+| `stack` | the two combined | Saluki full **0.7726** |
+
+This removes the shortcut, makes the floor real, and folds the old "phase D" mechanism control into every
+single run — `nn` above 0.608 means the landmark encoding extracts something Saluki's convolutions do not.
 
 ## The family
 

@@ -322,7 +322,7 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         net.train()
         return out
 
-    best, best_te, best_ep = -np.inf, None, -1
+    best, best_te, best_va, best_ep = -np.inf, None, None, -1
     for ep in range(args.epochs):
         t0, tot, nb = time.time(), 0.0, 0
         for b, sel in batches(tr, args.bs, True):
@@ -345,12 +345,31 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         pv = predict(va)
         rv = pearson(bu.y[va], pv)
         if rv > best:
-            best, best_ep = rv, ep
+            best, best_ep, best_va = rv, ep, pv
             best_te = predict(te)
         print(f"    ep {ep + 1:3d}/{args.epochs}  loss {tot / max(nb,1):.4f}  val r {rv:.4f}"
               f"{'  *' if ep == best_ep else ''}  {time.time() - t0:.0f}s", flush=True)
     print(f"    best val r {best:.4f} at epoch {best_ep + 1}  ({nparam/1e6:.2f}M params)")
-    return best_te, best, nparam
+
+    # Late fusion instead of a shared head. The shared head let the 609 features reach ~0.67 in a single
+    # epoch, so the convolutional trunk never received a useful gradient and learned nothing. Worse, an MLP
+    # on those features is weaker than gradient boosting on them (0.67 vs 0.702), so the "floor" the first
+    # design claimed never existed. Training the two separately and combining them on the inner validation
+    # split removes the shortcut and makes the floor real.
+    if args.stack_gbm:
+        from sklearn.ensemble import HistGradientBoostingRegressor
+        g = HistGradientBoostingRegressor(max_iter=600, learning_rate=0.06, max_leaf_nodes=63,
+                                          min_samples_leaf=20, l2_regularization=1.0,
+                                          early_stopping=True, validation_fraction=0.12,
+                                          random_state=seed).fit(bu.X[sc_tr], bu.y[sc_tr])
+        gv, gt = g.predict(bu.X[va]), g.predict(bu.X[te])
+        w = np.linalg.lstsq(np.c_[best_va, gv, np.ones(len(va))], bu.y[va], rcond=None)[0]
+        st = np.c_[best_te, gt, np.ones(len(te))] @ w
+        print(f"    nn {pearson(bu.y[te], best_te):.4f} | gbm {pearson(bu.y[te], gt):.4f} | "
+              f"stack {pearson(bu.y[te], st):.4f}   (weights nn={w[0]:.2f} gbm={w[1]:.2f})")
+        return st, best, nparam, dict(nn=pearson(bu.y[te], best_te), gbm=pearson(bu.y[te], gt),
+                                      stack=pearson(bu.y[te], st))
+    return best_te, best, nparam, None
 
 
 def main():
@@ -371,6 +390,10 @@ def main():
                     help="train the 54 individual-decay-dataset heads too (25x the label cells)")
     ap.add_argument("--task-w", type=float, default=1.0, help="weight on the auxiliary task loss")
     ap.add_argument("--tag", default="", help="label for this run in the results file")
+    ap.add_argument("--stack-gbm", action="store_true",
+                    help="late fusion: train a GBM on the 609 features inside each fold and combine it with "
+                         "the network on the inner validation split. Use with --aux-drop 1.0 so the network "
+                         "sees sequence only and the two stay independent.")
     ap.add_argument("--quick", action="store_true", help="3 folds, lmax 8192, 25 epochs")
     ap.add_argument("--bench", action="store_true",
                     help="time 20 training steps and extrapolate the full run, then exit")
@@ -430,7 +453,7 @@ def main():
     print(f"folds built over {len(idx)} scorable genes; {len(trainonly)} train-only genes "
           f"added to every training set")
     preds = np.full(len(idx), np.nan)
-    per_fold = []
+    per_fold, components = [], []
     for k in range(args.folds):
         te = idx[fold == k]
         inner = idx[fold != k]
@@ -441,7 +464,9 @@ def main():
         acc = np.zeros(len(te))
         nparam = 0
         for s in range(args.seeds):
-            pt, bv, nparam = run_fold(bu, tr, va, te, dev, args, seed=1234 + 17 * s)
+            pt, bv, nparam, comp = run_fold(bu, tr, va, te, dev, args, seed=1234 + 17 * s)
+            if comp:
+                components.append(comp)
             acc += pt
         pt = acc / args.seeds
         preds[np.array([posmap[t] for t in te])] = pt
@@ -450,6 +475,11 @@ def main():
         print(f"  fold {k}: test r = {r:.4f}   (running mean {np.mean(per_fold):.4f})", flush=True)
 
     done = ~np.isnan(preds)
+    if components:
+        print(f"\n{'component':26s}{'mean fold r':>13s}")
+        for k in ("nn", "gbm", "stack"):
+            v = [c[k] for c in components]
+            print(f"{k:26s}{np.mean(v):13.4f}")
     print(f"\n{'arm':26s}{'mean fold r':>13s}{'sd':>8s}{'pooled r':>11s}")
     print(f"{'landmark model':26s}{np.mean(per_fold):13.4f}{np.std(per_fold):8.4f}"
           f"{pearson(bu.y[idx[done]], preds[done]):11.4f}")
@@ -471,7 +501,9 @@ def main():
                    per_fold=per_fold, mean=float(np.mean(per_fold)), sd=float(np.std(per_fold)),
                    pooled=pearson(bu.y[idx[done]], preds[done]),
                    saluki=ref, folds=args.folds, epochs=args.epochs,
-                   lmax=args.lmax, seeds=args.seeds, n_scorable=int(len(idx))),
+                   lmax=args.lmax, seeds=args.seeds, n_scorable=int(len(idx)),
+                   components={k: float(np.mean([c[k] for c in components])) for k in ("nn", "gbm", "stack")}
+                   if components else None),
               open(args.out, "w"), indent=1)
     print(f"wrote {args.out}")
 
