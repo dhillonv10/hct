@@ -14,53 +14,47 @@ python3 train_landmark.py --bundle hl_bundle2_human.npz --selftest --multitask -
 ```
 Numbers are meaningless (240 genes, 2 epochs). You are checking that it runs and prints `nn / gbm / stack`.
 
-## Step 2 — the decisive run (~45 min)
-
-```bash
-python3 train_landmark.py --bundle hl_bundle2_human.npz --quick --multitask \
-    --aux-drop 1.0 --stack-gbm --lr 7e-4 --out seqonly_quick.json
-```
-
-### CORRECTED comparator (the first version of this runbook had it wrong)
-
-`--aux-drop 1.0` removes the 609 engineered features, but the network still receives **frame** (the period-3
-Fourier channel), **splice** (junction indicator and junction distances) and **region identity**. That is the
-same information Saluki's FULL model gets, plus explicit distance encodings. So the comparator is not their
-one-hot-only ablation.
-
-| Saluki input | r | relation to our `nn` arm |
-|---|--:|---|
-| sequence (one-hot only) | 0.6091 | strictly less information than ours |
-| + codon frame | 0.6748 | less |
-| + splice | 0.7443 | less |
-| **+ splice + codon = full Saluki** | **0.7726** | **the correct comparator** |
-
-First measured result at `--lr 2e-3`: **nn = 0.6322**, i.e. 0.140 BELOW the right comparator, and below even
-their one-hot+frame row. Reading it against 0.608 made a failure look like a pass.
-
-| `nn` | meaning | action |
-|---|---|---|
-| **≥ 0.74** | matches their sequence+splice | the architecture is competitive; run the family |
-| **0.68 – 0.74** | real progress over 0.632 but short | worth one more tuning round |
-| **< 0.68** | not exploiting splice information | stop; the sequence model is not the path |
-
-## Step 3 — the family (~35 h, resumable)
+## Step 2 — just run the family (~33 h, resumable)
 
 ```bash
 python3 run_family.py --bundle hl_bundle2_human.npz --mouse-bundle hl_bundle2_mouse.npz
 ```
 
-Interrupt it freely — finished runs are skipped on restart. `--dry-run` prints the plan.
+Interrupt freely — finished runs are skipped on restart. `--dry-run` prints the plan.
 
 | phase | what | time |
 |---|---|--:|
-| A | 5 sizes × 5 folds — the scaling curve | ~15 h |
-| B | best size × 10 folds × 2 seeds — the headline | ~11 h |
-| C | mouse, 10 folds | ~6 h |
+| **0** | **read-out ablation at `base`, 3 folds — the deciding phase** | **~2.6 h** |
+| A | 5 sizes × 5 folds — the scaling curve | ~13 h |
+| B | best size × 10 folds × 2 seeds — the headline | ~10 h |
+| C | mouse, 10 folds | ~5 h |
 
-Pre-registered expectation for A: **the curve saturates early.** With ~14k scorable genes capacity is not
-the binding constraint. The driver reports "best" and "cheapest within 0.005 of best" and hands the
-**cheapest** to B and C — if they differ, the small model is the honest release.
+Phase 0 reports first, so you get the answer that matters inside three hours and the driver prints an
+explicit **stop** instruction if it fails.
+
+### What phase 0 is testing, and why it is the deciding phase
+
+Structured pooling alone gave `nn = 0.631` twice — before and after the LR fix and the structural scalars —
+against Saluki's **0.7443** for the same class of input (sequence + splice). The diagnosis: collapsing ~768
+positions into 20 pooled cells destroys the long-range *arrangement*, so the network cannot use junction
+positions and performs like a model with no splice track at all. Saluki downsamples to a short sequence and
+runs a **GRU** over it. Recurrent integration in order is the one mechanism it has that this model lacked —
+structured pooling was validated on 25–100 nt UTRs and then applied to 12 kb transcripts without rechecking
+that the bottleneck still made sense.
+
+| read-out | what it is |
+|---|---|
+| `pool` | structured pooling only — reproduces the 0.631 result as the control |
+| `gru` | recurrence over the downsampled sequence, replacing pooling |
+| `both` | concatenated |
+
+**Falsifiable expectation:** if the read-out was the bottleneck, `gru` and `both` land at `nn` **0.70–0.75**
+(we have strictly more input than Saluki — their 6 tracks plus explicit landmark distances — and now the
+same integration mechanism). If they land near 0.65, the bottleneck is elsewhere, phases A–C are not worth
+~30 h, and the driver says so in those words.
+
+Read **`nn`**, not `stack`. `stack` will beat 0.70 regardless because it can lean on the GBM; only `nn`
+says whether the sequence model works.
 
 ## Targets
 

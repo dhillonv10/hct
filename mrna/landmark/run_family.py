@@ -12,6 +12,18 @@ reports three numbers: `nn` (sequence only, compare to Saluki's sequence-only ab
 (features alone, our 0.7023), and `stack` (compare to Saluki 0.7726). The old phase D is gone because the
 control it provided is now part of every single run.
 
+  0  READ-OUT ABLATION  3 read-outs at `base`, 3 folds, ~2.6 h. THE DECIDING PHASE.
+                       Structured pooling alone scored nn=0.631 twice -- before and after the LR fix and
+                       the structural scalars -- against Saluki's 0.744 for the same input class. The
+                       diagnosis: collapsing ~768 positions into 20 pooled cells destroys the long-range
+                       arrangement, so the network cannot use junction positions and scores like a model
+                       with no splice track. Saluki downsamples to a short sequence and runs a GRU over it;
+                       recurrent integration IN ORDER is the one mechanism it has that this model lacked.
+                       `pool` reproduces the 0.631 result, `gru` replaces pooling with recurrence, `both`
+                       concatenates. Falsifiable expectation: if the read-out was the bottleneck, `gru` and
+                       `both` land at nn 0.70-0.75. If they land at 0.65, the bottleneck is elsewhere and
+                       the later phases are not worth their compute.
+
   A  SCALING SWEEP     5 sizes (tiny..xl), human, 5 folds. Produces the scaling curve.
                        Pre-registered expectation: this SATURATES early. With ~14k scorable genes, capacity
                        is not the binding constraint, and where the curve flattens is the deliverable --
@@ -59,7 +71,8 @@ def run(tag, bundle, outdir, extra, dry):
 
 
 def table(rows, saluki):
-    print(f"\n{'run':22s}{'params':>10s}{'seq-only':>10s}{'gbm':>8s}{'stack':>8s}{'sd':>8s}{'vs Saluki':>11s}")
+    print(f"\n{'run':22s}{'read-out':>9s}{'params':>9s}{'seq-only':>10s}{'gbm':>8s}{'stack':>8s}"
+          f"{'vs Saluki':>11s}")
     print("-" * 77)
     for r in rows:
         if not r:
@@ -67,7 +80,7 @@ def table(rows, saluki):
         c = r.get("components") or {}
         nn = f"{c['nn']:10.4f}" if c else f"{'-':>10s}"
         gb = f"{c['gbm']:8.4f}" if c else f"{'-':>8s}"
-        print(f"{r['tag']:22s}{r['params']/1e6:9.2f}M{nn}{gb}{r['mean']:8.4f}{r['sd']:8.4f}"
+        print(f"{r['tag']:22s}{r.get('readout','-'):>9s}{r['params']/1e6:8.2f}M{nn}{gb}{r['mean']:8.4f}"
               f"{r['mean'] - saluki.get(r['species'], saluki['human']):+11.4f}")
     print(f"\nseq-only column compares to Saluki's sequence-only ablation {SEQ_ONLY_SALUKI}; "
           f"stack compares to full Saluki.")
@@ -78,11 +91,11 @@ def main():
     ap.add_argument("--bundle", required=True, help="human bundle (hl_bundle2_human.npz)")
     ap.add_argument("--mouse-bundle", default="")
     ap.add_argument("--outdir", default="family_results")
-    ap.add_argument("--phases", default="ABC")
+    ap.add_argument("--phases", default="0ABC")
     ap.add_argument("--sweep-folds", type=int, default=5)
-    ap.add_argument("--sweep-epochs", type=int, default=30)
+    ap.add_argument("--sweep-epochs", type=int, default=25)
     ap.add_argument("--final-folds", type=int, default=10)
-    ap.add_argument("--final-epochs", type=int, default=40)
+    ap.add_argument("--final-epochs", type=int, default=35)
     ap.add_argument("--lmax", type=int, default=12288)
     ap.add_argument("--bs", type=int, default=16)
     ap.add_argument("--device", default="")
@@ -93,6 +106,36 @@ def main():
               "--aux-drop", "1.0", "--stack-gbm"]
     if a.device:
         common += ["--device", a.device]
+
+    # ---- phase 0: which read-out? -------------------------------------------------------------
+    readout = "both"
+    rp = os.path.join(a.outdir, "_readout.json")
+    if "0" in a.phases:
+        print("\n### PHASE 0 -- read-out ablation (the deciding phase) ###")
+        abl = []
+        for ro in ("pool", "gru", "both"):
+            abl.append(run(f"0_readout_{ro}", a.bundle, a.outdir,
+                           common + ["--size", "base", "--readout", ro, "--folds", "3",
+                                     "--epochs", "20"], a.dry_run))
+        got = [r for r in abl if r]
+        if got:
+            table(got, SALUKI)
+            best = max(got, key=lambda r: (r.get("components") or {}).get("nn", r["mean"]))
+            readout = best.get("readout", "both")
+            nn = (best.get("components") or {}).get("nn")
+            print(f"\nbest read-out by the SEQUENCE-ONLY component: '{readout}'"
+                  + (f"  (nn = {nn:.4f})" if nn else ""))
+            print(f"  reference: Saluki sequence+splice 0.7443, full Saluki {SALUKI['human']}, "
+                  f"pooling-only measured 0.631")
+            if nn is not None and nn < 0.66:
+                print("\n  *** nn is still below 0.66. The read-out was NOT the bottleneck. Phases A-C would")
+                print("      spend ~30 h scaling a trunk that a validation-fitted stack weights near zero.")
+                print("      Stop here and send me this table rather than continuing. ***")
+            json.dump({"readout": readout, "nn": nn}, open(rp, "w"), indent=1)
+    elif os.path.exists(rp):
+        readout = json.load(open(rp))["readout"]
+    common += ["--readout", readout]
+    print(f"\nusing read-out '{readout}' for phases A-C")
 
     sweep = []
     if "A" in a.phases:

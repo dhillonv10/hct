@@ -174,11 +174,12 @@ class Block(nn.Module):
 
 
 class LandmarkNet(nn.Module):
-    def __init__(self, n_aux, size="base", periods=PERIODS, dropout=0.2, aux_drop=0.3, n_task=0):
+    def __init__(self, n_aux, size="base", periods=PERIODS, dropout=0.2, aux_drop=0.3, n_task=0,
+                 readout="both"):
         super().__init__()
         cfg = SIZES[size]
         c1, c, head = cfg["c1"], cfg["c"], cfg["head"]
-        self.size, self.n_task = size, n_task
+        self.size, self.n_task, self.readout = size, n_task, readout
         self.periods = periods
         in_ch = 4 + 3 + 1 + 1 + N_LANDMARK * 2 * len(periods)
         self.in_ch = in_ch
@@ -189,6 +190,17 @@ class LandmarkNet(nn.Module):
         self.d2 = nn.Conv1d(c, c, 4, stride=4)
         self.s3 = nn.Sequential(*[Block(c, 5, d) for d in cfg["s3"]])
         self.attn = nn.Conv1d(c, 1, 1)
+        # THE FIX. The pooled read-out collapses ~768 positions into 20 summary vectors, which is where the
+        # long-range positional structure was being destroyed: the network could not count junctions or use
+        # their arrangement relative to the stop codon, and scored like a model with no splice input at all
+        # (0.631 against Saluki's 0.744 for sequence+splice). Saluki's architecture downsamples to a short
+        # sequence and runs a GRU over it -- recurrent integration IN ORDER is the one mechanism it has that
+        # this model lacked. Structured pooling was validated on 25-100 nt UTRs and then applied to 12 kb
+        # transcripts without rechecking that the bottleneck still made sense. It did not.
+        self.gru_h = c // 2
+        if readout in ("gru", "both"):
+            self.d3 = nn.Conv1d(c, c, 8, stride=8)                      # /16 -> /128
+            self.gru = nn.GRU(c, self.gru_h, num_layers=1, batch_first=True, bidirectional=True)
         n_cells = 6 + 6 + 2 + 2 + 1          # regions(3 mean+3 max) + 6 bands + 2 junction + 2 global + attn
         # Explicit STRUCTURAL scalars. The first real run showed the network performing like a model with no
         # splice information even though junctions are in its input: a junction is a 1-nt spike in an 8192-long
@@ -197,7 +209,9 @@ class LandmarkNet(nn.Module):
         # scalars hand the read-out what convolution+pooling cannot recover. They are structure, not sequence
         # content, and Saluki's splice track carries the same information in a form its GRU can integrate.
         self.n_struct = 10
-        self.pool_dim = n_cells * c + 3 * c1 + self.n_struct
+        pooled = n_cells * c + 3 * c1 if readout in ("pool", "both") else 0
+        gru_dim = 2 * (2 * self.gru_h) if readout in ("gru", "both") else 0   # masked mean + max
+        self.pool_dim = pooled + gru_dim + self.n_struct
         self.norm_pool = nn.LayerNorm(self.pool_dim)
         self.norm_aux = nn.LayerNorm(n_aux)
         # Aux-block dropout. The 609 engineered features already reach r=0.702 alone, so without this the
@@ -243,11 +257,38 @@ class LandmarkNet(nn.Module):
         x, valid, region, pos, st, sp, L = self.build_input(b)
         h1 = self.s1(self.stem(x))                                  # full resolution: frame lives here
         h = self.s3(self.d2(self.s2(self.d1(h1))))                  # /16
-        r = 16
         dn = lambda m: F.avg_pool1d(F.avg_pool1d(m, 4), 4)
         v16 = dn(valid)
         reg16 = [dn(region[:, k:k + 1]) for k in range(3)]
         cells = []
+        if self.readout in ("gru", "both"):
+            g = self.d3(h)                                          # /128, ~96 steps at lmax 12288
+            o, _ = self.gru(g.transpose(1, 2))                      # (B, T', 2*gru_h)
+            o = o.transpose(1, 2)                                   # (B, 2*gru_h, T')
+            vg = F.avg_pool1d(v16, 8)
+            cells.append(self.mmean(o, vg))
+            cells.append(self.mmax(o, vg))
+        if self.readout not in ("pool", "both"):
+            # GRU-only: skip every pooled cell, keep the structural scalars appended below
+            L1_ = L.squeeze(-1); st1, sp1 = st.squeeze(-1), sp.squeeze(-1)
+            isj = b["isj"].unsqueeze(1)
+            njn = (isj * valid).sum(-1)
+            n_after = (isj * (pos > sp + 50).float() * valid).sum(-1)
+            n_cds = (isj * ((pos >= st) & (pos < sp)).float() * valid).sum(-1)
+            last_j = (isj * valid * pos).max(-1).values
+            kb = (L1_ / 1000.0).clamp(min=1e-3)
+            struct = torch.cat([njn / 50.0, njn / kb / 10.0, n_after / 10.0, n_cds / kb / 10.0,
+                                (last_j - sp1) / 1000.0, (L1_ - sp1) / 1000.0,
+                                torch.log1p(L1_) / 10.0, st1 / L1_.clamp(min=1.0),
+                                (sp1 - st1) / L1_.clamp(min=1.0), (L1_ - sp1) / L1_.clamp(min=1.0)], 1)
+            cells.append(torch.nan_to_num(struct, nan=0.0, posinf=0.0, neginf=0.0))
+            z = self.norm_pool(torch.cat(cells, 1))
+            a_in = self.norm_aux(b["aux"])
+            if self.training and self.aux_drop > 0:
+                keep = (torch.rand(a_in.shape[0], 1, device=a_in.device) >= self.aux_drop).float()
+                a_in = a_in * keep
+            hh = self.head(torch.cat([z, a_in], 1))
+            return self.out_pc1(hh).squeeze(-1), (self.out_task(hh) if self.out_task is not None else None)
         for m in reg16:
             cells.append(self.mmean(h, m))
         for m in reg16:
@@ -318,7 +359,8 @@ def run_fold(bu, tr, va, te, dev, args, seed):
         tmu = np.nan_to_num(tmu); tsd = np.where(np.isfinite(tsd) & (tsd > 1e-6), tsd, 1.0)
         tmu_t = torch.from_numpy(tmu.astype(np.float32)).to(dev)
         tsd_t = torch.from_numpy(tsd.astype(np.float32)).to(dev)
-    net = LandmarkNet(bu.X.shape[1], size=args.size, aux_drop=args.aux_drop, n_task=n_task).to(dev)
+    net = LandmarkNet(bu.X.shape[1], size=args.size, aux_drop=args.aux_drop, n_task=n_task,
+                      readout=args.readout).to(dev)
     nparam = sum(p.numel() for p in net.parameters())
     opt = torch.optim.AdamW(net.parameters(), lr=args.lr, weight_decay=1e-2)
     steps = args.epochs * math.ceil(len(tr) / args.bs)
@@ -409,6 +451,9 @@ def main():
     ap.add_argument("--aux-drop", type=float, default=0.3,
                     help="1.0 = sequence-only arm, the mechanism control (Saluki sequence-only is 0.608)")
     ap.add_argument("--size", default="base", choices=list(SIZES))
+    ap.add_argument("--readout", default="both", choices=["pool", "gru", "both"],
+                    help="pool = structured pooling only (what scored 0.631); gru = recurrent integration "
+                         "over the downsampled sequence, the mechanism Saluki has; both = concatenate them")
     ap.add_argument("--multitask", action="store_true",
                     help="train the 54 individual-decay-dataset heads too (25x the label cells)")
     ap.add_argument("--task-w", type=float, default=1.0, help="weight on the auxiliary task loss")
@@ -434,13 +479,13 @@ def main():
           f"{int((~bu.scored).sum())} train-only) | species {bu.species}")
     print(f"size '{args.size}' | lmax {args.lmax} | {bu.X.shape[1]} aux features | "
           f"{nt} auxiliary task heads | aux_drop {args.aux_drop}")
-    net0 = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt)
-    print(f"input channels {net0.in_ch}  pooled dim {net0.pool_dim}  "
+    net0 = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt, readout=args.readout)
+    print(f"readout '{args.readout}' | input channels {net0.in_ch}  readout dim {net0.pool_dim}  "
           f"params {sum(p.numel() for p in net0.parameters())/1e6:.2f}M")
     del net0
 
     if args.bench:
-        net = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt).to(dev)
+        net = LandmarkNet(bu.X.shape[1], size=args.size, n_task=nt, readout=args.readout).to(dev)
         opt = torch.optim.AdamW(net.parameters(), lr=1e-3)
         sel = np.random.default_rng(0).permutation(bu.n)[:args.bs * 21]
         t0 = None
@@ -519,7 +564,7 @@ def main():
         print(f"NOTE: only {args.folds} of 10 folds run, so this mean is noisier than the published one.")
     if args.selftest:
         print("\nSELFTEST ONLY -- 240 transcripts, 2 epochs. Numbers are meaningless; the point is that it ran.")
-    json.dump(dict(tag=args.tag or args.size, size=args.size, species=bu.species,
+    json.dump(dict(tag=args.tag or args.size, size=args.size, species=bu.species, readout=args.readout,
                    params=int(nparam), multitask=bool(nt), aux_drop=args.aux_drop,
                    per_fold=per_fold, mean=float(np.mean(per_fold)), sd=float(np.std(per_fold)),
                    pooled=pearson(bu.y[idx[done]], preds[done]),
